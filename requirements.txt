@@ -1,0 +1,11 @@
+Node.js >= 18.0.0
+npm >= 9.0.0
+
+Key Dependencies:
+- react
+- vite
+- tailwindcss
+- mermaid
+- jspdf
+- html2canvas
+- lucide-react
