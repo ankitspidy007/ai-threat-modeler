@@ -6,21 +6,21 @@
 
 @layer base {
   body {
-    @apply bg-cyber-900 text-cyber-text font-sans antialiased overflow-x-hidden;
+    @apply bg-brand-50 text-brand-900 font-sans antialiased overflow-x-hidden;
     background-image: 
-      radial-gradient(circle at 50% 0%, rgba(112, 0, 255, 0.1) 0%, transparent 50%),
-      radial-gradient(circle at 0% 100%, rgba(0, 242, 255, 0.05) 0%, transparent 50%);
+      radial-gradient(circle at 50% 0%, rgba(79, 70, 229, 0.05) 0%, transparent 50%),
+      radial-gradient(circle at 0% 100%, rgba(14, 165, 233, 0.05) 0%, transparent 50%);
   }
 }
 
 .glass-panel {
-  @apply bg-cyber-800/80 backdrop-blur-md border border-cyber-700 shadow-xl;
+  @apply bg-white border border-brand-200 shadow-lg rounded-xl;
 }
 
-.input-cyber {
-  @apply bg-cyber-900 border border-cyber-700 text-cyber-text rounded-md p-3 focus:outline-none focus:border-cyber-accent focus:ring-1 focus:ring-cyber-accent transition-all duration-300;
+.input-brand {
+  @apply bg-white border border-brand-300 text-brand-900 rounded-md p-3 focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition-all duration-200 placeholder-brand-400;
 }
 
-.btn-cyber {
-  @apply bg-cyber-accent text-cyber-900 font-bold py-2 px-4 rounded shadow-[0_0_15px_rgba(0,242,255,0.3)] hover:shadow-[0_0_25px_rgba(0,242,255,0.5)] hover:bg-white transition-all duration-300;
+.btn-brand {
+  @apply bg-brand-primary text-white font-bold py-2 px-4 rounded shadow-md hover:bg-brand-primary/90 hover:shadow-lg transition-all duration-200;
 }

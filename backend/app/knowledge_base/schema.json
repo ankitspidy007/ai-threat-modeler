@@ -1,0 +1,729 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "array",
+    "items": {
+        "type": "object",
+        "required": [
+            "id",
+            "category",
+            "resource_type",
+            "detection",
+            "threat",
+            "risk",
+            "mitigation"
+        ],
+        "properties": {
+            "id": {
+                "type": "string",
+                "description": "Unique identifier for the threat (e.g., S-001)"
+            },
+            "category": {
+                "type": "string",
+                "enum": [
+                    "Spoofing",
+                    "Tampering",
+                    "Repudiation",
+                    "Information Disclosure",
+                    "Denial of Service",
+                    "Elevation of Privilege",
+                    "Combined"
+                ]
+            },
+            "resource_type": {
+                "type": "string"
+            },
+            "threat_chain": {
+                "type": "boolean"
+            },
+            "prerequisite_threats": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "detection": {
+                "type": "object",
+                "properties": {
+                    "logic": {
+                        "type": "object",
+                        "properties": {
+                            "operator": {
+                                "type": "string",
+                                "enum": [
+                                    "AND",
+                                    "OR"
+                                ]
+                            },
+                            "conditions": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "field": {
+                                            "type": "string"
+                                        },
+                                        "op": {
+                                            "type": "string",
+                                            "enum": [
+                                                "==",
+                                                "!=",
+                                                "in",
+                                                "not_in",
+                                                "exists"
+                                            ]
+                                        },
+                                        "value": {
+                                            "type": [
+                                                "string",
+                                                "boolean",
+                                                "number",
+                                                "array"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "field",
+                                        "op",
+                                        "value"
+                                    ]
+                                }
+                            }
+                        },
+                        "required": [
+                            "operator",
+                            "conditions"
+                        ]
+                    },
+                    "auto_detectable": {
+                        "type": "boolean"
+                    },
+                    "confidence": {
+                        "type": "string",
+                        "enum": [
+                            "high",
+                            "medium",
+                            "low"
+                        ]
+                    }
+                },
+                "required": [
+                    "logic",
+                    "auto_detectable",
+                    "confidence"
+                ]
+            },
+            "threat": {
+                "type": "object",
+                "required": [
+                    "title",
+                    "description"
+                ],
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "attack_scenario": {
+                        "type": "string"
+                    },
+                    "prerequisites": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "attack_vector": {
+                        "type": "string"
+                    },
+                    "exploitability": {
+                        "type": "string"
+                    }
+                }
+            },
+            "risk": {
+                "type": "object",
+                "required": [
+                    "severity",
+                    "likelihood",
+                    "impact",
+                    "risk_score"
+                ],
+                "properties": {
+                    "severity": {
+                        "type": "string"
+                    },
+                    "likelihood": {
+                        "type": "string"
+                    },
+                    "impact": {
+                        "type": "string"
+                    },
+                    "risk_score": {
+                        "type": "number"
+                    },
+                    "cvss_score": {
+                        "type": "number"
+                    },
+                    "business_impact": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "affected_assets": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "mitigation": {
+                "type": "object",
+                "required": [
+                    "primary",
+                    "verification"
+                ],
+                "properties": {
+                    "primary": {
+                        "type": "string"
+                    },
+                    "defense_in_depth": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "verification": {
+                        "type": "string"
+                    }
+                }
+            },
+            "compliance": {
+                "type": "object",
+                "properties": {
+                    "standards": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "regulatory": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "industry_frameworks": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "references": {
+                "type": "object",
+                "properties": {
+                    "documentation": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "cwe": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "capec": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "related_cves": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "metadata": {
+                "type": "object",
+                "properties": {
+                    "version": {
+                        "type": "string"
+                    },
+                    "last_reviewed": {
+                        "type": "string"
+                    },
+                    "created": {
+                        "type": "string"
+                    },
+                    "last_updated": {
+                        "type": "string"
+                    },
+                    "author": {
+                        "type": "string"
+                    },
+                    "reviewed_by": {
+                        "type": "string"
+                    },
+                    "review_date": {
+                        "type": "string"
+                    }
+                }
+            },
+            "evidence": {
+                "type": "object",
+                "required": [
+                    "derived_from",
+                    "reasoning"
+                ],
+                "properties": {
+                    "derived_from": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "reasoning": {
+                        "type": "string"
+                    }
+                }
+            },
+            "signal_source": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "architecture",
+                        "configuration",
+                        "code",
+                        "runtime"
+                    ]
+                }
+            },
+            "applicability": {
+                "type": "object",
+                "properties": {
+                    "environment": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "exposed_to": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "data_sensitivity": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "negating_controls": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "mapped_controls": {
+                "type": "object",
+                "properties": {
+                    "owasp_top_10": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "owasp_asvs": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "nist_800_53": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "maturity_level": {
+                "type": "string",
+                "enum": [
+                    "baseline",
+                    "intermediate",
+                    "advanced"
+                ]
+            },
+            "related_threats": {
+                "type": "object",
+                "properties": {
+                    "amplifies": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "mitigates": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "positive_signal": {
+                "type": "object",
+                "properties": {
+                    "condition": {
+                        "type": "string"
+                    },
+                    "message": {
+                        "type": "string"
+                    }
+                }
+            },
+            "mitre_attack": {
+                "type": "object",
+                "properties": {
+                    "version": {
+                        "type": "string"
+                    },
+                    "enterprise": {
+                        "type": "object",
+                        "properties": {
+                            "tactics": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "url": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "name"
+                                    ]
+                                }
+                            },
+                            "techniques": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "url": {
+                                            "type": "string"
+                                        },
+                                        "description": {
+                                            "type": "string"
+                                        },
+                                        "detection_methods": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "data_sources": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "name"
+                                    ]
+                                }
+                            },
+                            "sub_techniques": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "url": {
+                                            "type": "string"
+                                        },
+                                        "description": {
+                                            "type": "string"
+                                        },
+                                        "platforms": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "name"
+                                    ]
+                                }
+                            },
+                            "procedures": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "group_id": {
+                                            "type": "string"
+                                        },
+                                        "group_name": {
+                                            "type": "string"
+                                        },
+                                        "description": {
+                                            "type": "string"
+                                        },
+                                        "reference": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "mobile": {
+                        "type": "object",
+                        "properties": {
+                            "techniques": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "ics": {
+                        "type": "object",
+                        "properties": {
+                            "techniques": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "mitigations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                },
+                                "description": {
+                                    "type": "string"
+                                },
+                                "applicability": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name"
+                            ]
+                        }
+                    },
+                    "threat_groups": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "aliases": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "url": {
+                                    "type": "string"
+                                },
+                                "known_to_exploit": {
+                                    "type": "boolean"
+                                },
+                                "last_observed": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "software_used": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "type": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                },
+                                "description": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "attack_patterns": {
+                        "type": "object",
+                        "properties": {
+                            "common_sequences": {
+                                "type": "array",
+                                "items": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            "kill_chain_mapping": {
+                                "type": "object",
+                                "additionalProperties": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "detection": {
+                        "type": "object",
+                        "properties": {
+                            "data_sources_required": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "detection_opportunities": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "method": {
+                                            "type": "string"
+                                        },
+                                        "description": {
+                                            "type": "string"
+                                        },
+                                        "difficulty": {
+                                            "type": "string"
+                                        },
+                                        "false_positive_rate": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            },
+                            "sigma_rules": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "rule_id": {
+                                            "type": "string"
+                                        },
+                                        "rule_name": {
+                                            "type": "string"
+                                        },
+                                        "severity": {
+                                            "type": "string"
+                                        },
+                                        "url": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            },
+                            "splunk_queries": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "elastic_queries": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "navigator": {
+                        "type": "object",
+                        "properties": {
+                            "layer_version": {
+                                "type": "string"
+                            },
+                            "techniques_highlighted": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "export_url": {
+                                "type": "string"
+                            },
+                            "layer_json": {
+                                "type": "object"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

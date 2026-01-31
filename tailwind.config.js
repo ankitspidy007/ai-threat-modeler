@@ -7,16 +7,23 @@ export default {
   theme: {
     extend: {
       colors: {
-        cyber: {
-          900: '#05050a', // Darker background
-          800: '#0f1016', // Card background
-          700: '#1a1b26', // Border/Input
-          accent: '#00f2ff', // Neon Cyan
-          primary: '#7000ff', // Neon Purple
-          danger: '#ff003c', // Neon Red
-          success: '#00ff9d', // Neon Green
-          text: '#e0e0e0',
-          muted: '#808090',
+        brand: {
+          900: '#0f172a', // Slate 900
+          800: '#1e293b', // Slate 800
+          700: '#334155', // Slate 700
+          600: '#475569', // Slate 600
+          500: '#64748b', // Slate 500
+          400: '#94a3b8', // Slate 400
+          300: '#cbd5e1', // Slate 300
+          200: '#e2e8f0', // Slate 200
+          100: '#f1f5f9', // Slate 100
+          50: '#f8fafc',  // Slate 50
+          primary: '#4f46e5', // Indigo 600
+          secondary: '#0ea5e9', // Sky 500
+          accent: '#8b5cf6', // Violet 500
+          success: '#10b981', // Emerald 500
+          warning: '#f59e0b', // Amber 500
+          danger: '#ef4444', // Red 500
         },
       },
       fontFamily: {
