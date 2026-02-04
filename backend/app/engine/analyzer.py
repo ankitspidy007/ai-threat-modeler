@@ -80,13 +80,17 @@ class ThreatAnalyzer:
         confirmed = [t for t in normalized_threats if t.tier == "Confirmed"]
         potential = [t for t in normalized_threats if t.tier == "Potential"]
         
+        from datetime import datetime
+        
         result = AnalysisResult(
             project_name=project_name,
             summary=f"Analysis complete. {len(confirmed)} confirmed risks, {len(potential)} potential risks.",
             threats=normalized_threats,
             architecture=architecture,
             score=score,
-            mermaid_diagram=diagram
+            mermaid_diagram=diagram,
+            diagram=diagram,  # Set both for compatibility
+            timestamp=datetime.now().isoformat()
         )
         
         # Generate Report

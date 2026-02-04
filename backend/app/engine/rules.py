@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from ..models import Threat
 
 from collections import namedtuple
@@ -16,6 +16,17 @@ class RuleEngine:
         
         with open(rules_path, 'r') as f:
             self.rules = json.load(f)
+        
+        # Load domain-specific threats if available
+        domain_rules_path = rules_path.replace('threats.json', 'domain_threats.json')
+        if os.path.exists(domain_rules_path):
+            with open(domain_rules_path, 'r') as f:
+                domain_rules = json.load(f)
+                self.rules.extend(domain_rules)
+                print(f"Loaded {len(domain_rules)} domain-specific threat rules")
+        
+        # Sort rules by priority (if defined) for consistent evaluation order
+        self.rules.sort(key=lambda r: r.get('priority', 50))
 
     def evaluate_component(self, component_id: str, component_data: Dict[str, Any]) -> List[Threat]:
         threats = []
@@ -39,6 +50,13 @@ class RuleEngine:
             
             match_res = self._evaluate_logic(logic, component_data)
             if match_res.match:
+                # Check for negating controls before adding threat
+                negated, negating_control = self._check_negating_controls(rule, component_data)
+                
+                if negated:
+                    # Add as informational finding instead of threat
+                    continue
+                
                 threats.append(self._create_threat_object(
                     rule, 
                     component_id=component_id, 
@@ -62,6 +80,13 @@ class RuleEngine:
 
             match_res = self._evaluate_logic(logic, flow_data)
             if match_res.match:
+                # Check for negating controls before adding threat
+                negated, negating_control = self._check_negating_controls(rule, flow_data)
+                
+                if negated:
+                    # Negating control present - skip this threat
+                    continue
+                
                 threats.append(self._create_threat_object(
                     rule, 
                     source=source, 
@@ -70,6 +95,53 @@ class RuleEngine:
                     evidence=match_res.evidence
                 ))
         return threats
+
+    def _check_negating_controls(self, rule: Dict, context: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        """
+        Check if any negating controls are present that would mitigate/negate this threat.
+        Returns (is_negated, control_name) tuple.
+        """
+        negating_controls = rule.get('negating_controls', [])
+        
+        if not negating_controls:
+            return False, None
+        
+        # Map control names to context field checks
+        control_mappings = {
+            'api_gateway': lambda ctx: ctx.get('has_api_gateway', False),
+            'waf_enabled': lambda ctx: ctx.get('waf_enabled', False),
+            'idp_integration': lambda ctx: ctx.get('idp_integration', False),
+            'zero_trust_network': lambda ctx: ctx.get('zero_trust', False),
+            'mutual_tls': lambda ctx: ctx.get('mtls_enabled', False),
+            'mTLS': lambda ctx: ctx.get('mtls_enabled', False),
+            'service_mesh': lambda ctx: ctx.get('service_mesh', False),
+            'network_segmentation': lambda ctx: ctx.get('network_segmentation', False),
+            'tls_termination': lambda ctx: ctx.get('tls_termination', False) or ctx.get('protocol') == 'https',
+            'vpn': lambda ctx: ctx.get('vpn_enabled', False),
+            'backup_policy': lambda ctx: ctx.get('backup_enabled', False),
+            'strict_dto_mapping': lambda ctx: ctx.get('dto_validation', False),
+            'centralized_logging': lambda ctx: ctx.get('centralized_logging', False),
+            'siem': lambda ctx: ctx.get('siem_integration', False),
+            'csrf_tokens': lambda ctx: ctx.get('csrf_protection', False),
+            'api_gateway_validation': lambda ctx: ctx.get('gateway_validation', False),
+            'encryption_at_rest': lambda ctx: ctx.get('encryption_at_rest', False),
+            'field_level_encryption': lambda ctx: ctx.get('field_level_encryption', False),
+            'hsm': lambda ctx: ctx.get('hsm_enabled', False),
+            'key_rotation': lambda ctx: ctx.get('key_rotation', False),
+            'rbac': lambda ctx: ctx.get('rbac_enabled', False),
+            'abac': lambda ctx: ctx.get('abac_enabled', False),
+            'private_subnet': lambda ctx: ctx.get('private_subnet', False),
+            'threat_intel_feeds': lambda ctx: ctx.get('threat_intel', False),
+            'waf': lambda ctx: ctx.get('waf_enabled', False),
+            'ddos_protection': lambda ctx: ctx.get('ddos_protection', False),
+        }
+        
+        for control in negating_controls:
+            check_func = control_mappings.get(control.lower())
+            if check_func and check_func(context):
+                return True, control
+        
+        return False, None
 
     def _evaluate_logic(self, logic: Dict, context: Dict[str, Any]) -> MatchResult:
         """
@@ -155,6 +227,10 @@ class RuleEngine:
         if op == 'in': matched = (val is not None and context_val in val)
         if op == 'not_in': matched = (val is not None and context_val not in val)
         if op == 'exists': matched = (context_val is not None)
+        if op == 'contains': matched = (val is not None and val in str(context_val))
+        if op == 'regex': 
+            import re
+            matched = bool(re.search(val, str(context_val))) if val else False
         
         # Legacy/Fallback
         if op == '>': matched = (context_val > val) if context_val is not None else False

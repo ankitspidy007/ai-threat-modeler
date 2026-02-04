@@ -49,4 +49,6 @@ class AnalysisResult(BaseModel):
     architecture: SystemArchitecture
     score: int
     mermaid_diagram: Optional[str] = None
+    diagram: Optional[str] = None  # Alias for frontend compatibility
     report_markdown: Optional[str] = None
+    timestamp: Optional[str] = None  # For tracking when analysis was done

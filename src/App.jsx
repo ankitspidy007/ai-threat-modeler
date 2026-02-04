@@ -3,11 +3,13 @@ import ThreatInput from './components/ThreatInput';
 import ThreatDashboard from './components/ThreatDashboard';
 import { analyzeSystem } from './services/mockAi';
 import { Shield } from 'lucide-react';
+import { useToast } from './components/Toast';
 
 function App() {
   const [data, setData] = useState(null);
   const [projectName, setProjectName] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const toast = useToast();
 
   const handleAnalyze = async (description, name) => {
     setIsAnalyzing(true);
@@ -17,8 +19,13 @@ function App() {
     try {
       const result = await analyzeSystem(description, name);
       setData(result);
+      toast.success(`Analysis complete! Found ${result.threats.length} potential threats.`, 'Success');
     } catch (error) {
       console.error("Analysis failed", error);
+      toast.error(
+        error.message || 'Failed to analyze system. Please check your connection and try again.',
+        'Analysis Failed'
+      );
     } finally {
       setIsAnalyzing(false);
     }
