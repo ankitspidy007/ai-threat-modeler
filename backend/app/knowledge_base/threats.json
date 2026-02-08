@@ -1818,5 +1818,868 @@
             ]
         },
         "maturity_level": "baseline"
+    },
+    {
+        "id": "DOS-007",
+        "category": "Denial of Service",
+        "resource_type": [
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "has_graphql",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "query_depth_limiting",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "GraphQL Query Depth/Complexity DoS",
+            "description": "GraphQL API without query depth or complexity limiting allows attackers to craft deeply nested queries that consume excessive server resources, leading to denial of service."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "High",
+            "impact": "Medium",
+            "risk_score": 72.0,
+            "affected_assets": [
+                "Service",
+                "API"
+            ],
+            "business_impact": [
+                "Service Disruption",
+                "Performance Degradation"
+            ]
+        },
+        "mitigation": {
+            "primary": "Implement query depth limiting (max 5-7 levels) and query complexity analysis. Use tools like graphql-depth-limit.",
+            "defense_in_depth": [
+                "Rate limiting per user",
+                "Query cost analysis",
+                "Timeout enforcement"
+            ],
+            "verification": "Test with deeply nested queries and verify they are rejected."
+        },
+        "metadata": {
+            "version": "1.0",
+            "last_reviewed": "2026-02-08",
+            "created": "2026-02-08",
+            "last_updated": "2026-02-08",
+            "author": "AI Threat Modeler Intelligence Team",
+            "reviewed_by": "Security Architect"
+        },
+        "evidence": {
+            "derived_from": [
+                "has_graphql",
+                "query_depth_limiting"
+            ],
+            "reasoning": "GraphQL endpoint detected without depth limiting controls."
+        },
+        "signal_source": [
+            "architecture",
+            "configuration"
+        ],
+        "negating_controls": [
+            "query_depth_limiting",
+            "query_complexity_analysis"
+        ],
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A05:2021-Security Misconfiguration"
+            ],
+            "cwe": [
+                "CWE-400"
+            ]
+        },
+        "maturity_level": "intermediate"
+    },
+    {
+        "id": "T-008",
+        "category": "Tampering",
+        "resource_type": [
+            "API",
+            "Service"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "has_webhooks",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "webhook_signature_validation",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Webhook Signature Validation Missing",
+            "description": "Webhook endpoints that don't verify sender signatures allow attackers to forge webhook requests, potentially triggering unauthorized actions or data manipulation."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 68.0,
+            "affected_assets": [
+                "Data",
+                "Service"
+            ],
+            "business_impact": [
+                "Data Integrity Loss",
+                "Unauthorized Actions"
+            ]
+        },
+        "mitigation": {
+            "primary": "Implement HMAC signature verification for all webhook endpoints. Validate signatures before processing payload.",
+            "defense_in_depth": [
+                "IP allowlisting",
+                "Webhook secret rotation",
+                "Idempotency keys"
+            ],
+            "verification": "Test with forged webhook requests and verify they are rejected."
+        },
+        "metadata": {
+            "version": "1.0",
+            "last_reviewed": "2026-02-08",
+            "created": "2026-02-08",
+            "last_updated": "2026-02-08",
+            "author": "AI Threat Modeler Intelligence Team",
+            "reviewed_by": "Security Architect"
+        },
+        "evidence": {
+            "derived_from": [
+                "has_webhooks",
+                "webhook_signature_validation"
+            ],
+            "reasoning": "Webhook integration detected without signature validation."
+        },
+        "signal_source": [
+            "architecture",
+            "configuration"
+        ],
+        "negating_controls": [
+            "webhook_signature_validation",
+            "ip_allowlist"
+        ],
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A08:2021-Software and Data Integrity Failures"
+            ],
+            "cwe": [
+                "CWE-345"
+            ]
+        },
+        "maturity_level": "baseline"
+    },
+    {
+        "id": "T-009",
+        "category": "Tampering",
+        "resource_type": [
+            "API",
+            "WebClient"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "user_html_input",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "html_sanitization",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Cross-Site Scripting (XSS) via User-Provided HTML",
+            "description": "Application allows user-provided HTML content without sanitization, enabling attackers to inject malicious JavaScript that executes in other users' browsers."
+        },
+        "risk": {
+            "severity": "Critical",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 85.0,
+            "affected_assets": [
+                "Data",
+                "Users"
+            ],
+            "business_impact": [
+                "Account Takeover",
+                "Data Theft",
+                "Reputation Damage"
+            ]
+        },
+        "mitigation": {
+            "primary": "Implement HTML sanitization using libraries like DOMPurify or Bleach. Use Content Security Policy (CSP) headers.",
+            "defense_in_depth": [
+                "CSP with strict-dynamic",
+                "HTTPOnly cookies",
+                "Input validation"
+            ],
+            "verification": "Test with XSS payloads and verify they are sanitized."
+        },
+        "metadata": {
+            "version": "1.0",
+            "last_reviewed": "2026-02-08",
+            "created": "2026-02-08",
+            "last_updated": "2026-02-08",
+            "author": "AI Threat Modeler Intelligence Team",
+            "reviewed_by": "Security Architect"
+        },
+        "evidence": {
+            "derived_from": [
+                "user_html_input",
+                "html_sanitization"
+            ],
+            "reasoning": "User-provided HTML detected without sanitization controls."
+        },
+        "signal_source": [
+            "code",
+            "configuration"
+        ],
+        "negating_controls": [
+            "html_sanitization",
+            "csp_enabled"
+        ],
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A03:2021-Injection"
+            ],
+            "cwe": [
+                "CWE-79"
+            ],
+            "owasp_asvs": [
+                "V5-Validation"
+            ]
+        },
+        "maturity_level": "baseline"
+    },
+    {
+        "id": "T-010",
+        "category": "Tampering",
+        "resource_type": [
+            "API",
+            "Service"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "csv_import",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "csv_sanitization",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "CSV Formula Injection",
+            "description": "CSV import functionality without formula sanitization allows attackers to inject formulas (=, +, -, @) that execute when the CSV is opened in spreadsheet applications, potentially leading to remote code execution."
+        },
+        "risk": {
+            "severity": "Medium",
+            "likelihood": "Medium",
+            "impact": "Medium",
+            "risk_score": 55.0,
+            "affected_assets": [
+                "Data",
+                "Users"
+            ],
+            "business_impact": [
+                "Code Execution",
+                "Data Exfiltration"
+            ]
+        },
+        "mitigation": {
+            "primary": "Sanitize CSV cells starting with =, +, -, @ by prepending a single quote ('). Validate and escape all user input.",
+            "defense_in_depth": [
+                "Input validation",
+                "File format restrictions",
+                "User warnings"
+            ],
+            "verification": "Test with CSV containing formulas and verify they are escaped."
+        },
+        "metadata": {
+            "version": "1.0",
+            "last_reviewed": "2026-02-08",
+            "created": "2026-02-08",
+            "last_updated": "2026-02-08",
+            "author": "AI Threat Modeler Intelligence Team",
+            "reviewed_by": "Security Architect"
+        },
+        "evidence": {
+            "derived_from": [
+                "csv_import",
+                "csv_sanitization"
+            ],
+            "reasoning": "CSV import functionality detected without formula sanitization."
+        },
+        "signal_source": [
+            "code",
+            "architecture"
+        ],
+        "negating_controls": [
+            "csv_sanitization",
+            "input_validation"
+        ],
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A03:2021-Injection"
+            ],
+            "cwe": [
+                "CWE-1236"
+            ]
+        },
+        "maturity_level": "intermediate"
+    },
+    {
+        "id": "CORS-001",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "cors_wildcard",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "environment",
+                        "op": "==",
+                        "value": "production"
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "CORS Wildcard Misconfiguration in Production",
+            "description": "Production API configured with CORS wildcard (*) allows any origin to make authenticated requests, potentially exposing sensitive data to malicious websites."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 70.0,
+            "affected_assets": [
+                "Data",
+                "API"
+            ],
+            "business_impact": [
+                "Data Exposure",
+                "Unauthorized Access"
+            ]
+        },
+        "mitigation": {
+            "primary": "Configure CORS with explicit allowed origins. Never use wildcard (*) in production with credentials.",
+            "defense_in_depth": [
+                "Origin validation",
+                "CSRF tokens",
+                "SameSite cookies"
+            ],
+            "verification": "Test CORS configuration and verify only allowed origins can access the API."
+        },
+        "metadata": {
+            "version": "1.0",
+            "last_reviewed": "2026-02-08",
+            "created": "2026-02-08",
+            "last_updated": "2026-02-08",
+            "author": "AI Threat Modeler Intelligence Team",
+            "reviewed_by": "Security Architect"
+        },
+        "evidence": {
+            "derived_from": [
+                "cors_wildcard",
+                "environment"
+            ],
+            "reasoning": "CORS wildcard configuration detected in production environment."
+        },
+        "signal_source": [
+            "configuration"
+        ],
+        "negating_controls": [
+            "cors_strict_origins"
+        ],
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A05:2021-Security Misconfiguration"
+            ],
+            "cwe": [
+                "CWE-942"
+            ]
+        },
+        "maturity_level": "baseline"
+    },
+    {
+        "id": "ID-010",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "API",
+            "Service"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "detailed_errors",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "environment",
+                        "op": "==",
+                        "value": "production"
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Stack Trace and Detailed Error Exposure",
+            "description": "Production API returns detailed error messages with stack traces, exposing internal implementation details, file paths, and potentially sensitive information to attackers."
+        },
+        "risk": {
+            "severity": "Medium",
+            "likelihood": "High",
+            "impact": "Low",
+            "risk_score": 52.0,
+            "affected_assets": [
+                "Information"
+            ],
+            "business_impact": [
+                "Information Leakage",
+                "Attack Surface Exposure"
+            ]
+        },
+        "mitigation": {
+            "primary": "Configure production environment to return generic error messages. Log detailed errors server-side only.",
+            "defense_in_depth": [
+                "Error handling middleware",
+                "Centralized logging",
+                "Error monitoring"
+            ],
+            "verification": "Trigger errors and verify only generic messages are returned to clients."
+        },
+        "metadata": {
+            "version": "1.0",
+            "last_reviewed": "2026-02-08",
+            "created": "2026-02-08",
+            "last_updated": "2026-02-08",
+            "author": "AI Threat Modeler Intelligence Team",
+            "reviewed_by": "Security Architect"
+        },
+        "evidence": {
+            "derived_from": [
+                "detailed_errors",
+                "environment"
+            ],
+            "reasoning": "Detailed error messages detected in production environment."
+        },
+        "signal_source": [
+            "configuration",
+            "runtime"
+        ],
+        "negating_controls": [
+            "generic_error_messages"
+        ],
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A05:2021-Security Misconfiguration"
+            ],
+            "cwe": [
+                "CWE-209"
+            ]
+        },
+        "maturity_level": "baseline"
+    },
+    {
+        "id": "S-007",
+        "category": "Spoofing",
+        "resource_type": [
+            "API",
+            "Service"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "session_timeout_type",
+                        "op": "==",
+                        "value": "sliding"
+                    },
+                    {
+                        "field": "absolute_timeout",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Session Timeout Misconfiguration",
+            "description": "Sessions using only sliding timeout without absolute timeout allow sessions to remain active indefinitely with periodic activity, increasing risk of session hijacking."
+        },
+        "risk": {
+            "severity": "Medium",
+            "likelihood": "Medium",
+            "impact": "Medium",
+            "risk_score": 50.0,
+            "affected_assets": [
+                "Sessions",
+                "Users"
+            ],
+            "business_impact": [
+                "Session Hijacking",
+                "Unauthorized Access"
+            ]
+        },
+        "mitigation": {
+            "primary": "Implement both sliding timeout (15-30 min) and absolute timeout (8-24 hours). Force re-authentication after absolute timeout.",
+            "defense_in_depth": [
+                "Session rotation",
+                "Device fingerprinting",
+                "Anomaly detection"
+            ],
+            "verification": "Test session behavior and verify absolute timeout is enforced."
+        },
+        "metadata": {
+            "version": "1.0",
+            "last_reviewed": "2026-02-08",
+            "created": "2026-02-08",
+            "last_updated": "2026-02-08",
+            "author": "AI Threat Modeler Intelligence Team",
+            "reviewed_by": "Security Architect"
+        },
+        "evidence": {
+            "derived_from": [
+                "session_timeout_type",
+                "absolute_timeout"
+            ],
+            "reasoning": "Session configuration uses sliding timeout without absolute limit."
+        },
+        "signal_source": [
+            "configuration"
+        ],
+        "negating_controls": [
+            "absolute_timeout",
+            "session_rotation"
+        ],
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A07:2021-Identification and Authentication Failures"
+            ],
+            "owasp_asvs": [
+                "V3-Session Management"
+            ]
+        },
+        "maturity_level": "intermediate"
+    },
+    {
+        "id": "T-011",
+        "category": "Tampering",
+        "resource_type": [
+            "API",
+            "Service"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "file_upload",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "content_type_validation",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "File Upload Content-Type Bypass",
+            "description": "File upload functionality without proper content-type validation allows attackers to upload malicious files (e.g., web shells, executables) by bypassing client-side checks."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 78.0,
+            "affected_assets": [
+                "Service",
+                "Data"
+            ],
+            "business_impact": [
+                "Remote Code Execution",
+                "Data Breach",
+                "Service Compromise"
+            ]
+        },
+        "mitigation": {
+            "primary": "Validate file content (magic bytes) server-side, not just extension or MIME type. Use allowlist of permitted file types.",
+            "defense_in_depth": [
+                "File size limits",
+                "Virus scanning",
+                "Isolated storage",
+                "Content-Disposition headers"
+            ],
+            "verification": "Test with malicious files disguised as allowed types and verify they are rejected."
+        },
+        "metadata": {
+            "version": "1.0",
+            "last_reviewed": "2026-02-08",
+            "created": "2026-02-08",
+            "last_updated": "2026-02-08",
+            "author": "AI Threat Modeler Intelligence Team",
+            "reviewed_by": "Security Architect"
+        },
+        "evidence": {
+            "derived_from": [
+                "file_upload",
+                "content_type_validation"
+            ],
+            "reasoning": "File upload functionality detected without content-type validation."
+        },
+        "signal_source": [
+            "code",
+            "architecture"
+        ],
+        "negating_controls": [
+            "content_type_validation",
+            "magic_byte_validation"
+        ],
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A04:2021-Insecure Design"
+            ],
+            "cwe": [
+                "CWE-434"
+            ]
+        },
+        "maturity_level": "baseline"
+    },
+    {
+        "id": "S-008",
+        "category": "Spoofing",
+        "resource_type": [
+            "API",
+            "Service"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "has_jwt",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "jwt_validation",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "JWT Signature Not Validated",
+            "description": "Microservices decode JWT tokens without validating the signature, allowing attackers to forge tokens with arbitrary claims and impersonate any user."
+        },
+        "risk": {
+            "severity": "Critical",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 92.0,
+            "affected_assets": [
+                "Authentication",
+                "Data",
+                "Users"
+            ],
+            "business_impact": [
+                "Complete Authentication Bypass",
+                "Privilege Escalation",
+                "Data Breach"
+            ]
+        },
+        "mitigation": {
+            "primary": "Always validate JWT signature using the public key or shared secret. Verify issuer, audience, and expiration claims.",
+            "defense_in_depth": [
+                "JWT libraries with strict validation",
+                "Key rotation",
+                "Short expiration times"
+            ],
+            "verification": "Test with forged JWT tokens and verify they are rejected."
+        },
+        "metadata": {
+            "version": "1.0",
+            "last_reviewed": "2026-02-08",
+            "created": "2026-02-08",
+            "last_updated": "2026-02-08",
+            "author": "AI Threat Modeler Intelligence Team",
+            "reviewed_by": "Security Architect"
+        },
+        "evidence": {
+            "derived_from": [
+                "has_jwt",
+                "jwt_validation"
+            ],
+            "reasoning": "JWT usage detected without signature validation."
+        },
+        "signal_source": [
+            "code",
+            "configuration"
+        ],
+        "negating_controls": [
+            "jwt_signature_validation",
+            "api_gateway_validation"
+        ],
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A07:2021-Identification and Authentication Failures"
+            ],
+            "cwe": [
+                "CWE-347"
+            ],
+            "owasp_asvs": [
+                "V2-Authentication"
+            ]
+        },
+        "maturity_level": "baseline"
+    },
+    {
+        "id": "DOS-008",
+        "category": "Denial of Service",
+        "resource_type": [
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "has_graphql",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "rate_limiting",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Missing Rate Limiting on GraphQL API",
+            "description": "GraphQL API without rate limiting allows attackers to overwhelm the service with excessive requests, causing resource exhaustion and denial of service."
+        },
+        "risk": {
+            "severity": "Medium",
+            "likelihood": "High",
+            "impact": "Medium",
+            "risk_score": 58.0,
+            "affected_assets": [
+                "Service",
+                "API"
+            ],
+            "business_impact": [
+                "Service Disruption",
+                "Performance Degradation"
+            ]
+        },
+        "mitigation": {
+            "primary": "Implement rate limiting per user/IP address. Use sliding window or token bucket algorithms.",
+            "defense_in_depth": [
+                "Query complexity analysis",
+                "Depth limiting",
+                "Timeout enforcement"
+            ],
+            "verification": "Test with excessive requests and verify rate limiting is enforced."
+        },
+        "metadata": {
+            "version": "1.0",
+            "last_reviewed": "2026-02-08",
+            "created": "2026-02-08",
+            "last_updated": "2026-02-08",
+            "author": "AI Threat Modeler Intelligence Team",
+            "reviewed_by": "Security Architect"
+        },
+        "evidence": {
+            "derived_from": [
+                "has_graphql",
+                "rate_limiting"
+            ],
+            "reasoning": "GraphQL API detected without rate limiting controls."
+        },
+        "signal_source": [
+            "architecture",
+            "configuration"
+        ],
+        "negating_controls": [
+            "rate_limiting",
+            "api_gateway"
+        ],
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A04:2021-Insecure Design"
+            ],
+            "cwe": [
+                "CWE-770"
+            ]
+        },
+        "maturity_level": "baseline"
     }
 ]

@@ -1,57 +1,221 @@
-# AITM (AI-based Threat Modeling)
+# AI Threat Modeler
 
-AITM is a modern, AI-powered tool designed to help developers and security engineers generate threat models from simple system descriptions. It leverages keyword-based AI inference (extensible to LLMs) to identify potential security risks, map them to compliance standards, and visualize the findings.
+An advanced, AI-powered threat modeling tool that automatically identifies security vulnerabilities from system architecture descriptions. Built with React + Vite frontend and FastAPI backend.
 
-## Key Features
+## 🎯 Key Features
 
-- **AI Threat Inference**: Automatically identifies threats like SQL Injection, Weak Auth, and more based on architecture descriptions.
-- **Interactive Dashboard**:
-    - **Risk Matrix**: Visual 3x3 Heat Map of Threat Severity vs. Likelihood.
-    - **Architecture Diagrams**: Auto-generated mermaid.js system diagrams.
-    - **Detailed Table View**: Comprehensive findings including "Attack Simulation" narratives.
-- **Compliance Mapping**: All threats are mapped to **OWASP Top 10** and **NIST 800-53** controls.
-- **Rich PDF Reports**: Export extensive, landscape-oriented PDF reports for stakeholders.
-- **Data Export**: Download findings as **JSON** or **CSV** for integration with Jira or other tools.
-- **Secure by Design**: Client-side processing ensures your architecture data stays local (in this version).
+### Intelligent Threat Detection
+- **10+ Threat Categories**: Detects GraphQL DoS, webhook validation, XSS, CSV injection, CORS misconfigurations, JWT validation, and more
+- **Known Issues Processing**: Automatically converts explicitly stated vulnerabilities into high-confidence threats
+- **STRIDE Framework**: Maps all threats to STRIDE categories (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege)
+- **Compliance Mapping**: Links threats to OWASP Top 10, CWE, and NIST 800-53 controls
 
-## Prerequisites
+### Enhanced Architecture Diagrams
+- **Microservice Extraction**: Parses individual services from numbered lists and bullet points
+- **Database Detection**: Identifies PostgreSQL, MongoDB, MySQL, Redis, Elasticsearch, and more
+- **Third-Party Integrations**: Detects Stripe, PayPal, SendGrid, Twilio, FedEx, and other external services
+- **Layered Visualization**: Color-coded zones (Frontend, API Layer, Services, Data Layer, External)
+- **Trust Boundaries**: Highlights flows crossing security boundaries with dotted lines
 
-Ensure you have the following installed on your local system:
+### Interactive Dashboard
+- **Risk Matrix**: 3x3 heat map showing threat severity vs. likelihood
+- **Detailed Threat Table**: Comprehensive findings with evidence, mitigation steps, and attack simulations
+- **Architecture Diagrams**: Auto-generated Mermaid.js diagrams with intelligent component grouping
+- **Export Options**: PDF reports, JSON, and CSV downloads
+
+## 🏗️ Architecture
+
+```
+Frontend (React + Vite)          Backend (FastAPI)
+├── ThreatDashboard.jsx    ←→   ├── main.py
+├── RiskMatrix.jsx               ├── engine/
+└── ArchitectureDiagram.jsx      │   ├── parser.py (extracts components)
+                                 │   ├── rules.py (evaluates threats)
+                                 │   ├── analyzer.py (orchestrates analysis)
+                                 │   └── mermaid_generator.py
+                                 └── knowledge_base/
+                                     └── threats.json (60+ threat rules)
+```
+
+## 📋 Prerequisites
 
 - **Node.js**: Version 18 or higher
 - **npm**: Version 9 or higher
+- **Python**: Version 3.8 or higher
+- **pip**: Latest version
 
-## Installation
+## 🚀 Installation
 
-1. **Clone the repository** (if applicable) or navigate to the project folder.
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+### 1. Clone the Repository
+```bash
+git clone <repository-url>
+cd ai-threat-modeler
+```
 
-## Running the Application
+### 2. Install Frontend Dependencies
+```bash
+npm install
+```
 
-1. **Start the development server**:
-   ```bash
-   npm run dev
-   ```
-2. **Open your browser** and navigate to the URL shown in the terminal (usually `http://localhost:5173/`).
+### 3. Install Backend Dependencies
+```bash
+cd backend
+pip install -r requirements.txt
+```
 
-## Usage Guide
+## ▶️ Running the Application
 
-1. **Describe System**: Enter a description of your system architecture (e.g., *"A public web app with a React frontend, Node.js API, and MongoDB database"*).
-2. **Analyze**: Click the **Analyze System** button.
-3. **Review Findings**:
-    - Check the **Risk Matrix** for high-priority items.
-    - Review the inferred **Compliance Mappings**.
-    - Read the **Attack Simulations** to understand the exploit paths.
-4. **Export**:
-    - Click **Export PDF** for a printable report.
-    - Click **JSON** or **CSV** to get raw data.
+### Start Backend Server
+```bash
+cd backend
+python -m uvicorn app.main:app --reload --port 8000
+```
+Backend will run at: `http://127.0.0.1:8000`
 
-## Project Structure
+### Start Frontend Server
+```bash
+npm run dev
+```
+Frontend will run at: `http://localhost:5173/`
 
-- `src/components/RiskMatrix.jsx`: Visualization component for the 3x3 risk grid.
-- `src/components/ThreatDashboard.jsx`: Main dashboard view with table, diagrams, and export buttons.
-- `src/services/mockAi.js`: Logic for threat inference, diagram generation, and compliance mapping.
-- `src/utils/pdfGenerator.js`: Utility for generating landscape PDFs.
+## 📖 Usage Guide
+
+### 1. Describe Your System
+Enter a detailed architecture description. For best results, include:
+- **Microservices**: List services with tech stacks
+  ```
+  1. User Service (Node.js + Express): Handles authentication
+  2. Payment Service (Java Spring Boot): Integrates with Stripe
+  ```
+- **Databases**: Specify types and purposes
+  ```
+  PostgreSQL database for user data
+  MongoDB for order storage
+  Redis cluster for session management
+  ```
+- **Third-Party Integrations**: Mention external services
+  ```
+  Integrates with Stripe for payments
+  Sends emails via SendGrid
+  ```
+- **Known Issues**: List security concerns
+  ```
+  KNOWN ISSUES:
+  - JWT signature is not validated
+  - GraphQL has no depth limiting
+  - CORS allows wildcard origins in production
+  ```
+
+### 2. Analyze System
+Click **Analyze System** to process your architecture.
+
+### 3. Review Results
+- **Architecture Diagram**: View the auto-generated layered diagram
+- **Risk Matrix**: Identify high-priority threats
+- **Threat Details**: Review evidence, severity, and mitigation steps
+- **Compliance**: Check OWASP Top 10 and CWE mappings
+
+### 4. Export Findings
+- **PDF Report**: Comprehensive printable report
+- **JSON**: Structured data for automation
+- **CSV**: Import into Jira, Excel, or other tools
+
+## 🔍 Example Input
+
+```
+System: E-Commerce Platform
+
+ARCHITECTURE:
+1. User Service (Node.js + Express): Handles authentication with JWT
+2. Product Catalog (Python FastAPI): GraphQL API for product search
+3. Payment Service (Java Spring Boot): Integrates with Stripe and PayPal
+4. Order Management (Go): Stores orders in MongoDB, sends confirmations via SendGrid
+
+DATABASES:
+- PostgreSQL with read replicas for user and product data
+- MongoDB for order storage
+- Redis cluster for session management
+
+KNOWN ISSUES:
+- JWT signature is not validated, only decoded
+- GraphQL has no query depth limiting
+- CORS allows wildcard origins in production
+```
+
+**Expected Output:**
+- 10+ threats detected
+- Individual service nodes in diagram
+- Separate database nodes (PostgreSQL, MongoDB, Redis)
+- External integrations (Stripe, PayPal, SendGrid)
+- High-confidence threats from Known Issues
+
+## 📁 Project Structure
+
+```
+ai-threat-modeler/
+├── src/                          # Frontend (React + Vite)
+│   ├── components/
+│   │   ├── ThreatDashboard.jsx   # Main dashboard
+│   │   ├── RiskMatrix.jsx        # Risk visualization
+│   │   └── ArchitectureDiagram.jsx
+│   └── services/
+│       └── api.js                # Backend API client
+├── backend/                      # Backend (FastAPI)
+│   ├── app/
+│   │   ├── main.py               # FastAPI app
+│   │   ├── engine/
+│   │   │   ├── parser.py         # Architecture parser
+│   │   │   ├── rules.py          # Threat rule engine
+│   │   │   ├── analyzer.py       # Analysis orchestrator
+│   │   │   └── mermaid_generator.py
+│   │   ├── knowledge_base/
+│   │   │   └── threats.json      # 60+ threat rules
+│   │   └── models.py             # Data models
+│   └── requirements.txt
+└── README.md
+```
+
+## 🛡️ Threat Detection Capabilities
+
+### Supported Threat Types
+- **Authentication**: JWT validation, weak auth, session management
+- **Injection**: SQL, NoSQL, CSV formula injection
+- **API Security**: GraphQL DoS, rate limiting, webhook validation
+- **Web Security**: XSS, CORS misconfigurations, CSRF
+- **Data Protection**: Encryption at rest, PII exposure, backup security
+- **Infrastructure**: Network segmentation, VPN, bastion hosts
+- **Third-Party**: Payment processor integration, external API security
+
+### Architecture Components Detected
+- **Frontend**: WebClient, Mobile Apps, CDN
+- **API Layer**: API Gateway, Load Balancer
+- **Services**: Individual microservices with tech stacks
+- **Databases**: PostgreSQL, MongoDB, MySQL, Redis, Elasticsearch, DynamoDB, Redshift
+- **External**: Stripe, PayPal, SendGrid, Twilio, FedEx, UPS, Auth0, Okta
+
+## 🔧 API Endpoints
+
+- `POST /analyze`: Analyze architecture description
+  - Request: `{ "architecture_description": "...", "project_name": "..." }`
+  - Response: Threats, diagram, risk score
+
+- `GET /health`: Health check
+- `GET /docs`: Interactive API documentation (Swagger UI)
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+## 📄 License
+
+[Add your license here]
+
+## 🙏 Acknowledgments
+
+Built with:
+- React + Vite
+- FastAPI
+- NetworkX (graph analysis)
+- Mermaid.js (diagrams)
+- STRIDE threat modeling framework
+

@@ -49,27 +49,33 @@ class ThreatAnalyzer:
             raw_threats.extend(threats)
 
         # ========================================
-        # PHASE 1: Aggregate by threat_id
+        # PHASE 1: Process Known Issues
+        # ========================================
+        known_issues_threats = self._process_known_issues(architecture)
+        raw_threats.extend(known_issues_threats)
+        
+        # ========================================
+        # PHASE 2: Aggregate by threat_id
         # ========================================
         aggregated_threats = self._aggregate_threats_by_id(raw_threats)
         
         # ========================================
-        # PHASE 2: Apply Confidence-Gated Severity
+        # PHASE 3: Apply Confidence-Gated Severity
         # ========================================
         gated_threats = self._apply_confidence_gating(aggregated_threats)
         
         # ========================================
-        # PHASE 3: Classify into Confirmed vs Potential
+        # PHASE 4: Classify into Confirmed vs Potential
         # ========================================
         classified_threats = self._classify_tiers(gated_threats)
         
         # ========================================
-        # PHASE 4: Normalize STRIDE Categories
+        # PHASE 5: Normalize STRIDE Categories
         # ========================================
         normalized_threats = self._normalize_stride(classified_threats)
         
         # ========================================
-        # PHASE 5: Calculate Risk Score (post-aggregation)
+        # PHASE 6: Calculate Risk Score (post-aggregation)
         # ========================================
         score = self._calculate_score(normalized_threats)
         
@@ -97,6 +103,77 @@ class ThreatAnalyzer:
         result.report_markdown = ReportGenerator.generate_markdown(result)
         
         return result
+
+    def _process_known_issues(self, architecture: SystemArchitecture) -> List[Threat]:
+        """
+        Process known issues from architecture metadata and convert them to threat findings.
+        Known issues are explicitly stated vulnerabilities that should be high-confidence threats.
+        """
+        threats = []
+        known_issues = architecture.metadata.get('known_issues', [])
+        
+        if not known_issues:
+            return threats
+        
+        # Map issue types to threat properties
+        for issue in known_issues:
+            issue_type = issue.get('type')
+            control = issue.get('control')
+            severity = issue.get('severity', 'medium').title()
+            description = issue.get('description', '')
+            suggested_id = issue.get('suggested_threat_id')
+            
+            # Create a threat object from the known issue
+            if issue_type == 'missing_control':
+                title = f"Known Issue: {description[:80]}..."
+                if len(description) <= 80:
+                    title = f"Known Issue: {description}"
+                
+                # Map severity to risk score
+                risk_scores = {
+                    'critical': 90,
+                    'high': 75,
+                    'medium': 50,
+                    'low': 25
+                }
+                risk_score = risk_scores.get(severity.lower(), 50)
+                
+                # Determine STRIDE category from suggested threat ID
+                category = "Spoofing"  # Default
+                if suggested_id:
+                    if suggested_id.startswith('S-'):
+                        category = "Spoofing"
+                    elif suggested_id.startswith('T-'):
+                        category = "Tampering"
+                    elif suggested_id.startswith('R-'):
+                        category = "Repudiation"
+                    elif suggested_id.startswith('ID-'):
+                        category = "Information Disclosure"
+                    elif suggested_id.startswith('DOS-'):
+                        category = "Denial of Service"
+                    elif suggested_id.startswith('EOP-'):
+                        category = "Elevation of Privilege"
+                    elif suggested_id.startswith('CORS-'):
+                        category = "Information Disclosure"
+                
+                threat = Threat(
+                    id=suggested_id or f"KNOWN-{len(threats)+1}",
+                    category=category,
+                    title=title,
+                    description=description,
+                    severity=severity,
+                    likelihood="High",  # Known issues are high likelihood
+                    impact="High" if severity.lower() in ['critical', 'high'] else "Medium",
+                    risk_score=risk_score,
+                    mitigation=f"Address the known issue: {control}",
+                    confidence="High",  # Known issues are high confidence
+                    evidence=[f"Explicitly stated in architecture description: {description}"],
+                    status="Identified",
+                    tier="Confirmed"  # Known issues are always confirmed
+                )
+                threats.append(threat)
+        
+        return threats
 
     def _aggregate_threats_by_id(self, threats: List[Threat]) -> List[Threat]:
         """
