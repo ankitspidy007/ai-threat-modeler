@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import ThreatInput from './components/ThreatInput';
 import ThreatDashboard from './components/ThreatDashboard';
+import AIAnalysis from './components/AIAnalysis';
 import { analyzeSystem } from './services/mockAi';
-import { Shield } from 'lucide-react';
+import { Shield, Zap, Sparkles } from 'lucide-react';
 import { useToast } from './components/Toast';
 
 function App() {
   const [data, setData] = useState(null);
   const [projectName, setProjectName] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [activeTab, setActiveTab] = useState('static'); // 'static' or 'ai'
   const toast = useToast();
 
   const handleAnalyze = async (description, name) => {
@@ -31,6 +33,11 @@ function App() {
     }
   };
 
+  const handleAIAnalysisComplete = (result, name) => {
+    setData(result);
+    setProjectName(name);
+  };
+
   return (
     <div className="min-h-screen text-brand-900 selection:bg-brand-primary selection:text-white">
       <header className="border-b border-brand-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50 shadow-sm">
@@ -49,30 +56,69 @@ function App() {
             v1.0.0-alpha
           </div>
         </div>
+
+        {/* Tab Navigation */}
+        <div className="container mx-auto px-4">
+          <div className="flex gap-1 border-b border-brand-200">
+            <button
+              onClick={() => setActiveTab('static')}
+              className={`px-6 py-3 font-semibold transition-all flex items-center gap-2 ${activeTab === 'static'
+                  ? 'border-b-2 border-brand-primary text-brand-primary bg-brand-50'
+                  : 'text-brand-600 hover:text-brand-900 hover:bg-brand-50'
+                }`}
+            >
+              <Zap className="w-4 h-4" />
+              Static Analysis
+            </button>
+            <button
+              onClick={() => setActiveTab('ai')}
+              className={`px-6 py-3 font-semibold transition-all flex items-center gap-2 ${activeTab === 'ai'
+                  ? 'border-b-2 border-purple-600 text-purple-600 bg-purple-50'
+                  : 'text-brand-600 hover:text-brand-900 hover:bg-brand-50'
+                }`}
+            >
+              <Sparkles className="w-4 h-4" />
+              AI Analysis (OpenAI / Claude)
+            </button>
+          </div>
+        </div>
       </header>
 
       <main className="container mx-auto px-4 py-10 flex flex-col items-center">
-        {!data && !isAnalyzing && (
-          <div className="text-center mb-12 max-w-2xl animate-fade-in-up">
-            <h2 className="text-4xl font-bold mb-4 text-brand-900">
-              AI-Powered Threat Modeling
-            </h2>
-            <p className="text-brand-600 text-lg">
-              Describe your system architecture and let our AI engine identify potential vulnerabilities using the STRIDE model.
-            </p>
-          </div>
+        {activeTab === 'static' ? (
+          <>
+            {!data && !isAnalyzing && (
+              <div className="text-center mb-12 max-w-2xl animate-fade-in-up">
+                <h2 className="text-4xl font-bold mb-4 text-brand-900">
+                  Rule-Based Threat Detection
+                </h2>
+                <p className="text-brand-600 text-lg">
+                  Fast, accurate threat detection using our enhanced rule engine with 60+ threat patterns.
+                </p>
+              </div>
+            )}
+
+            <ThreatInput onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing} />
+
+            {isAnalyzing && (
+              <div className="flex flex-col items-center justify-center py-20 animate-pulse">
+                <div className="w-16 h-16 border-4 border-brand-200 border-t-brand-primary rounded-full animate-spin mb-4"></div>
+                <p className="text-brand-primary font-mono font-medium">ANALYZING ARCHITECTURE...</p>
+              </div>
+            )}
+
+            <ThreatDashboard data={data} projectName={projectName} />
+          </>
+        ) : (
+          <>
+            {!data && (
+              <AIAnalysis onAnalysisComplete={handleAIAnalysisComplete} />
+            )}
+            {data && (
+              <ThreatDashboard data={data} projectName={projectName} />
+            )}
+          </>
         )}
-
-        <ThreatInput onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing} />
-
-        {isAnalyzing && (
-          <div className="flex flex-col items-center justify-center py-20 animate-pulse">
-            <div className="w-16 h-16 border-4 border-brand-200 border-t-brand-primary rounded-full animate-spin mb-4"></div>
-            <p className="text-brand-primary font-mono font-medium">ANALYZING ARCHITECTURE...</p>
-          </div>
-        )}
-
-        <ThreatDashboard data={data} projectName={projectName} />
       </main>
 
       <footer className="py-6 text-center text-brand-500 text-sm border-t border-brand-200 mt-auto bg-white">
@@ -83,3 +129,4 @@ function App() {
 }
 
 export default App;
+
