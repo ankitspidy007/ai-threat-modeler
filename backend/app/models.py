@@ -18,6 +18,7 @@ class DataFlow(BaseModel):
 class SystemArchitecture(BaseModel):
     components: List[Component]
     flows: List[DataFlow]
+    metadata: Optional[Dict[str, Any]] = {}  # NEW: For known issues and other metadata
 
 class Threat(BaseModel):
     id: str

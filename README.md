@@ -23,6 +23,23 @@ An advanced, AI-powered threat modeling tool that automatically identifies secur
 - **Architecture Diagrams**: Auto-generated Mermaid.js diagrams with intelligent component grouping
 - **Export Options**: PDF reports, JSON, and CSV downloads
 
+## ✨ Recent Improvements
+
+### Enhanced Threat Detection
+- **Baseline Security Analysis**: Now detects threats even in simple architecture descriptions
+- **Improved Parser**: Automatically identifies missing security controls (authentication, encryption, logging, etc.)
+- **Better Accuracy**: Fixed property inference to ensure comprehensive threat coverage
+
+### Simplified Startup
+- **Single Command**: Start both backend and frontend with one command
+- **Multiple Options**: Choose from `start.bat`, `start.ps1`, or `npm start`
+- **Auto-Configuration**: Automatically checks dependencies and opens browser
+
+### Flexible Configuration
+- **Custom Ports**: Define backend and frontend ports via command-line arguments
+- **Environment Variables**: Configure via `.env` file for persistent settings
+- **Multiple Instances**: Run multiple instances on different ports for testing
+
 ## 🏗️ Architecture
 
 ```
@@ -36,6 +53,30 @@ Frontend (React + Vite)          Backend (FastAPI)
                                  └── knowledge_base/
                                      └── threats.json (60+ threat rules)
 ```
+
+## ⚡ Quick Start
+
+```bash
+# Clone and navigate to the project
+git clone <repository-url>
+cd ai-threat-modeler
+
+# Install dependencies
+npm install
+cd backend && pip install -r requirements.txt && cd ..
+
+# Start the application (single command)
+npm start
+# OR use platform-specific scripts:
+# .\start.ps1    (PowerShell)
+# start.bat      (Windows Batch)
+```
+
+**The application will automatically:**
+- Install any missing dependencies
+- Start backend server on port 8000
+- Start frontend server on port 5173
+- Open in your default browser
 
 ## 📋 Prerequisites
 
@@ -65,18 +106,110 @@ pip install -r requirements.txt
 
 ## ▶️ Running the Application
 
-### Start Backend Server
+### Option 1: Single Command (Recommended)
+
+**Windows (Batch Script):**
+```bash
+start.bat
+```
+
+**Windows (PowerShell):**
+```powershell
+.\start.ps1
+```
+
+**Cross-Platform (npm):**
+```bash
+npm start
+```
+
+This will automatically:
+- Check and install dependencies if needed
+- Start both backend and frontend servers
+- Open the application in your browser
+
+### Option 2: Manual Start (Separate Terminals)
+
+**Terminal 1 - Start Backend Server:**
 ```bash
 cd backend
 python -m uvicorn app.main:app --reload --port 8000
 ```
 Backend will run at: `http://127.0.0.1:8000`
 
-### Start Frontend Server
+**Terminal 2 - Start Frontend Server:**
 ```bash
 npm run dev
 ```
 Frontend will run at: `http://localhost:5173/`
+
+### Configuring Custom Ports
+
+You can specify custom ports for both backend and frontend servers:
+
+**PowerShell (with parameters):**
+```powershell
+# Use default ports (8000, 5173)
+.\start.ps1
+
+# Custom backend port only
+.\start.ps1 -BackendPort 3000
+
+# Custom frontend port only
+.\start.ps1 -FrontendPort 3001
+
+# Both custom ports
+.\start.ps1 -BackendPort 3000 -FrontendPort 3001
+```
+
+**Batch Script (with arguments):**
+```bash
+# Use default ports
+start.bat
+
+# Custom backend port
+start.bat --backend-port 3000
+
+# Short form
+start.bat -b 3000 -f 3001
+
+# Show help
+start.bat --help
+```
+
+**Environment Variables (.env file):**
+```bash
+# Copy the example file
+cp .env.example .env
+
+# Edit .env and set your preferred ports
+BACKEND_PORT=3000
+FRONTEND_PORT=3001
+VITE_API_URL=http://127.0.0.1:3000
+```
+
+## 🔄 Dependency Management
+
+This project uses **flexible versioning** to ensure you get security updates and new features while maintaining stability:
+
+- **Frontend (NPM)**: Uses `^` notation - allows minor and patch updates automatically
+- **Backend (Python)**: Uses range notation - allows updates within major versions
+
+**Update to latest compatible versions:**
+```bash
+# Frontend
+npm update
+
+# Backend  
+cd backend && pip install --upgrade -r requirements.txt
+```
+
+**Check for security vulnerabilities:**
+```bash
+npm audit && npm audit fix
+```
+
+For detailed information, see [DEPENDENCY_MANAGEMENT.md](docs/DEPENDENCY_MANAGEMENT.md)
 
 ## 📖 Usage Guide
 
@@ -201,6 +334,15 @@ ai-threat-modeler/
 
 - `GET /health`: Health check
 - `GET /docs`: Interactive API documentation (Swagger UI)
+
+## 📚 Documentation
+
+Comprehensive guides available in the `docs/` directory:
+
+- **[PORT_CONFIGURATION.md](docs/PORT_CONFIGURATION.md)** - Custom port configuration
+- **[DEPENDENCY_MANAGEMENT.md](docs/DEPENDENCY_MANAGEMENT.md)** - Dependency updates and management
+- **[knowledge_base.md](docs/knowledge_base.md)** - Threat knowledge base details
+- **[API Docs](http://127.0.0.1:8000/docs)** - Interactive API documentation
 
 ## 🤝 Contributing
 

@@ -1,0 +1,413 @@
+{
+    "project_name":  "E-Commerce Improved Test",
+    "summary":  "Analysis complete. 4 confirmed risks, 0 potential risks.",
+    "threats":  [
+                    {
+                        "id":  "S-003",
+                        "category":  "Spoofing",
+                        "stride_category":  "Spoofing",
+                        "title":  "JWT Signature Validation Bypass",
+                        "description":  "JWT authentication is used but signature validation is disabled or incomplete, allowing token forgery and privilege escalation.",
+                        "severity":  "Critical",
+                        "likelihood":  "High",
+                        "impact":  "High",
+                        "risk_score":  92,
+                        "confidence":  "High",
+                        "tier":  "Confirmed",
+                        "status":  "Identified",
+                        "evidence":  [
+                                         "Verified \u0027auth_type\u0027 is \u0027jwt\u0027 (Matched condition: contains jwt)",
+                                         "Verified \u0027jwt_validation\u0027 is \u0027False\u0027 (Matched condition: == False)"
+                                     ],
+                        "mitigation":  "Enable JWT signature validation on all services using a shared secret or public key infrastructure.",
+                        "affected_components":  [
+                                                    "api",
+                                                    "api_gateway"
+                                                ],
+                        "affected_data_flows":  [
+
+                                                ],
+                        "component_id":  null,
+                        "flow_source":  null,
+                        "flow_target":  null
+                    },
+                    {
+                        "id":  "ID-006",
+                        "category":  "Information Disclosure",
+                        "stride_category":  "Information Disclosure",
+                        "title":  "Unrestricted Public Access to Storage",
+                        "description":  "Storage resources are publicly accessible without signed URLs or access controls, allowing unauthorized enumeration and data scraping.",
+                        "severity":  "Medium",
+                        "likelihood":  "High",
+                        "impact":  "Medium",
+                        "risk_score":  65,
+                        "confidence":  "High",
+                        "tier":  "Confirmed",
+                        "status":  "Identified",
+                        "evidence":  [
+                                         "Verified \u0027public_access\u0027 is \u0027True\u0027 (Matched condition: == True)",
+                                         "Verified \u0027signed_urls\u0027 is \u0027False\u0027 (Matched condition: != True)"
+                                     ],
+                        "mitigation":  "Implement signed URLs with time-based expiration for all storage access.",
+                        "affected_components":  [
+                                                    "cdn",
+                                                    "object_storage"
+                                                ],
+                        "affected_data_flows":  [
+
+                                                ],
+                        "component_id":  null,
+                        "flow_source":  null,
+                        "flow_target":  null
+                    },
+                    {
+                        "id":  "I-001",
+                        "category":  "Information Disclosure",
+                        "stride_category":  "Information Disclosure",
+                        "title":  "Unencrypted Data at Rest",
+                        "description":  "The data store does not use encryption at rest, exposing data to physical theft or disk inspection.",
+                        "severity":  "High",
+                        "likelihood":  "Medium",
+                        "impact":  "Low",
+                        "risk_score":  59,
+                        "confidence":  "High",
+                        "tier":  "Confirmed",
+                        "status":  "Identified",
+                        "evidence":  [
+                                         "Verified \u0027encryption_at_rest\u0027 is \u0027False\u0027 (Matched condition: == False)"
+                                     ],
+                        "mitigation":  "Enable Transparent Data Encryption (TDE) or server-side encryption.",
+                        "affected_components":  [
+                                                    "database"
+                                                ],
+                        "affected_data_flows":  [
+
+                                                ],
+                        "component_id":  null,
+                        "flow_source":  null,
+                        "flow_target":  null
+                    },
+                    {
+                        "id":  "LAT-001",
+                        "category":  "Lateral Movement",
+                        "stride_category":  "Elevation of Privilege",
+                        "title":  "Potential Lateral Movement (Missing Internal Auth)",
+                        "description":  "Internal traffic between components appears to lack authentication. If one service is compromised, attackers could move laterally to others without restriction.",
+                        "severity":  "High",
+                        "likelihood":  "Medium",
+                        "impact":  "High",
+                        "risk_score":  75,
+                        "confidence":  "Medium",
+                        "tier":  "Confirmed",
+                        "status":  "Identified",
+                        "evidence":  [
+                                         "Verified \u0027trust_boundary\u0027 is \u0027internal\u0027 (Matched condition: == internal)",
+                                         "Field \u0027authenticated\u0027 is not defined (no positive signal)."
+                                     ],
+                        "mitigation":  "Implement Service-to-Service authentication using mTLS or OIDC tokens.",
+                        "affected_components":  [
+
+                                                ],
+                        "affected_data_flows":  [
+                                                    "api â?? service",
+                                                    "api â?? object_storage",
+                                                    "service â?? database",
+                                                    "service â?? object_storage",
+                                                    "api_gateway â?? api",
+                                                    "database â?? object_storage"
+                                                ],
+                        "component_id":  null,
+                        "flow_source":  null,
+                        "flow_target":  null
+                    }
+                ],
+    "architecture":  {
+                         "components":  [
+                                            {
+                                                "id":  "api",
+                                                "name":  "API",
+                                                "type":  "API",
+                                                "description":  "",
+                                                "properties":  {
+                                                                   "auth_type":  "jwt",
+                                                                   "encryption_at_rest":  false,
+                                                                   "logging_enabled":  null,
+                                                                   "input_validation":  null,
+                                                                   "rate_limiting":  true,
+                                                                   "public_access":  true,
+                                                                   "compliance_frameworks":  [
+                                                                                                 "GDPR",
+                                                                                                 "PCI DSS"
+                                                                                             ],
+                                                                   "has_jwt":  true,
+                                                                   "cloud_provider":  true,
+                                                                   "jwt_validation":  false,
+                                                                   "signed_urls":  false,
+                                                                   "admin_separation":  false
+                                                               }
+                                            },
+                                            {
+                                                "id":  "service",
+                                                "name":  "Service",
+                                                "type":  "Service",
+                                                "description":  "",
+                                                "properties":  {
+                                                                   "auth_type":  "jwt",
+                                                                   "encryption_at_rest":  false,
+                                                                   "logging_enabled":  null,
+                                                                   "input_validation":  null,
+                                                                   "rate_limiting":  true,
+                                                                   "public_access":  true,
+                                                                   "compliance_frameworks":  [
+                                                                                                 "GDPR",
+                                                                                                 "PCI DSS"
+                                                                                             ],
+                                                                   "has_jwt":  true,
+                                                                   "cloud_provider":  true,
+                                                                   "jwt_validation":  false,
+                                                                   "signed_urls":  false,
+                                                                   "admin_separation":  false
+                                                               }
+                                            },
+                                            {
+                                                "id":  "api_gateway",
+                                                "name":  "API Gateway",
+                                                "type":  "API Gateway",
+                                                "description":  "",
+                                                "properties":  {
+                                                                   "auth_type":  "jwt",
+                                                                   "encryption_at_rest":  false,
+                                                                   "logging_enabled":  null,
+                                                                   "input_validation":  null,
+                                                                   "rate_limiting":  true,
+                                                                   "public_access":  true,
+                                                                   "compliance_frameworks":  [
+                                                                                                 "GDPR",
+                                                                                                 "PCI DSS"
+                                                                                             ],
+                                                                   "has_jwt":  true,
+                                                                   "cloud_provider":  true,
+                                                                   "jwt_validation":  false,
+                                                                   "signed_urls":  false,
+                                                                   "admin_separation":  false
+                                                               }
+                                            },
+                                            {
+                                                "id":  "webclient",
+                                                "name":  "WebClient",
+                                                "type":  "WebClient",
+                                                "description":  "",
+                                                "properties":  {
+                                                                   "auth_type":  "jwt",
+                                                                   "encryption_at_rest":  false,
+                                                                   "logging_enabled":  null,
+                                                                   "input_validation":  null,
+                                                                   "rate_limiting":  true,
+                                                                   "public_access":  true,
+                                                                   "compliance_frameworks":  [
+                                                                                                 "GDPR",
+                                                                                                 "PCI DSS"
+                                                                                             ],
+                                                                   "has_jwt":  true,
+                                                                   "cloud_provider":  true,
+                                                                   "mobile_app":  true,
+                                                                   "jwt_validation":  false,
+                                                                   "signed_urls":  false,
+                                                                   "admin_separation":  false
+                                                               }
+                                            },
+                                            {
+                                                "id":  "cdn",
+                                                "name":  "CDN",
+                                                "type":  "CDN",
+                                                "description":  "",
+                                                "properties":  {
+                                                                   "auth_type":  "jwt",
+                                                                   "encryption_at_rest":  false,
+                                                                   "logging_enabled":  null,
+                                                                   "input_validation":  null,
+                                                                   "rate_limiting":  true,
+                                                                   "public_access":  true,
+                                                                   "compliance_frameworks":  [
+                                                                                                 "GDPR",
+                                                                                                 "PCI DSS"
+                                                                                             ],
+                                                                   "has_jwt":  true,
+                                                                   "cloud_provider":  true,
+                                                                   "jwt_validation":  false,
+                                                                   "signed_urls":  false,
+                                                                   "admin_separation":  false
+                                                               }
+                                            },
+                                            {
+                                                "id":  "database",
+                                                "name":  "Database",
+                                                "type":  "Database",
+                                                "description":  "",
+                                                "properties":  {
+                                                                   "auth_type":  "jwt",
+                                                                   "encryption_at_rest":  false,
+                                                                   "logging_enabled":  null,
+                                                                   "input_validation":  null,
+                                                                   "rate_limiting":  true,
+                                                                   "public_access":  true,
+                                                                   "compliance_frameworks":  [
+                                                                                                 "GDPR",
+                                                                                                 "PCI DSS"
+                                                                                             ],
+                                                                   "has_jwt":  true,
+                                                                   "cloud_provider":  true,
+                                                                   "jwt_validation":  false,
+                                                                   "signed_urls":  false,
+                                                                   "admin_separation":  false
+                                                               }
+                                            },
+                                            {
+                                                "id":  "identity_provider",
+                                                "name":  "Identity Provider",
+                                                "type":  "Identity Provider",
+                                                "description":  "",
+                                                "properties":  {
+                                                                   "auth_type":  "jwt",
+                                                                   "encryption_at_rest":  false,
+                                                                   "logging_enabled":  null,
+                                                                   "input_validation":  null,
+                                                                   "rate_limiting":  true,
+                                                                   "public_access":  true,
+                                                                   "compliance_frameworks":  [
+                                                                                                 "GDPR",
+                                                                                                 "PCI DSS"
+                                                                                             ],
+                                                                   "has_jwt":  true,
+                                                                   "cloud_provider":  true,
+                                                                   "jwt_validation":  false,
+                                                                   "signed_urls":  false,
+                                                                   "admin_separation":  false
+                                                               }
+                                            },
+                                            {
+                                                "id":  "object_storage",
+                                                "name":  "Object Storage",
+                                                "type":  "Object Storage",
+                                                "description":  "",
+                                                "properties":  {
+                                                                   "auth_type":  "jwt",
+                                                                   "encryption_at_rest":  false,
+                                                                   "logging_enabled":  null,
+                                                                   "input_validation":  null,
+                                                                   "rate_limiting":  true,
+                                                                   "public_access":  true,
+                                                                   "compliance_frameworks":  [
+                                                                                                 "GDPR",
+                                                                                                 "PCI DSS"
+                                                                                             ],
+                                                                   "has_jwt":  true,
+                                                                   "cloud_provider":  true,
+                                                                   "jwt_validation":  false,
+                                                                   "signed_urls":  false,
+                                                                   "admin_separation":  false
+                                                               }
+                                            }
+                                        ],
+                         "flows":  [
+                                       {
+                                           "source_id":  "webclient",
+                                           "target_id":  "api_gateway",
+                                           "protocol":  "websocket",
+                                           "properties":  {
+                                                              "trust_boundary":  "internet",
+                                                              "authenticated":  null
+                                                          }
+                                       },
+                                       {
+                                           "source_id":  "api_gateway",
+                                           "target_id":  "api",
+                                           "protocol":  "websocket",
+                                           "properties":  {
+                                                              "trust_boundary":  "internal",
+                                                              "authenticated":  null
+                                                          }
+                                       },
+                                       {
+                                           "source_id":  "api",
+                                           "target_id":  "service",
+                                           "protocol":  "websocket",
+                                           "properties":  {
+                                                              "trust_boundary":  "internal",
+                                                              "authenticated":  null
+                                                          }
+                                       },
+                                       {
+                                           "source_id":  "service",
+                                           "target_id":  "database",
+                                           "protocol":  "websocket",
+                                           "properties":  {
+                                                              "trust_boundary":  "internal",
+                                                              "authenticated":  null
+                                                          }
+                                       },
+                                       {
+                                           "source_id":  "database",
+                                           "target_id":  "object_storage",
+                                           "protocol":  "websocket",
+                                           "properties":  {
+                                                              "trust_boundary":  "internal",
+                                                              "authenticated":  null
+                                                          }
+                                       },
+                                       {
+                                           "source_id":  "api",
+                                           "target_id":  "object_storage",
+                                           "protocol":  "https",
+                                           "properties":  {
+                                                              "trust_boundary":  "internal"
+                                                          }
+                                       },
+                                       {
+                                           "source_id":  "service",
+                                           "target_id":  "object_storage",
+                                           "protocol":  "https",
+                                           "properties":  {
+                                                              "trust_boundary":  "internal"
+                                                          }
+                                       }
+                                   ],
+                         "metadata":  {
+                                          "known_issues":  [
+                                                               {
+                                                                   "type":  "missing_control",
+                                                                   "control":  "jwt_validation",
+                                                                   "severity":  "critical",
+                                                                   "description":  "API Gateway does not validate JWT signatures from all services",
+                                                                   "suggested_threat_id":  "S-003"
+                                                               },
+                                                               {
+                                                                   "type":  "missing_encryption",
+                                                                   "control":  "encryption_at_rest",
+                                                                   "severity":  "critical",
+                                                                   "description":  "Redis cache has no encryption at rest",
+                                                                   "suggested_threat_id":  "ID-005"
+                                                               },
+                                                               {
+                                                                   "type":  "public_access",
+                                                                   "control":  "signed_urls",
+                                                                   "severity":  "medium",
+                                                                   "description":  "Product images on S3 are publicly accessible without signed URLs",
+                                                                   "suggested_threat_id":  "ID-006"
+                                                               },
+                                                               {
+                                                                   "type":  "shared_auth",
+                                                                   "control":  "admin_separation",
+                                                                   "severity":  "high",
+                                                                   "description":  "Admin dashboard uses same authentication as customer portal",
+                                                                   "suggested_threat_id":  "EOP-003"
+                                                               }
+                                                           ]
+                                      }
+                     },
+    "score":  70,
+    "mermaid_diagram":  "graph LR\n    api([API])\n    service[Service]\n    api_gateway[API Gateway]\n    webclient{{WebClient}}\n    cdn[CDN]\n    database[(Database)]\n    identity_provider[Identity Provider]\n    object_storage[Object Storage]\n    api -- websocket --\u003e service\n    api -- https --\u003e object_storage\n    service -- websocket --\u003e database\n    service -- https --\u003e object_storage\n    api_gateway -- websocket --\u003e api\n    webclient -- websocket --\u003e api_gateway\n    database -- websocket --\u003e object_storage",
+    "diagram":  "graph LR\n    api([API])\n    service[Service]\n    api_gateway[API Gateway]\n    webclient{{WebClient}}\n    cdn[CDN]\n    database[(Database)]\n    identity_provider[Identity Provider]\n    object_storage[Object Storage]\n    api -- websocket --\u003e service\n    api -- https --\u003e object_storage\n    service -- websocket --\u003e database\n    service -- https --\u003e object_storage\n    api_gateway -- websocket --\u003e api\n    webclient -- websocket --\u003e api_gateway\n    database -- websocket --\u003e object_storage",
+    "report_markdown":  "# Threat Model Report: E-Commerce Improved Test\n**Date:** 2026-02-04 21:56:46\n**Security Score:** 70/100\n**Unique Threats:** 4 (4 confirmed, 0 potential)\n---\n\n## 1. System Architecture\n\n**Components:**\n- **API** (API)\n- **Service** (Service)\n- **API Gateway** (API Gateway)\n- **WebClient** (WebClient)\n- **CDN** (CDN)\n- **Database** (Database)\n- **Identity Provider** (Identity Provider)\n- **Object Storage** (Object Storage)\n\n**Data Flows:**\n- webclient â?? api_gateway [websocket]\n- api_gateway â?? api [websocket]\n- api â?? service [websocket]\n- service â?? database [websocket]\n- database â?? object_storage [websocket]\n- api â?? object_storage [https]\n- service â?? object_storage [https]\n\n### Architecture Diagram\n```mermaid\ngraph LR\n    api([API])\n    service[Service]\n    api_gateway[API Gateway]\n    webclient{{WebClient}}\n    cdn[CDN]\n    database[(Database)]\n    identity_provider[Identity Provider]\n    object_storage[Object Storage]\n    api -- websocket --\u003e service\n    api -- https --\u003e object_storage\n    service -- websocket --\u003e database\n    service -- https --\u003e object_storage\n    api_gateway -- websocket --\u003e api\n    webclient -- websocket --\u003e api_gateway\n    database -- websocket --\u003e object_storage\n```\n\n## 2. Confirmed Risks\nThe following 4 risks are backed by verified evidence:\n\n### [CRITICAL] JWT Signature Validation Bypass\n**ID:** S-003 | **Category:** Spoofing | **Confidence:** High\n\n**Why this exists:** JWT authentication is used but signature validation is disabled or incomplete, allowing token forgery and privilege escalation.\n\n**Affected Components:** api, api_gateway\n\n**Evidence:**\n- Verified \u0027auth_type\u0027 is \u0027jwt\u0027 (Matched condition: contains jwt)\n- Verified \u0027jwt_validation\u0027 is \u0027False\u0027 (Matched condition: == False)\n\n**Mitigation:** Enable JWT signature validation on all services using a shared secret or public key infrastructure.\n\n### [MEDIUM] Unrestricted Public Access to Storage\n**ID:** ID-006 | **Category:** Information Disclosure | **Confidence:** High\n\n**Why this exists:** Storage resources are publicly accessible without signed URLs or access controls, allowing unauthorized enumeration and data scraping.\n\n**Affected Components:** cdn, object_storage\n\n**Evidence:**\n- Verified \u0027public_access\u0027 is \u0027True\u0027 (Matched condition: == True)\n- Verified \u0027signed_urls\u0027 is \u0027False\u0027 (Matched condition: != True)\n\n**Mitigation:** Implement signed URLs with time-based expiration for all storage access.\n\n### [HIGH] Unencrypted Data at Rest\n**ID:** I-001 | **Category:** Information Disclosure | **Confidence:** High\n\n**Why this exists:** The data store does not use encryption at rest, exposing data to physical theft or disk inspection.\n\n**Affected Components:** database\n\n**Evidence:**\n- Verified \u0027encryption_at_rest\u0027 is \u0027False\u0027 (Matched condition: == False)\n\n**Mitigation:** Enable Transparent Data Encryption (TDE) or server-side encryption.\n\n### [HIGH] Potential Lateral Movement (Missing Internal Auth) (Elevation of Privilege)\n**ID:** LAT-001 | **Category:** Lateral Movement | **Confidence:** Medium\n\n**Why this exists:** Internal traffic between components appears to lack authentication. If one service is compromised, attackers could move laterally to others without restriction.\n\n**Affected Data Flows:** api â?? service, api â?? object_storage, service â?? database, service â?? object_storage, api_gateway â?? api, database â?? object_storage\n\n**Evidence:**\n- Verified \u0027trust_boundary\u0027 is \u0027internal\u0027 (Matched condition: == internal)\n- Field \u0027authenticated\u0027 is not defined (no positive signal).\n\n**Mitigation:** Implement Service-to-Service authentication using mTLS or OIDC tokens.\n\n## 3. Potential Risks (Assumption-Based)\n*No potential risks detected.*\n\n\n---\n\n*Generated by AI Threat Modeler*",
+    "timestamp":  "2026-02-04T21:56:46.787403"
+}

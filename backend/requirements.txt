@@ -1,11 +1,26 @@
-fastapi==0.115.12
-uvicorn==0.34.0
-networkx==3.4.2
+# AI Threat Modeler - Backend Requirements
+# Python 3.8+ required
+
+# Web Framework
+# Using ~= allows patch updates but not minor/major version changes
+fastapi>=0.115.0,<1.0.0
+uvicorn[standard]>=0.34.0,<1.0.0
+python-multipart>=0.0.9,<1.0.0
+
+# Data Processing & Analysis
+networkx>=3.4.0,<4.0.0
+pydantic>=2.6.0,<3.0.0
+
+# AI/LLM Integration (Optional - for future enhancements)
+# Using >= for flexibility with latest AI model updates
 openai>=1.0.0
-anthropic>=0.18.0.1
-pydantic==2.6.0
-python-multipart==0.0.9
-pytest==8.0.0
-pytest-asyncio==0.23.3
-pytest-cov==4.1.0
-httpx==0.26.0
+anthropic>=0.18.0
+
+# Testing
+pytest>=8.0.0,<9.0.0
+pytest-asyncio>=0.23.0,<1.0.0
+pytest-cov>=4.1.0,<5.0.0
+httpx>=0.26.0,<1.0.0
+
+# To upgrade all packages to latest compatible versions, run:
+# pip install --upgrade -r requirements.txt

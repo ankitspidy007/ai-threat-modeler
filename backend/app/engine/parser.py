@@ -653,12 +653,14 @@ class ArchitectureParser:
 
     def _infer_properties(self, text_lower: str, component_type: str) -> Dict:
         """Enhanced property inference based on text analysis."""
+        # Set appropriate defaults for security properties
+        # Use 'none' and False instead of None so threat rules can match
         props = {
-            'auth_type': None,
-            'encryption_at_rest': None,
-            'logging_enabled': None,
-            'input_validation': None,
-            'rate_limiting': None,
+            'auth_type': 'none',  # Default to no auth unless explicitly mentioned
+            'encryption_at_rest': False,  # Default to not encrypted
+            'logging_enabled': False,  # Default to no logging
+            'input_validation': False,  # Default to no validation
+            'rate_limiting': False,  # Default to no rate limiting
             'public_access': False,
             'compliance_frameworks': []
         }

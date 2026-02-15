@@ -1,751 +1,1009 @@
 [
     {
-        "id": "IOT-001",
-        "category": "Tampering",
-        "resource_type": [
-            "IoT Device",
-            "Queue"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "ota_updates",
-                        "op": "==",
-                        "value": true
-                    },
-                    {
-                        "field": "code_signing",
-                        "op": "!=",
-                        "value": true
-                    }
-                ]
-            },
-            "auto_detectable": true,
-            "confidence": "high"
-        },
-        "threat": {
-            "title": "IoT Firmware Tampering Risk",
-            "description": "Over-the-air (OTA) firmware updates are enabled without code signing, allowing attackers to push malicious firmware to IoT devices."
-        },
-        "risk": {
-            "severity": "Critical",
-            "likelihood": "Medium",
-            "impact": "High",
-            "risk_score": 82.5,
-            "affected_assets": [
-                "IoT Devices",
-                "Patient Data"
-            ],
-            "business_impact": [
-                "Device Compromise",
-                "Patient Safety"
-            ]
-        },
-        "mitigation": {
-            "primary": "Implement code signing for all firmware updates with secure key management.",
-            "defense_in_depth": [
-                "Secure boot",
-                "Device attestation",
-                "Rollback protection"
-            ],
-            "verification": "Verify firmware signature validation on devices."
-        },
-        "references": [
-            "OWASP IoT Top 10",
-            "NIST IoT Security"
-        ],
-        "tags": [
-            "iot",
-            "firmware",
-            "medical-device"
-        ]
+        "id":  "IOT-001",
+        "category":  "Tampering",
+        "resource_type":  [
+                              "IoT Device",
+                              "Queue"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "ota_updates",
+                                                               "op":  "==",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "code_signing",
+                                                               "op":  "!=",
+                                                               "value":  true
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "high"
+                      },
+        "threat":  {
+                       "title":  "IoT Firmware Tampering Risk",
+                       "description":  "Over-the-air (OTA) firmware updates are enabled without code signing, allowing attackers to push malicious firmware to IoT devices."
+                   },
+        "risk":  {
+                     "severity":  "Critical",
+                     "likelihood":  "Medium",
+                     "impact":  "High",
+                     "risk_score":  82.5,
+                     "affected_assets":  [
+                                             "IoT Devices",
+                                             "Patient Data"
+                                         ],
+                     "business_impact":  [
+                                             "Device Compromise",
+                                             "Patient Safety"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Implement code signing for all firmware updates with secure key management.",
+                           "defense_in_depth":  [
+                                                    "Secure boot",
+                                                    "Device attestation",
+                                                    "Rollback protection"
+                                                ],
+                           "verification":  "Verify firmware signature validation on devices."
+                       },
+        "references":  [
+                           "OWASP IoT Top 10",
+                           "NIST IoT Security"
+                       ],
+        "tags":  [
+                     "iot",
+                     "firmware",
+                     "medical-device"
+                 ]
     },
     {
-        "id": "IOT-002",
-        "category": "Spoofing",
-        "resource_type": [
-            "IoT Device"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "is_iot_device",
-                        "op": "==",
-                        "value": true
-                    },
-                    {
-                        "field": "device_authentication",
-                        "op": "!=",
-                        "value": true
-                    }
-                ]
-            },
-            "auto_detectable": true,
-            "confidence": "medium"
-        },
-        "threat": {
-            "title": "Rogue IoT Device Connection",
-            "description": "IoT devices lack proper authentication, allowing rogue devices to connect and inject false medical data."
-        },
-        "risk": {
-            "severity": "High",
-            "likelihood": "Medium",
-            "impact": "High",
-            "risk_score": 75.0,
-            "affected_assets": [
-                "Medical Data",
-                "Patient Safety"
-            ],
-            "business_impact": [
-                "Incorrect Diagnosis",
-                "Patient Harm"
-            ]
-        },
-        "mitigation": {
-            "primary": "Implement device certificates (X.509) for mutual authentication.",
-            "defense_in_depth": [
-                "Device whitelisting",
-                "Network segmentation"
-            ],
-            "verification": "Test with unauthorized device connection attempts."
-        },
-        "references": [
-            "FDA Medical Device Security"
-        ],
-        "tags": [
-            "iot",
-            "authentication",
-            "medical-device"
-        ]
+        "id":  "IOT-002",
+        "category":  "Spoofing",
+        "resource_type":  [
+                              "IoT Device"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "is_iot_device",
+                                                               "op":  "==",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "device_authentication",
+                                                               "op":  "!=",
+                                                               "value":  true
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "medium"
+                      },
+        "threat":  {
+                       "title":  "Rogue IoT Device Connection",
+                       "description":  "IoT devices lack proper authentication, allowing rogue devices to connect and inject false medical data."
+                   },
+        "risk":  {
+                     "severity":  "High",
+                     "likelihood":  "Medium",
+                     "impact":  "High",
+                     "risk_score":  75.0,
+                     "affected_assets":  [
+                                             "Medical Data",
+                                             "Patient Safety"
+                                         ],
+                     "business_impact":  [
+                                             "Incorrect Diagnosis",
+                                             "Patient Harm"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Implement device certificates (X.509) for mutual authentication.",
+                           "defense_in_depth":  [
+                                                    "Device whitelisting",
+                                                    "Network segmentation"
+                                                ],
+                           "verification":  "Test with unauthorized device connection attempts."
+                       },
+        "references":  [
+                           "FDA Medical Device Security"
+                       ],
+        "tags":  [
+                     "iot",
+                     "authentication",
+                     "medical-device"
+                 ]
     },
     {
-        "id": "ML-001",
-        "category": "Tampering",
-        "resource_type": [
-            "ML Service",
-            "Service"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "ml_pipeline",
-                        "op": "==",
-                        "value": true
-                    },
-                    {
-                        "field": "training_data_validation",
-                        "op": "!=",
-                        "value": true
-                    }
-                ]
-            },
-            "auto_detectable": true,
-            "confidence": "medium"
-        },
-        "threat": {
-            "title": "ML Model Poisoning Risk",
-            "description": "ML training pipeline lacks input validation, allowing attackers to inject malicious data and poison the model."
-        },
-        "risk": {
-            "severity": "High",
-            "likelihood": "Low",
-            "impact": "High",
-            "risk_score": 68.0,
-            "affected_assets": [
-                "ML Models",
-                "Patient Predictions"
-            ],
-            "business_impact": [
-                "Incorrect Predictions",
-                "Patient Safety"
-            ]
-        },
-        "mitigation": {
-            "primary": "Implement robust input validation and anomaly detection for training data.",
-            "defense_in_depth": [
-                "Model versioning",
-                "A/B testing",
-                "Human review"
-            ],
-            "verification": "Test with adversarial training examples."
-        },
-        "references": [
-            "OWASP ML Top 10",
-            "MITRE ATLAS"
-        ],
-        "tags": [
-            "ml",
-            "ai",
-            "data-poisoning"
-        ]
+        "id":  "ML-001",
+        "category":  "Tampering",
+        "resource_type":  [
+                              "ML Service",
+                              "Service"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "ml_pipeline",
+                                                               "op":  "==",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "training_data_validation",
+                                                               "op":  "!=",
+                                                               "value":  true
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "medium"
+                      },
+        "threat":  {
+                       "title":  "ML Model Poisoning Risk",
+                       "description":  "ML training pipeline lacks input validation, allowing attackers to inject malicious data and poison the model."
+                   },
+        "risk":  {
+                     "severity":  "High",
+                     "likelihood":  "Low",
+                     "impact":  "High",
+                     "risk_score":  68.0,
+                     "affected_assets":  [
+                                             "ML Models",
+                                             "Patient Predictions"
+                                         ],
+                     "business_impact":  [
+                                             "Incorrect Predictions",
+                                             "Patient Safety"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Implement robust input validation and anomaly detection for training data.",
+                           "defense_in_depth":  [
+                                                    "Model versioning",
+                                                    "A/B testing",
+                                                    "Human review"
+                                                ],
+                           "verification":  "Test with adversarial training examples."
+                       },
+        "references":  [
+                           "OWASP ML Top 10",
+                           "MITRE ATLAS"
+                       ],
+        "tags":  [
+                     "ml",
+                     "ai",
+                     "data-poisoning"
+                 ]
     },
     {
-        "id": "ML-002",
-        "category": "Information Disclosure",
-        "resource_type": [
-            "ML Service"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "ml_pipeline",
-                        "op": "==",
-                        "value": true
-                    },
-                    {
-                        "field": "data_anonymization",
-                        "op": "!=",
-                        "value": true
-                    },
-                    {
-                        "field": "data_sensitivity",
-                        "op": "==",
-                        "value": "pii"
-                    }
-                ]
-            },
-            "auto_detectable": true,
-            "confidence": "high"
-        },
-        "threat": {
-            "title": "ML Model Inversion Attack",
-            "description": "ML models trained on sensitive data without proper anonymization may leak patient information through model inversion attacks."
-        },
-        "risk": {
-            "severity": "High",
-            "likelihood": "Medium",
-            "impact": "High",
-            "risk_score": 75.0,
-            "affected_assets": [
-                "Patient Data",
-                "PHI"
-            ],
-            "business_impact": [
-                "Privacy Violation",
-                "HIPAA Breach"
-            ]
-        },
-        "mitigation": {
-            "primary": "Implement differential privacy and k-anonymization for training data.",
-            "defense_in_depth": [
-                "Federated learning",
-                "Secure enclaves"
-            ],
-            "verification": "Perform model inversion attack testing."
-        },
-        "references": [
-            "NIST AI Privacy",
-            "HIPAA ML Guidelines"
-        ],
-        "tags": [
-            "ml",
-            "privacy",
-            "hipaa"
-        ]
+        "id":  "ML-002",
+        "category":  "Information Disclosure",
+        "resource_type":  [
+                              "ML Service"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "ml_pipeline",
+                                                               "op":  "==",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "data_anonymization",
+                                                               "op":  "!=",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "data_sensitivity",
+                                                               "op":  "==",
+                                                               "value":  "pii"
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "high"
+                      },
+        "threat":  {
+                       "title":  "ML Model Inversion Attack",
+                       "description":  "ML models trained on sensitive data without proper anonymization may leak patient information through model inversion attacks."
+                   },
+        "risk":  {
+                     "severity":  "High",
+                     "likelihood":  "Medium",
+                     "impact":  "High",
+                     "risk_score":  75.0,
+                     "affected_assets":  [
+                                             "Patient Data",
+                                             "PHI"
+                                         ],
+                     "business_impact":  [
+                                             "Privacy Violation",
+                                             "HIPAA Breach"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Implement differential privacy and k-anonymization for training data.",
+                           "defense_in_depth":  [
+                                                    "Federated learning",
+                                                    "Secure enclaves"
+                                                ],
+                           "verification":  "Perform model inversion attack testing."
+                       },
+        "references":  [
+                           "NIST AI Privacy",
+                           "HIPAA ML Guidelines"
+                       ],
+        "tags":  [
+                     "ml",
+                     "privacy",
+                     "hipaa"
+                 ]
     },
     {
-        "id": "COMP-001",
-        "category": "Repudiation",
-        "resource_type": [
-            "Database",
-            "API",
-            "Service"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "compliance_frameworks",
-                        "op": "contains",
-                        "value": "HIPAA"
-                    },
-                    {
-                        "field": "audit_logging",
-                        "op": "!=",
-                        "value": true
-                    }
-                ]
-            },
-            "auto_detectable": true,
-            "confidence": "high"
-        },
-        "threat": {
-            "title": "HIPAA Audit Trail Violation",
-            "description": "System handles PHI but lacks comprehensive audit logging, violating HIPAA requirements for tracking data access."
-        },
-        "risk": {
-            "severity": "High",
-            "likelihood": "High",
-            "impact": "Medium",
-            "risk_score": 72.0,
-            "affected_assets": [
-                "PHI",
-                "Audit Records"
-            ],
-            "business_impact": [
-                "Compliance Violation",
-                "Fines"
-            ]
-        },
-        "mitigation": {
-            "primary": "Implement comprehensive audit logging for all PHI access with immutable storage.",
-            "defense_in_depth": [
-                "SIEM integration",
-                "Real-time alerting"
-            ],
-            "verification": "Conduct HIPAA compliance audit."
-        },
-        "references": [
-            "HIPAA Security Rule §164.312(b)",
-            "NIST 800-66"
-        ],
-        "tags": [
-            "hipaa",
-            "compliance",
-            "audit"
-        ]
+        "id":  "COMP-001",
+        "category":  "Repudiation",
+        "resource_type":  [
+                              "Database",
+                              "API",
+                              "Service"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "compliance_frameworks",
+                                                               "op":  "contains",
+                                                               "value":  "HIPAA"
+                                                           },
+                                                           {
+                                                               "field":  "audit_logging",
+                                                               "op":  "!=",
+                                                               "value":  true
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "high"
+                      },
+        "threat":  {
+                       "title":  "HIPAA Audit Trail Violation",
+                       "description":  "System handles PHI but lacks comprehensive audit logging, violating HIPAA requirements for tracking data access."
+                   },
+        "risk":  {
+                     "severity":  "High",
+                     "likelihood":  "High",
+                     "impact":  "Medium",
+                     "risk_score":  72.0,
+                     "affected_assets":  [
+                                             "PHI",
+                                             "Audit Records"
+                                         ],
+                     "business_impact":  [
+                                             "Compliance Violation",
+                                             "Fines"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Implement comprehensive audit logging for all PHI access with immutable storage.",
+                           "defense_in_depth":  [
+                                                    "SIEM integration",
+                                                    "Real-time alerting"
+                                                ],
+                           "verification":  "Conduct HIPAA compliance audit."
+                       },
+        "references":  [
+                           "HIPAA Security Rule §164.312(b)",
+                           "NIST 800-66"
+                       ],
+        "tags":  [
+                     "hipaa",
+                     "compliance",
+                     "audit"
+                 ]
     },
     {
-        "id": "COMP-002",
-        "category": "Information Disclosure",
-        "resource_type": [
-            "Database",
-            "Service"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "compliance_frameworks",
-                        "op": "contains",
-                        "value": "GDPR"
-                    },
-                    {
-                        "field": "data_residency",
-                        "op": "!=",
-                        "value": "compliant"
-                    }
-                ]
-            },
-            "auto_detectable": false,
-            "confidence": "medium"
-        },
-        "threat": {
-            "title": "GDPR Data Residency Violation",
-            "description": "EU patient data may be stored or processed outside approved regions, violating GDPR data residency requirements."
-        },
-        "risk": {
-            "severity": "High",
-            "likelihood": "Medium",
-            "impact": "High",
-            "risk_score": 75.0,
-            "affected_assets": [
-                "EU Patient Data"
-            ],
-            "business_impact": [
-                "GDPR Fines",
-                "Legal Action"
-            ]
-        },
-        "mitigation": {
-            "primary": "Ensure all EU data is stored and processed within EU/EEA or approved countries.",
-            "defense_in_depth": [
-                "Data classification",
-                "Geo-fencing"
-            ],
-            "verification": "Audit data storage locations and processing pipelines."
-        },
-        "references": [
-            "GDPR Article 44-50",
-            "EU-US Data Privacy Framework"
-        ],
-        "tags": [
-            "gdpr",
-            "compliance",
-            "data-residency"
-        ]
+        "id":  "COMP-002",
+        "category":  "Information Disclosure",
+        "resource_type":  [
+                              "Database",
+                              "Service"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "compliance_frameworks",
+                                                               "op":  "contains",
+                                                               "value":  "GDPR"
+                                                           },
+                                                           {
+                                                               "field":  "data_residency",
+                                                               "op":  "!=",
+                                                               "value":  "compliant"
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  false,
+                          "confidence":  "medium"
+                      },
+        "threat":  {
+                       "title":  "GDPR Data Residency Violation",
+                       "description":  "EU patient data may be stored or processed outside approved regions, violating GDPR data residency requirements."
+                   },
+        "risk":  {
+                     "severity":  "High",
+                     "likelihood":  "Medium",
+                     "impact":  "High",
+                     "risk_score":  75.0,
+                     "affected_assets":  [
+                                             "EU Patient Data"
+                                         ],
+                     "business_impact":  [
+                                             "GDPR Fines",
+                                             "Legal Action"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Ensure all EU data is stored and processed within EU/EEA or approved countries.",
+                           "defense_in_depth":  [
+                                                    "Data classification",
+                                                    "Geo-fencing"
+                                                ],
+                           "verification":  "Audit data storage locations and processing pipelines."
+                       },
+        "references":  [
+                           "GDPR Article 44-50",
+                           "EU-US Data Privacy Framework"
+                       ],
+        "tags":  [
+                     "gdpr",
+                     "compliance",
+                     "data-residency"
+                 ]
     },
     {
-        "id": "EXT-001",
-        "category": "Information Disclosure",
-        "resource_type": [
-            "API",
-            "Service"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "third_party_integration",
-                        "op": "==",
-                        "value": true
-                    },
-                    {
-                        "field": "vendor_assessment",
-                        "op": "!=",
-                        "value": true
-                    }
-                ]
-            },
-            "auto_detectable": true,
-            "confidence": "medium"
-        },
-        "threat": {
-            "title": "Third-Party Vendor Data Breach",
-            "description": "Integration with third-party services (Stripe, Twilio, SendGrid) without vendor security assessment creates supply chain risk."
-        },
-        "risk": {
-            "severity": "High",
-            "likelihood": "Medium",
-            "impact": "High",
-            "risk_score": 75.0,
-            "affected_assets": [
-                "Patient Data",
-                "Payment Data"
-            ],
-            "business_impact": [
-                "Data Breach",
-                "Reputation Damage"
-            ]
-        },
-        "mitigation": {
-            "primary": "Conduct vendor security assessments (SOC 2, ISO 27001) and implement data minimization.",
-            "defense_in_depth": [
-                "API key rotation",
-                "Rate limiting",
-                "Monitoring"
-            ],
-            "verification": "Review vendor security certifications and SLAs."
-        },
-        "references": [
-            "NIST SP 800-161",
-            "OWASP SCVS"
-        ],
-        "tags": [
-            "third-party",
-            "supply-chain",
-            "vendor-risk"
-        ]
+        "id":  "EXT-001",
+        "category":  "Information Disclosure",
+        "resource_type":  [
+                              "API",
+                              "Service"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "third_party_integration",
+                                                               "op":  "==",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "vendor_assessment",
+                                                               "op":  "!=",
+                                                               "value":  true
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "medium"
+                      },
+        "threat":  {
+                       "title":  "Third-Party Vendor Data Breach",
+                       "description":  "Integration with third-party services (Stripe, Twilio, SendGrid) without vendor security assessment creates supply chain risk."
+                   },
+        "risk":  {
+                     "severity":  "High",
+                     "likelihood":  "Medium",
+                     "impact":  "High",
+                     "risk_score":  75.0,
+                     "affected_assets":  [
+                                             "Patient Data",
+                                             "Payment Data"
+                                         ],
+                     "business_impact":  [
+                                             "Data Breach",
+                                             "Reputation Damage"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Conduct vendor security assessments (SOC 2, ISO 27001) and implement data minimization.",
+                           "defense_in_depth":  [
+                                                    "API key rotation",
+                                                    "Rate limiting",
+                                                    "Monitoring"
+                                                ],
+                           "verification":  "Review vendor security certifications and SLAs."
+                       },
+        "references":  [
+                           "NIST SP 800-161",
+                           "OWASP SCVS"
+                       ],
+        "tags":  [
+                     "third-party",
+                     "supply-chain",
+                     "vendor-risk"
+                 ]
     },
     {
-        "id": "EXT-002",
-        "category": "Tampering",
-        "resource_type": [
-            "API"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "healthcare_integration",
-                        "op": "==",
-                        "value": true
-                    },
-                    {
-                        "field": "message_validation",
-                        "op": "!=",
-                        "value": true
-                    }
-                ]
-            },
-            "auto_detectable": true,
-            "confidence": "medium"
-        },
-        "threat": {
-            "title": "HL7/FHIR Message Tampering",
-            "description": "Healthcare data exchange via HL7/FHIR lacks message validation, allowing tampering of medical records in transit."
-        },
-        "risk": {
-            "severity": "High",
-            "likelihood": "Low",
-            "impact": "Critical",
-            "risk_score": 78.0,
-            "affected_assets": [
-                "Medical Records",
-                "Lab Results"
-            ],
-            "business_impact": [
-                "Patient Safety",
-                "Incorrect Treatment"
-            ]
-        },
-        "mitigation": {
-            "primary": "Implement message signing and validation for all HL7/FHIR exchanges.",
-            "defense_in_depth": [
-                "TLS encryption",
-                "Message integrity checks"
-            ],
-            "verification": "Test with modified HL7 messages."
-        },
-        "references": [
-            "HL7 Security Specification",
-            "FHIR Security"
-        ],
-        "tags": [
-            "healthcare",
-            "hl7",
-            "fhir"
-        ]
+        "id":  "EXT-002",
+        "category":  "Tampering",
+        "resource_type":  [
+                              "API"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "healthcare_integration",
+                                                               "op":  "==",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "message_validation",
+                                                               "op":  "!=",
+                                                               "value":  true
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "medium"
+                      },
+        "threat":  {
+                       "title":  "HL7/FHIR Message Tampering",
+                       "description":  "Healthcare data exchange via HL7/FHIR lacks message validation, allowing tampering of medical records in transit."
+                   },
+        "risk":  {
+                     "severity":  "High",
+                     "likelihood":  "Low",
+                     "impact":  "Critical",
+                     "risk_score":  78.0,
+                     "affected_assets":  [
+                                             "Medical Records",
+                                             "Lab Results"
+                                         ],
+                     "business_impact":  [
+                                             "Patient Safety",
+                                             "Incorrect Treatment"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Implement message signing and validation for all HL7/FHIR exchanges.",
+                           "defense_in_depth":  [
+                                                    "TLS encryption",
+                                                    "Message integrity checks"
+                                                ],
+                           "verification":  "Test with modified HL7 messages."
+                       },
+        "references":  [
+                           "HL7 Security Specification",
+                           "FHIR Security"
+                       ],
+        "tags":  [
+                     "healthcare",
+                     "hl7",
+                     "fhir"
+                 ]
     },
     {
-        "id": "K8S-001",
-        "category": "Elevation of Privilege",
-        "resource_type": [
-            "Service"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "deployment",
-                        "op": "==",
-                        "value": "k8s"
-                    },
-                    {
-                        "field": "pod_security_policy",
-                        "op": "!=",
-                        "value": true
-                    }
-                ]
-            },
-            "auto_detectable": true,
-            "confidence": "medium"
-        },
-        "threat": {
-            "title": "Kubernetes Privilege Escalation",
-            "description": "Kubernetes pods lack security policies, allowing container escape and privilege escalation to host."
-        },
-        "risk": {
-            "severity": "High",
-            "likelihood": "Low",
-            "impact": "Critical",
-            "risk_score": 78.0,
-            "affected_assets": [
-                "Kubernetes Cluster",
-                "All Services"
-            ],
-            "business_impact": [
-                "Full System Compromise"
-            ]
-        },
-        "mitigation": {
-            "primary": "Implement Pod Security Standards (restricted profile) and RBAC.",
-            "defense_in_depth": [
-                "Network policies",
-                "Service mesh",
-                "Runtime security"
-            ],
-            "verification": "Test with privilege escalation exploits."
-        },
-        "references": [
-            "Kubernetes Security Best Practices",
-            "CIS Kubernetes Benchmark"
-        ],
-        "tags": [
-            "kubernetes",
-            "container",
-            "privilege-escalation"
-        ]
+        "id":  "K8S-001",
+        "category":  "Elevation of Privilege",
+        "resource_type":  [
+                              "Service"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "deployment",
+                                                               "op":  "==",
+                                                               "value":  "k8s"
+                                                           },
+                                                           {
+                                                               "field":  "pod_security_policy",
+                                                               "op":  "!=",
+                                                               "value":  true
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "medium"
+                      },
+        "threat":  {
+                       "title":  "Kubernetes Privilege Escalation",
+                       "description":  "Kubernetes pods lack security policies, allowing container escape and privilege escalation to host."
+                   },
+        "risk":  {
+                     "severity":  "High",
+                     "likelihood":  "Low",
+                     "impact":  "Critical",
+                     "risk_score":  78.0,
+                     "affected_assets":  [
+                                             "Kubernetes Cluster",
+                                             "All Services"
+                                         ],
+                     "business_impact":  [
+                                             "Full System Compromise"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Implement Pod Security Standards (restricted profile) and RBAC.",
+                           "defense_in_depth":  [
+                                                    "Network policies",
+                                                    "Service mesh",
+                                                    "Runtime security"
+                                                ],
+                           "verification":  "Test with privilege escalation exploits."
+                       },
+        "references":  [
+                           "Kubernetes Security Best Practices",
+                           "CIS Kubernetes Benchmark"
+                       ],
+        "tags":  [
+                     "kubernetes",
+                     "container",
+                     "privilege-escalation"
+                 ]
     },
     {
-        "id": "MOB-001",
-        "category": "Information Disclosure",
-        "resource_type": [
-            "WebClient"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "mobile_app",
-                        "op": "==",
-                        "value": true
-                    },
-                    {
-                        "field": "certificate_pinning",
-                        "op": "!=",
-                        "value": true
-                    }
-                ]
-            },
-            "auto_detectable": true,
-            "confidence": "medium"
-        },
-        "threat": {
-            "title": "Mobile App MITM Attack",
-            "description": "Mobile apps lack certificate pinning, allowing man-in-the-middle attacks to intercept patient data."
-        },
-        "risk": {
-            "severity": "High",
-            "likelihood": "Low",
-            "impact": "High",
-            "risk_score": 68.0,
-            "affected_assets": [
-                "Patient Data",
-                "Credentials"
-            ],
-            "business_impact": [
-                "Data Breach",
-                "Account Takeover"
-            ]
-        },
-        "mitigation": {
-            "primary": "Implement certificate pinning for all API connections.",
-            "defense_in_depth": [
-                "App attestation",
-                "Jailbreak detection"
-            ],
-            "verification": "Test with proxy tools (Burp Suite, Charles Proxy)."
-        },
-        "references": [
-            "OWASP MASVS",
-            "Mobile App Security"
-        ],
-        "tags": [
-            "mobile",
-            "mitm",
-            "certificate-pinning"
-        ]
+        "id":  "MOB-001",
+        "category":  "Information Disclosure",
+        "resource_type":  [
+                              "WebClient"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "mobile_app",
+                                                               "op":  "==",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "certificate_pinning",
+                                                               "op":  "!=",
+                                                               "value":  true
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "medium"
+                      },
+        "threat":  {
+                       "title":  "Mobile App MITM Attack",
+                       "description":  "Mobile apps lack certificate pinning, allowing man-in-the-middle attacks to intercept patient data."
+                   },
+        "risk":  {
+                     "severity":  "High",
+                     "likelihood":  "Low",
+                     "impact":  "High",
+                     "risk_score":  68.0,
+                     "affected_assets":  [
+                                             "Patient Data",
+                                             "Credentials"
+                                         ],
+                     "business_impact":  [
+                                             "Data Breach",
+                                             "Account Takeover"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Implement certificate pinning for all API connections.",
+                           "defense_in_depth":  [
+                                                    "App attestation",
+                                                    "Jailbreak detection"
+                                                ],
+                           "verification":  "Test with proxy tools (Burp Suite, Charles Proxy)."
+                       },
+        "references":  [
+                           "OWASP MASVS",
+                           "Mobile App Security"
+                       ],
+        "tags":  [
+                     "mobile",
+                     "mitm",
+                     "certificate-pinning"
+                 ]
     },
     {
-        "id": "MOB-002",
-        "category": "Information Disclosure",
-        "resource_type": [
-            "WebClient"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "mobile_app",
-                        "op": "==",
-                        "value": true
-                    },
-                    {
-                        "field": "offline_capability",
-                        "op": "==",
-                        "value": true
-                    },
-                    {
-                        "field": "local_encryption",
-                        "op": "!=",
-                        "value": true
-                    }
-                ]
-            },
-            "auto_detectable": true,
-            "confidence": "high"
-        },
-        "threat": {
-            "title": "Insecure Mobile Data Storage",
-            "description": "Mobile app with offline capability stores PHI locally without encryption, risking data exposure if device is lost/stolen."
-        },
-        "risk": {
-            "severity": "Critical",
-            "likelihood": "Medium",
-            "impact": "High",
-            "risk_score": 82.5,
-            "affected_assets": [
-                "PHI",
-                "Patient Records"
-            ],
-            "business_impact": [
-                "HIPAA Breach",
-                "Data Loss"
-            ]
-        },
-        "mitigation": {
-            "primary": "Implement encrypted local storage using platform keychains (iOS Keychain, Android Keystore).",
-            "defense_in_depth": [
-                "Remote wipe capability",
-                "Biometric authentication"
-            ],
-            "verification": "Extract and analyze app data from device."
-        },
-        "references": [
-            "OWASP MASVS V2",
-            "HIPAA Mobile Device Security"
-        ],
-        "tags": [
-            "mobile",
-            "storage",
-            "encryption"
-        ]
+        "id":  "MOB-002",
+        "category":  "Information Disclosure",
+        "resource_type":  [
+                              "WebClient"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "mobile_app",
+                                                               "op":  "==",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "offline_capability",
+                                                               "op":  "==",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "local_encryption",
+                                                               "op":  "!=",
+                                                               "value":  true
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "high"
+                      },
+        "threat":  {
+                       "title":  "Insecure Mobile Data Storage",
+                       "description":  "Mobile app with offline capability stores PHI locally without encryption, risking data exposure if device is lost/stolen."
+                   },
+        "risk":  {
+                     "severity":  "Critical",
+                     "likelihood":  "Medium",
+                     "impact":  "High",
+                     "risk_score":  82.5,
+                     "affected_assets":  [
+                                             "PHI",
+                                             "Patient Records"
+                                         ],
+                     "business_impact":  [
+                                             "HIPAA Breach",
+                                             "Data Loss"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Implement encrypted local storage using platform keychains (iOS Keychain, Android Keystore).",
+                           "defense_in_depth":  [
+                                                    "Remote wipe capability",
+                                                    "Biometric authentication"
+                                                ],
+                           "verification":  "Extract and analyze app data from device."
+                       },
+        "references":  [
+                           "OWASP MASVS V2",
+                           "HIPAA Mobile Device Security"
+                       ],
+        "tags":  [
+                     "mobile",
+                     "storage",
+                     "encryption"
+                 ]
     },
     {
-        "id": "DR-001",
-        "category": "Denial of Service",
-        "resource_type": [
-            "Database"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "multi_region",
-                        "op": "==",
-                        "value": true
-                    },
-                    {
-                        "field": "failover_testing",
-                        "op": "!=",
-                        "value": true
-                    }
-                ]
-            },
-            "auto_detectable": false,
-            "confidence": "low"
-        },
-        "threat": {
-            "title": "Untested Disaster Recovery",
-            "description": "Multi-region failover is configured but not regularly tested, risking extended downtime during actual disaster."
-        },
-        "risk": {
-            "severity": "Medium",
-            "likelihood": "Medium",
-            "impact": "High",
-            "risk_score": 65.0,
-            "affected_assets": [
-                "System Availability"
-            ],
-            "business_impact": [
-                "Service Outage",
-                "SLA Violation"
-            ]
-        },
-        "mitigation": {
-            "primary": "Conduct quarterly DR drills and document RTO/RPO metrics.",
-            "defense_in_depth": [
-                "Automated failover",
-                "Runbooks",
-                "On-call rotation"
-            ],
-            "verification": "Perform unannounced DR test."
-        },
-        "references": [
-            "NIST SP 800-34",
-            "AWS Well-Architected"
-        ],
-        "tags": [
-            "disaster-recovery",
-            "availability",
-            "testing"
-        ]
+        "id":  "DR-001",
+        "category":  "Denial of Service",
+        "resource_type":  [
+                              "Database"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "multi_region",
+                                                               "op":  "==",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "failover_testing",
+                                                               "op":  "!=",
+                                                               "value":  true
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  false,
+                          "confidence":  "low"
+                      },
+        "threat":  {
+                       "title":  "Untested Disaster Recovery",
+                       "description":  "Multi-region failover is configured but not regularly tested, risking extended downtime during actual disaster."
+                   },
+        "risk":  {
+                     "severity":  "Medium",
+                     "likelihood":  "Medium",
+                     "impact":  "High",
+                     "risk_score":  65.0,
+                     "affected_assets":  [
+                                             "System Availability"
+                                         ],
+                     "business_impact":  [
+                                             "Service Outage",
+                                             "SLA Violation"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Conduct quarterly DR drills and document RTO/RPO metrics.",
+                           "defense_in_depth":  [
+                                                    "Automated failover",
+                                                    "Runbooks",
+                                                    "On-call rotation"
+                                                ],
+                           "verification":  "Perform unannounced DR test."
+                       },
+        "references":  [
+                           "NIST SP 800-34",
+                           "AWS Well-Architected"
+                       ],
+        "tags":  [
+                     "disaster-recovery",
+                     "availability",
+                     "testing"
+                 ]
+    },
+    {
+        "id":  "S-003",
+        "category":  "Spoofing",
+        "resource_type":  [
+                              "API Gateway",
+                              "API"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "auth_type",
+                                                               "op":  "contains",
+                                                               "value":  "jwt"
+                                                           },
+                                                           {
+                                                               "field":  "jwt_validation",
+                                                               "op":  "==",
+                                                               "value":  false
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "high"
+                      },
+        "threat":  {
+                       "title":  "JWT Signature Validation Bypass",
+                       "description":  "JWT authentication is used but signature validation is disabled or incomplete, allowing token forgery and privilege escalation."
+                   },
+        "risk":  {
+                     "severity":  "Critical",
+                     "likelihood":  "High",
+                     "impact":  "High",
+                     "risk_score":  92.0,
+                     "affected_assets":  [
+                                             "User Accounts",
+                                             "API Access"
+                                         ],
+                     "business_impact":  [
+                                             "Account Takeover",
+                                             "Data Breach"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Enable JWT signature validation on all services using a shared secret or public key infrastructure.",
+                           "defense_in_depth":  [
+                                                    "Short-lived tokens (15-30 min)",
+                                                    "Token revocation",
+                                                    "Request signing"
+                                                ],
+                           "verification":  "Test with forged JWT tokens"
+                       },
+        "references":  [
+                           "OWASP API Security Top 10",
+                           "JWT Best Practices"
+                       ],
+        "tags":  [
+                     "jwt",
+                     "authentication",
+                     "api-security"
+                 ]
+    },
+    {
+        "id":  "ID-005",
+        "category":  "Information Disclosure",
+        "resource_type":  [
+                              "Database",
+                              "Queue"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "data_sensitivity",
+                                                               "op":  "in",
+                                                               "value":  [
+                                                                             "pii",
+                                                                             "financial",
+                                                                             "credentials"
+                                                                         ]
+                                                           },
+                                                           {
+                                                               "field":  "encryption_at_rest",
+                                                               "op":  "==",
+                                                               "value":  false
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "high"
+                      },
+        "threat":  {
+                       "title":  "Sensitive Data Stored Unencrypted",
+                       "description":  "Sensitive data (PII, financial, credentials) is stored without encryption at rest, exposing it if storage media is compromised."
+                   },
+        "risk":  {
+                     "severity":  "Critical",
+                     "likelihood":  "Medium",
+                     "impact":  "High",
+                     "risk_score":  88.0,
+                     "affected_assets":  [
+                                             "Customer Data",
+                                             "Payment Information"
+                                         ],
+                     "business_impact":  [
+                                             "Data Breach",
+                                             "Compliance Violation",
+                                             "GDPR Fines"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Enable encryption at rest for all data stores containing sensitive information.",
+                           "defense_in_depth":  [
+                                                    "Key management service (KMS)",
+                                                    "Access controls",
+                                                    "Data masking"
+                                                ],
+                           "verification":  "Verify encryption status in database configuration"
+                       },
+        "references":  [
+                           "GDPR Article 32",
+                           "PCI-DSS Requirement 3.4"
+                       ],
+        "tags":  [
+                     "encryption",
+                     "data-protection",
+                     "compliance"
+                 ]
+    },
+    {
+        "id":  "ID-006",
+        "category":  "Information Disclosure",
+        "resource_type":  [
+                              "Object Storage",
+                              "CDN"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "public_access",
+                                                               "op":  "==",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "signed_urls",
+                                                               "op":  "!=",
+                                                               "value":  true
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "high"
+                      },
+        "threat":  {
+                       "title":  "Unrestricted Public Access to Storage",
+                       "description":  "Storage resources are publicly accessible without signed URLs or access controls, allowing unauthorized enumeration and data scraping."
+                   },
+        "risk":  {
+                     "severity":  "Medium",
+                     "likelihood":  "High",
+                     "impact":  "Medium",
+                     "risk_score":  65.0,
+                     "affected_assets":  [
+                                             "Product Images",
+                                             "Static Assets"
+                                         ],
+                     "business_impact":  [
+                                             "Data Scraping",
+                                             "Bandwidth Theft",
+                                             "Competitive Intelligence Loss"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Implement signed URLs with time-based expiration for all storage access.",
+                           "defense_in_depth":  [
+                                                    "Block direct storage access",
+                                                    "Referrer checking",
+                                                    "Rate limiting"
+                                                ],
+                           "verification":  "Attempt direct storage access without authentication"
+                       },
+        "references":  [
+                           "AWS S3 Security Best Practices",
+                           "Cloud Storage Security"
+                       ],
+        "tags":  [
+                     "storage",
+                     "access-control",
+                     "public-access"
+                 ]
+    },
+    {
+        "id":  "EOP-003",
+        "category":  "Elevation of Privilege",
+        "resource_type":  [
+                              "Identity Provider",
+                              "WebClient"
+                          ],
+        "detection":  {
+                          "logic":  {
+                                        "operator":  "AND",
+                                        "conditions":  [
+                                                           {
+                                                               "field":  "admin_portal",
+                                                               "op":  "==",
+                                                               "value":  true
+                                                           },
+                                                           {
+                                                               "field":  "admin_separation",
+                                                               "op":  "==",
+                                                               "value":  false
+                                                           }
+                                                       ]
+                                    },
+                          "auto_detectable":  true,
+                          "confidence":  "medium"
+                      },
+        "threat":  {
+                       "title":  "Shared Admin/Customer Authentication",
+                       "description":  "Admin portal uses the same authentication mechanism as customer portal, increasing privilege escalation risk and attack surface."
+                   },
+        "risk":  {
+                     "severity":  "High",
+                     "likelihood":  "Medium",
+                     "impact":  "High",
+                     "risk_score":  82.0,
+                     "affected_assets":  [
+                                             "Admin Access",
+                                             "All Customer Data"
+                                         ],
+                     "business_impact":  [
+                                             "Full System Compromise",
+                                             "Mass Data Breach"
+                                         ]
+                 },
+        "mitigation":  {
+                           "primary":  "Implement separate authentication for admin users with MFA and IP whitelisting.",
+                           "defense_in_depth":  [
+                                                    "Separate admin tenant/realm",
+                                                    "RBAC with least privilege",
+                                                    "Admin activity logging"
+                                                ],
+                           "verification":  "Attempt privilege escalation from customer account"
+                       },
+        "references":  [
+                           "OWASP ASVS",
+                           "Admin Portal Security"
+                       ],
+        "tags":  [
+                     "admin",
+                     "privilege-escalation",
+                     "authentication"
+                 ]
     }
 ]
