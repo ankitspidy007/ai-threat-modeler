@@ -1,0 +1,85 @@
+{
+    "STRIDE_COLORS": {
+        "Spoofing": {
+            "color": "#FF6B6B",
+            "hex": "FF6B6B",
+            "name": "Red",
+            "icon": "🎭",
+            "description": "Identity impersonation"
+        },
+        "Tampering": {
+            "color": "#FFA500",
+            "hex": "FFA500",
+            "name": "Orange",
+            "icon": "✏️",
+            "description": "Data modification"
+        },
+        "Repudiation": {
+            "color": "#FFD93D",
+            "hex": "FFD93D",
+            "name": "Yellow",
+            "icon": "🚫",
+            "description": "Denial of actions"
+        },
+        "Information Disclosure": {
+            "color": "#6BCF7F",
+            "hex": "6BCF7F",
+            "name": "Green",
+            "icon": "👁️",
+            "description": "Information leak"
+        },
+        "Denial of Service": {
+            "color": "#4D96FF",
+            "hex": "4D96FF",
+            "name": "Blue",
+            "icon": "🛑",
+            "description": "Service disruption"
+        },
+        "Elevation of Privilege": {
+            "color": "#9D4EDD",
+            "hex": "9D4EDD",
+            "name": "Purple",
+            "icon": "👑",
+            "description": "Unauthorized privilege gain"
+        }
+    },
+    "SEVERITY_COLORS": {
+        "Critical": {
+            "color": "#DC143C",
+            "background": "#FFE5E5",
+            "icon": "🔴"
+        },
+        "High": {
+            "color": "#FF8C00",
+            "background": "#FFF4E5",
+            "icon": "🟠"
+        },
+        "Medium": {
+            "color": "#FFD700",
+            "background": "#FFFBE5",
+            "icon": "🟡"
+        },
+        "Low": {
+            "color": "#32CD32",
+            "background": "#E5FFE5",
+            "icon": "🟢"
+        }
+    },
+    "TRUST_BOUNDARIES": {
+        "Internet": {
+            "color": "#FF0000",
+            "style": "dashed",
+            "trust_level": "Untrusted"
+        },
+        "DMZ": {
+            "color": "#FFA500",
+            "style": "dashed",
+            "trust_level": "Semi-trusted"
+        },
+        "Internal": {
+            "color": "#00FF00",
+            "style": "dashed",
+            "trust_level": "Trusted"
+        }
+    }
+}

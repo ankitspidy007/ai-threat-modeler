@@ -2,6 +2,7 @@ import json
 import os
 from typing import List, Dict, Any, Tuple, Optional
 from ..models import Threat
+from ..knowledge_base.loader import get_knowledge_base
 
 from collections import namedtuple
 
@@ -9,24 +10,277 @@ MatchResult = namedtuple('MatchResult', ['match', 'confidence', 'evidence'])
 
 class RuleEngine:
     def __init__(self, rules_path: str = None):
-        if rules_path is None:
-            # Default to knowledge_base/threats.json relative to this file
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            rules_path = os.path.join(base_dir, 'knowledge_base', 'threats.json')
-        
-        with open(rules_path, 'r') as f:
-            self.rules = json.load(f)
-        
-        # Load domain-specific threats if available
-        domain_rules_path = rules_path.replace('threats.json', 'domain_threats.json')
-        if os.path.exists(domain_rules_path):
-            with open(domain_rules_path, 'r') as f:
-                domain_rules = json.load(f)
-                self.rules.extend(domain_rules)
-                print(f"Loaded {len(domain_rules)} domain-specific threat rules")
+        """
+        Initialize RuleEngine with comprehensive knowledge base.
+        Supports both legacy threats.json and new modular knowledge base.
+        """
+        # Load comprehensive knowledge base
+        try:
+            kb = get_knowledge_base()
+            comprehensive_threats = kb.get_all_threats()
+            print(f"Loaded {len(comprehensive_threats)} threats from comprehensive knowledge base")
+            
+            # Convert comprehensive threats to legacy format for compatibility
+            self.rules = self._convert_to_legacy_format(comprehensive_threats)
+            
+        except Exception as e:
+            print(f"Warning: Could not load comprehensive knowledge base: {e}")
+            print("Falling back to legacy threats.json")
+            
+            # Fallback to legacy loading
+            if rules_path is None:
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                rules_path = os.path.join(base_dir, 'knowledge_base', 'threats.json')
+            
+            with open(rules_path, 'r') as f:
+                self.rules = json.load(f)
+            
+            # Load domain-specific threats if available
+            domain_rules_path = rules_path.replace('threats.json', 'domain_threats.json')
+            if os.path.exists(domain_rules_path):
+                with open(domain_rules_path, 'r') as f:
+                    domain_rules = json.load(f)
+                    self.rules.extend(domain_rules)
+                    print(f"Loaded {len(domain_rules)} domain-specific threat rules")
         
         # Sort rules by priority (if defined) for consistent evaluation order
         self.rules.sort(key=lambda r: r.get('priority', 50))
+    
+    def _convert_to_legacy_format(self, comprehensive_threats: List[Dict]) -> List[Dict]:
+        """
+        Convert comprehensive threat format to legacy format for compatibility.
+        This allows the existing rule engine logic to work with new threats.
+        """
+        legacy_rules = []
+        
+        for threat in comprehensive_threats:
+            # If the threat already has legacy format fields (from threats.json), keep it as-is
+            if 'detection' in threat and 'resource_type' in threat:
+                legacy_rules.append(threat)
+                continue
+
+            # Map comprehensive format to legacy format
+            legacy_rule = {
+                'id': threat.get('threat_id', threat.get('id', 'UNKNOWN')),
+                'category': threat.get('stride_category', 'Unknown'),
+                'title': threat.get('threat_name', 'Unknown Threat'),
+                'description': threat.get('attack_vector', ''),
+                'severity': threat.get('impact', 'Medium'),
+                'priority': self._map_severity_to_priority(threat.get('impact', 'Medium')),
+                'resource_type': [threat.get('component', 'Any')],
+                'threat': {
+                    'title': threat.get('threat_name', 'Unknown Threat'),
+                    'description': threat.get('attack_vector', '')
+                },
+                'risk': {
+                    'severity': threat.get('impact', 'Medium'),
+                    'likelihood': threat.get('likelihood', 'Medium'),
+                    'impact': threat.get('impact', 'Medium'),
+                    'risk_score': self._calculate_risk_score(
+                        threat.get('likelihood', 'Medium'),
+                        threat.get('impact', 'Medium')
+                    )
+                },
+                'mitigation': {
+                    'primary': self._extract_primary_mitigation(threat.get('mitigations', []))
+                },
+                'detection': self._create_detection_logic(threat),
+                'negating_controls': self._extract_negating_controls(threat.get('mitigations', []))
+            }
+
+            # Extract compliance mappings from comprehensive format (references field)
+            refs = threat.get('references', {})
+            mapped_controls = {}
+            if refs.get('owasp'):
+                mapped_controls['owasp_top_10'] = refs['owasp']
+            if refs.get('cwe'):
+                mapped_controls['cwe'] = refs['cwe']
+            if refs.get('mitre_attack'):
+                mapped_controls['mitre_attack'] = refs['mitre_attack']
+            if refs.get('nist'):
+                mapped_controls['nist_800_53'] = refs['nist']
+
+            if mapped_controls:
+                legacy_rule['mapped_controls'] = mapped_controls
+            
+            legacy_rules.append(legacy_rule)
+        
+        return legacy_rules
+    
+    def _map_severity_to_priority(self, severity: str) -> int:
+        """Map severity to priority number (lower = higher priority)"""
+        mapping = {
+            'Critical': 10,
+            'High': 20,
+            'Medium': 30,
+            'Low': 40
+        }
+        return mapping.get(severity, 30)
+    
+    def _calculate_risk_score(self, likelihood: str, impact: str) -> int:
+        """Calculate risk score from likelihood and impact"""
+        scores = {'Low': 1, 'Medium': 2, 'High': 3, 'Critical': 4}
+        l_score = scores.get(likelihood, 2)
+        i_score = scores.get(impact, 2)
+        return l_score * i_score
+    
+    def _extract_primary_mitigation(self, mitigations: List[Dict]) -> str:
+        """Extract primary mitigation from mitigations list"""
+        if not mitigations:
+            return "No specific mitigation provided"
+        
+        # Prefer preventive controls
+        preventive = [m for m in mitigations if m.get('control_type') == 'Preventive']
+        if preventive:
+            return preventive[0].get('description', 'No description')
+        
+        return mitigations[0].get('description', 'No description')
+    
+    def _create_detection_logic(self, threat: Dict) -> Dict:
+        """
+        Create intelligent detection logic from threat data.
+        Considers cloud platform, component type, database type, and security controls.
+        """
+        component = threat.get('component', 'Any')
+        cloud_platforms = threat.get('cloud_platform', [])
+        cloud_services = threat.get('cloud_services', [])
+        threat_id = threat.get('threat_id', '')
+        
+        conditions = []
+        
+        # Base condition: Component type match
+        conditions.append({
+            'field': 'type',
+            'op': '==',
+            'value': component
+        })
+        
+        # Cloud platform specific threats
+        if cloud_platforms and cloud_platforms != ['On-Premise']:
+            # For AWS-specific threats
+            if 'AWS' in threat_id or any('AWS' in svc for svc in cloud_services):
+                conditions.append({
+                    'field': 'cloud_provider',
+                    'op': '==',
+                    'value': 'aws'
+                })
+            
+            # For Azure-specific threats  
+            elif 'AZURE' in threat_id or any('Azure' in svc for svc in cloud_services):
+                conditions.append({
+                    'field': 'cloud_provider',
+                    'op': '==',
+                    'value': 'azure'
+                })
+            
+            # For GCP-specific threats
+            elif 'GCP' in threat_id or any('GCP' in svc for svc in cloud_services):
+                conditions.append({
+                    'field': 'cloud_provider',
+                    'op': '==',
+                    'value': 'gcp'
+                })
+        
+        # Database-specific logic
+        if component == 'Database':
+            # SQL-specific threats (RDS, Azure SQL, Cloud SQL)
+            if any(keyword in threat_id or keyword in str(cloud_services) 
+                   for keyword in ['RDS', 'SQL', 'TDE']):
+                # Only match SQL databases
+                conditions.append({
+                    'field': 'db_type',
+                    'op': 'in',
+                    'value': ['mysql', 'postgresql', 'mssql', 'oracle', 'sql']
+                })
+            
+            # NoSQL-specific threats
+            elif 'NoSQL' in threat.get('attack_vector', ''):
+                conditions.append({
+                    'field': 'db_type',
+                    'op': 'in',
+                    'value': ['mongodb', 'dynamodb', 'cosmosdb', 'firestore', 'nosql']
+                })
+        
+        # Authentication-specific logic
+        if component == 'API':
+            # JWT threats - only if NOT using managed auth
+            if 'JWT' in threat_id:
+                conditions.append({
+                    'field': 'auth_type',
+                    'op': 'in',
+                    'value': ['jwt', 'custom', 'none']
+                })
+            
+            # OAuth threats - only if using OAuth
+            elif 'OAuth' in threat_id or 'OAuth' in threat.get('threat_name', ''):
+                conditions.append({
+                    'field': 'auth_type',
+                    'op': 'in',
+                    'value': ['oauth', 'oauth2', 'custom']
+                })
+            
+            # API Key threats - only if using API keys
+            elif 'API Key' in threat.get('threat_name', ''):
+                conditions.append({
+                    'field': 'auth_type',
+                    'op': 'in',
+                    'value': ['api_key', 'none']
+                })
+            
+            # API Gateway threats - only if NOT using managed auth services
+            elif 'API Gateway' in threat.get('threat_name', ''):
+                conditions.append({
+                    'field': 'auth_type',
+                    'op': 'not_in',
+                    'value': ['cognito', 'auth0', 'okta', 'azure_ad', 'google_identity']
+                })
+        
+        # Serverless-specific logic
+        if component == 'Serverless':
+            if 'Lambda' in str(cloud_services):
+                conditions.append({
+                    'field': 'cloud_provider',
+                    'op': '==',
+                    'value': 'aws'
+                })
+            elif 'Functions' in str(cloud_services) and 'Azure' in str(cloud_services):
+                conditions.append({
+                    'field': 'cloud_provider',
+                    'op': '==',
+                    'value': 'azure'
+                })
+            elif 'Functions' in str(cloud_services) and 'GCP' in str(cloud_services):
+                conditions.append({
+                    'field': 'cloud_provider',
+                    'op': '==',
+                    'value': 'gcp'
+                })
+        
+        # Use AND logic for all conditions
+        return {
+            'logic': {
+                'operator': 'AND',
+                'conditions': conditions
+            }
+        }
+    
+    def _extract_negating_controls(self, mitigations: List[Dict]) -> List[str]:
+        """Extract negating controls from mitigations"""
+        controls = []
+        for mitigation in mitigations:
+            tools = mitigation.get('tools', [])
+            # Map common tools to negating controls
+            for tool in tools:
+                if 'WAF' in tool:
+                    controls.append('waf_enabled')
+                elif 'API Gateway' in tool:
+                    controls.append('api_gateway')
+                elif 'TLS' in tool or 'SSL' in tool:
+                    controls.append('tls_termination')
+                elif 'Encryption' in tool:
+                    controls.append('encryption_at_rest')
+        return list(set(controls))  # Remove duplicates
+
 
     def evaluate_component(self, component_id: str, component_data: Dict[str, Any]) -> List[Threat]:
         threats = []
@@ -255,6 +509,13 @@ class RuleEngine:
         if confidence == "Low":
             title = f"[Conditional] {title}"
 
+        # Extract compliance/framework mappings
+        mapped = rule.get('mapped_controls', {})
+        owasp_top_10 = mapped.get('owasp_top_10', [])
+        cwe = mapped.get('cwe', [])
+        mitre_attack = mapped.get('mitre_attack', mapped.get('mitre', []))
+        nist_800_53 = mapped.get('nist_800_53', [])
+
         return Threat(
             id=rule['id'],
             category=rule['category'],
@@ -270,5 +531,9 @@ class RuleEngine:
             flow_target=target,
             confidence=confidence,
             evidence=evidence or [],
-            status="Identified"
+            status="Identified",
+            owasp_top_10=owasp_top_10,
+            cwe=cwe,
+            mitre_attack=mitre_attack,
+            nist_800_53=nist_800_53,
         )

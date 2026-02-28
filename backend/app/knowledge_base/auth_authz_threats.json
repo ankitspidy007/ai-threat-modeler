@@ -1,0 +1,480 @@
+[
+    {
+        "threat_id": "AUTH-001",
+        "threat_name": "JWT Token Without Expiration",
+        "component": "API",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "stride_category": "Spoofing",
+        "attack_vector": "JWT tokens without expiration (exp claim) remain valid indefinitely, allowing long-term unauthorized access if stolen.",
+        "likelihood": "High",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity"
+        ],
+        "prerequisites": [
+            "JWT tokens issued without exp claim",
+            "No token refresh mechanism",
+            "Token theft or interception"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Always include expiration claim in JWT",
+                "implementation": "Set short-lived tokens (15-60 minutes) with exp claim",
+                "tools": [
+                    "JWT Libraries",
+                    "OAuth 2.0"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement token refresh mechanism",
+                "implementation": "Use refresh tokens for obtaining new access tokens",
+                "tools": [
+                    "OAuth 2.0",
+                    "OpenID Connect"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Monitor token usage patterns",
+                "implementation": "Alert on tokens used from multiple IPs or locations",
+                "tools": [
+                    "API Gateway",
+                    "Application Logs"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Token Analysis",
+                "indicators": [
+                    "Tokens without exp claim",
+                    "Long-lived tokens"
+                ],
+                "tools": [
+                    "jwt.io",
+                    "Custom Validators"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-613"
+            ],
+            "mitre_attack": [
+                "T1550.001"
+            ],
+            "owasp": [
+                "A07:2021"
+            ],
+            "external_links": [
+                "https://datatracker.ietf.org/doc/html/rfc7519"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "API-first",
+            "Microservices"
+        ],
+        "tags": [
+            "authentication",
+            "jwt",
+            "session-management"
+        ]
+    },
+    {
+        "threat_id": "AUTH-002",
+        "threat_name": "OAuth 2.0 Redirect URI Manipulation",
+        "component": "API",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "stride_category": "Spoofing",
+        "attack_vector": "Attacker manipulates redirect_uri parameter to steal authorization codes by redirecting to malicious site.",
+        "likelihood": "Medium",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality"
+        ],
+        "prerequisites": [
+            "Weak redirect URI validation",
+            "Open redirector vulnerability",
+            "Authorization code flow used"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Implement strict redirect URI validation",
+                "implementation": "Use exact string matching for redirect URIs",
+                "tools": [
+                    "OAuth 2.0 Server"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use PKCE for public clients",
+                "implementation": "Implement Proof Key for Code Exchange (RFC 7636)",
+                "tools": [
+                    "OAuth 2.0 with PKCE"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Register all redirect URIs",
+                "implementation": "Maintain whitelist of allowed redirect URIs per client",
+                "tools": [
+                    "OAuth 2.0 Server Configuration"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Authorization Server Logs",
+                "indicators": [
+                    "Redirect URI mismatches",
+                    "Unusual redirect patterns"
+                ],
+                "tools": [
+                    "OAuth Server Logs"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-601"
+            ],
+            "mitre_attack": [
+                "T1539"
+            ],
+            "capec": [
+                "CAPEC-194"
+            ],
+            "owasp": [
+                "A01:2021"
+            ],
+            "external_links": [
+                "https://datatracker.ietf.org/doc/html/rfc6749"
+            ]
+        },
+        "compliance_relevance": [
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "API-first",
+            "Microservices"
+        ],
+        "tags": [
+            "authentication",
+            "oauth",
+            "authorization"
+        ]
+    },
+    {
+        "threat_id": "AUTH-003",
+        "threat_name": "API Keys in URL Parameters",
+        "component": "API",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "API keys passed in URL parameters are logged in server logs, browser history, and proxy logs, leading to exposure.",
+        "likelihood": "High",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality"
+        ],
+        "prerequisites": [
+            "API keys transmitted in query strings",
+            "Server access logs enabled",
+            "Third-party analytics or proxies"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Use Authorization header for API keys",
+                "implementation": "Pass API keys in Authorization or X-API-Key headers",
+                "tools": [
+                    "API Gateway",
+                    "Application Code"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement short-lived tokens",
+                "implementation": "Use OAuth tokens instead of static API keys",
+                "tools": [
+                    "OAuth 2.0",
+                    "JWT"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Scan logs for exposed keys",
+                "implementation": "Regularly scan logs and revoke exposed keys",
+                "tools": [
+                    "Log Analysis Tools"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Log Analysis",
+                "indicators": [
+                    "API keys in access logs",
+                    "Keys in URLs"
+                ],
+                "tools": [
+                    "ELK Stack",
+                    "Splunk"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-598"
+            ],
+            "mitre_attack": [
+                "T1552.001"
+            ],
+            "owasp": [
+                "API1:2023"
+            ],
+            "external_links": [
+                "https://owasp.org/www-project-api-security/"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "API-first"
+        ],
+        "tags": [
+            "authentication",
+            "api-keys",
+            "credential-exposure"
+        ]
+    },
+    {
+        "threat_id": "DB-001",
+        "threat_name": "SQL Injection via Stored Procedures",
+        "component": "Database",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "cloud_services": [
+            "AWS RDS",
+            "Azure SQL",
+            "GCP Cloud SQL"
+        ],
+        "stride_category": "Tampering",
+        "attack_vector": "Dynamic SQL within stored procedures concatenating user input allows SQL injection attacks.",
+        "likelihood": "Medium",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "Stored procedures using dynamic SQL",
+            "User input concatenated into queries",
+            "Insufficient input validation"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Use parameterized stored procedures",
+                "implementation": "Always use parameters instead of string concatenation",
+                "tools": [
+                    "Database Stored Procedures"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Validate and sanitize input",
+                "implementation": "Implement strict input validation before calling procedures",
+                "tools": [
+                    "Application Layer Validation"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Monitor database queries",
+                "implementation": "Alert on unusual query patterns or errors",
+                "tools": [
+                    "Database Activity Monitoring"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Database Monitoring",
+                "indicators": [
+                    "SQL syntax errors",
+                    "Unusual query patterns"
+                ],
+                "tools": [
+                    "AWS RDS Performance Insights",
+                    "Azure SQL Analytics"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-89"
+            ],
+            "mitre_attack": [
+                "T1190"
+            ],
+            "capec": [
+                "CAPEC-66"
+            ],
+            "owasp": [
+                "A03:2021"
+            ],
+            "external_links": [
+                "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Monolithic",
+            "Microservices"
+        ],
+        "tags": [
+            "database",
+            "injection",
+            "sql"
+        ]
+    },
+    {
+        "threat_id": "SUPPLY-001",
+        "threat_name": "Compromised NPM Package Dependency",
+        "component": "CI/CD",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "stride_category": "Tampering",
+        "attack_vector": "Malicious code injected into npm packages through compromised maintainer accounts or typosquatting.",
+        "likelihood": "Medium",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "Direct dependencies on public npm packages",
+            "No dependency scanning",
+            "Automatic dependency updates"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Use package lock files",
+                "implementation": "Commit package-lock.json to version control",
+                "tools": [
+                    "npm",
+                    "yarn"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Scan dependencies for vulnerabilities",
+                "implementation": "Integrate dependency scanning in CI/CD",
+                "tools": [
+                    "npm audit",
+                    "Snyk",
+                    "Dependabot"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use private npm registry",
+                "implementation": "Mirror approved packages in private registry",
+                "tools": [
+                    "Artifactory",
+                    "Nexus",
+                    "AWS CodeArtifact"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Dependency Scanning",
+                "indicators": [
+                    "Known malicious packages",
+                    "Suspicious package updates"
+                ],
+                "tools": [
+                    "Snyk",
+                    "Socket Security"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-1104"
+            ],
+            "mitre_attack": [
+                "T1195.002"
+            ],
+            "capec": [
+                "CAPEC-437"
+            ],
+            "owasp": [
+                "A06:2021"
+            ],
+            "external_links": [
+                "https://owasp.org/www-project-dependency-check/"
+            ]
+        },
+        "real_world_examples": [
+            {
+                "incident": "event-stream npm package compromise",
+                "year": 2018,
+                "impact": "Malicious code injected to steal cryptocurrency",
+                "reference": "https://blog.npmjs.org/post/180565383195/details-about-the-event-stream-incident"
+            }
+        ],
+        "compliance_relevance": [
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Microservices",
+            "Serverless"
+        ],
+        "tags": [
+            "supply-chain",
+            "dependencies",
+            "npm"
+        ]
+    }
+]

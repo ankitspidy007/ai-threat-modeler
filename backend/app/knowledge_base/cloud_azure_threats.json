@@ -1,0 +1,519 @@
+[
+    {
+        "threat_id": "AZURE-BLOB-001",
+        "threat_name": "Azure Blob Storage Anonymous Access",
+        "component": "Storage",
+        "cloud_platform": [
+            "Azure"
+        ],
+        "cloud_services": [
+            "Azure Blob Storage"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "Storage containers configured with anonymous read access allow unauthorized data access without authentication.",
+        "likelihood": "High",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality"
+        ],
+        "prerequisites": [
+            "Container with public access level set to 'Blob' or 'Container'",
+            "Sensitive data stored in publicly accessible container"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Disable anonymous access at storage account level",
+                "implementation": "Set AllowBlobPublicAccess to false on storage account",
+                "tools": [
+                    "Azure Storage Account",
+                    "Azure Policy"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use Azure AD authentication",
+                "implementation": "Implement RBAC with Azure AD for blob access",
+                "tools": [
+                    "Azure AD",
+                    "Azure RBAC"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Monitor storage access logs",
+                "implementation": "Enable diagnostic logging and monitor for anonymous access",
+                "tools": [
+                    "Azure Monitor",
+                    "Azure Storage Analytics"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Azure Policy",
+                "indicators": [
+                    "Storage accounts allowing blob public access"
+                ],
+                "tools": [
+                    "Azure Policy",
+                    "Azure Security Center"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-732"
+            ],
+            "mitre_attack": [
+                "T1530"
+            ],
+            "owasp": [
+                "A01:2021"
+            ],
+            "nist": [
+                "AC-3"
+            ],
+            "external_links": [
+                "https://docs.microsoft.com/en-us/azure/storage/blobs/anonymous-read-access-prevent"
+            ]
+        },
+        "compliance_relevance": [
+            "GDPR",
+            "HIPAA",
+            "PCI-DSS"
+        ],
+        "architecture_patterns": [
+            "Microservices",
+            "Serverless"
+        ],
+        "tags": [
+            "cloud-native",
+            "data-exposure",
+            "misconfiguration"
+        ]
+    },
+    {
+        "threat_id": "AZURE-VM-001",
+        "threat_name": "Azure VM with Public IP and Open RDP/SSH",
+        "component": "Service",
+        "cloud_platform": [
+            "Azure"
+        ],
+        "cloud_services": [
+            "Azure Virtual Machines"
+        ],
+        "stride_category": "Elevation of Privilege",
+        "attack_vector": "Virtual machines with public IPs and open RDP (3389) or SSH (22) ports are vulnerable to brute force attacks and exploitation.",
+        "likelihood": "High",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "VM with public IP address",
+            "NSG allowing inbound RDP/SSH from internet",
+            "Weak or default credentials"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Use Azure Bastion for remote access",
+                "implementation": "Deploy Azure Bastion and remove public IPs from VMs",
+                "tools": [
+                    "Azure Bastion"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement Just-In-Time VM Access",
+                "implementation": "Enable JIT access in Azure Security Center",
+                "tools": [
+                    "Azure Security Center"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Restrict NSG rules",
+                "implementation": "Limit RDP/SSH access to specific IP ranges or VPN",
+                "tools": [
+                    "Azure Network Security Groups"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Azure Security Center",
+                "indicators": [
+                    "Management ports exposed to internet"
+                ],
+                "tools": [
+                    "Azure Security Center",
+                    "Azure Defender"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-284"
+            ],
+            "mitre_attack": [
+                "T1078",
+                "T1110"
+            ],
+            "nist": [
+                "AC-17"
+            ],
+            "external_links": [
+                "https://docs.microsoft.com/en-us/azure/security-center/security-center-just-in-time"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Monolithic",
+            "Hybrid"
+        ],
+        "trust_boundaries": [
+            "Internet ↔ VM"
+        ],
+        "tags": [
+            "network-exposure",
+            "brute-force",
+            "remote-access"
+        ]
+    },
+    {
+        "threat_id": "AZURE-AD-001",
+        "threat_name": "Azure AD Conditional Access Not Enforced",
+        "component": "IAM",
+        "cloud_platform": [
+            "Azure"
+        ],
+        "cloud_services": [
+            "Azure Active Directory"
+        ],
+        "stride_category": "Spoofing",
+        "attack_vector": "Lack of conditional access policies allows authentication from untrusted locations, devices, or without MFA.",
+        "likelihood": "High",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity"
+        ],
+        "prerequisites": [
+            "No conditional access policies configured",
+            "MFA not enforced",
+            "Access allowed from any location"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Implement conditional access policies",
+                "implementation": "Create policies requiring MFA, device compliance, and trusted locations",
+                "tools": [
+                    "Azure AD Conditional Access"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Enforce MFA for all users",
+                "implementation": "Enable MFA requirement in conditional access policies",
+                "tools": [
+                    "Azure AD MFA"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Monitor sign-in logs",
+                "implementation": "Review Azure AD sign-in logs for suspicious activity",
+                "tools": [
+                    "Azure AD Sign-in Logs",
+                    "Azure Sentinel"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Azure AD Identity Protection",
+                "indicators": [
+                    "Sign-ins from anonymous IP addresses",
+                    "Impossible travel"
+                ],
+                "tools": [
+                    "Azure AD Identity Protection"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-287"
+            ],
+            "mitre_attack": [
+                "T1078.004"
+            ],
+            "owasp": [
+                "A07:2021"
+            ],
+            "external_links": [
+                "https://docs.microsoft.com/en-us/azure/active-directory/conditional-access/"
+            ]
+        },
+        "compliance_relevance": [
+            "SOC2",
+            "ISO27001"
+        ],
+        "tags": [
+            "authentication",
+            "mfa",
+            "identity"
+        ]
+    },
+    {
+        "threat_id": "AZURE-FUNC-001",
+        "threat_name": "Azure Function with Anonymous Authentication",
+        "component": "Serverless",
+        "cloud_platform": [
+            "Azure"
+        ],
+        "cloud_services": [
+            "Azure Functions"
+        ],
+        "stride_category": "Spoofing",
+        "attack_vector": "Azure Functions configured with anonymous authentication level allow unrestricted access to function endpoints.",
+        "likelihood": "High",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity"
+        ],
+        "prerequisites": [
+            "Function authorization level set to 'anonymous'",
+            "Sensitive operations exposed via function",
+            "No additional authentication layer"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Use function or admin authorization levels",
+                "implementation": "Set authorization level to 'function' and protect function keys",
+                "tools": [
+                    "Azure Functions"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement Azure AD authentication",
+                "implementation": "Configure App Service Authentication with Azure AD",
+                "tools": [
+                    "Azure App Service Authentication",
+                    "Azure AD"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use API Management for additional security",
+                "implementation": "Front functions with Azure API Management for authentication and rate limiting",
+                "tools": [
+                    "Azure API Management"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Application Insights",
+                "indicators": [
+                    "High volume of requests",
+                    "Unusual access patterns"
+                ],
+                "tools": [
+                    "Azure Application Insights"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-306"
+            ],
+            "mitre_attack": [
+                "T1190"
+            ],
+            "owasp": [
+                "Serverless:2021-S1"
+            ],
+            "external_links": [
+                "https://docs.microsoft.com/en-us/azure/azure-functions/functions-bindings-http-webhook-trigger"
+            ]
+        },
+        "compliance_relevance": [
+            "SOC2",
+            "PCI-DSS"
+        ],
+        "architecture_patterns": [
+            "Serverless",
+            "Event-driven"
+        ],
+        "tags": [
+            "serverless",
+            "authentication",
+            "api-security"
+        ]
+    },
+    {
+        "threat_id": "AZURE-SQL-001",
+        "threat_name": "Azure SQL Database Without TDE",
+        "component": "Database",
+        "cloud_platform": [
+            "Azure"
+        ],
+        "cloud_services": [
+            "Azure SQL Database"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "SQL databases without Transparent Data Encryption expose data if backups or storage are compromised.",
+        "likelihood": "Low",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality"
+        ],
+        "prerequisites": [
+            "TDE not enabled on database",
+            "Sensitive data stored in database"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Enable Transparent Data Encryption",
+                "implementation": "Enable TDE on all Azure SQL databases",
+                "tools": [
+                    "Azure SQL Database"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use customer-managed keys",
+                "implementation": "Configure TDE with Azure Key Vault for key management",
+                "tools": [
+                    "Azure Key Vault"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Azure Policy",
+                "indicators": [
+                    "SQL databases without TDE enabled"
+                ],
+                "tools": [
+                    "Azure Policy",
+                    "Azure Security Center"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-311"
+            ],
+            "nist": [
+                "SC-28"
+            ],
+            "external_links": [
+                "https://docs.microsoft.com/en-us/azure/azure-sql/database/transparent-data-encryption-tde-overview"
+            ]
+        },
+        "compliance_relevance": [
+            "GDPR",
+            "HIPAA",
+            "PCI-DSS"
+        ],
+        "tags": [
+            "encryption",
+            "data-protection",
+            "compliance"
+        ]
+    },
+    {
+        "threat_id": "AZURE-AKS-001",
+        "threat_name": "AKS Cluster Without Azure Policy Add-on",
+        "component": "Container",
+        "cloud_platform": [
+            "Azure"
+        ],
+        "cloud_services": [
+            "Azure Kubernetes Service"
+        ],
+        "stride_category": "Tampering",
+        "attack_vector": "AKS clusters without policy enforcement allow deployment of non-compliant or insecure workloads.",
+        "likelihood": "Medium",
+        "impact": "High",
+        "affected_cia": [
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "Azure Policy add-on not enabled",
+            "No pod security policies",
+            "Unrestricted container deployments"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Enable Azure Policy add-on for AKS",
+                "implementation": "Enable the add-on and assign built-in policy initiatives",
+                "tools": [
+                    "Azure Policy",
+                    "Azure AKS"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement Pod Security Standards",
+                "implementation": "Configure pod security admission controller",
+                "tools": [
+                    "Kubernetes Pod Security"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Azure Policy Compliance",
+                "indicators": [
+                    "Non-compliant pod deployments"
+                ],
+                "tools": [
+                    "Azure Policy"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-693"
+            ],
+            "mitre_attack": [
+                "T1610"
+            ],
+            "cis": [
+                "CIS Kubernetes 5.2"
+            ],
+            "external_links": [
+                "https://docs.microsoft.com/en-us/azure/aks/use-azure-policy"
+            ]
+        },
+        "compliance_relevance": [
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Container-based",
+            "Microservices"
+        ],
+        "tags": [
+            "kubernetes",
+            "policy-enforcement",
+            "container-security"
+        ]
+    }
+]

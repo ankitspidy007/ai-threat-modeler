@@ -79,8 +79,8 @@ class ThreatAnalyzer:
         # ========================================
         score = self._calculate_score(normalized_threats)
         
-        # Generate Mermaid Diagram
-        diagram = generate_mermaid(graph)
+        # Generate Enhanced Mermaid Diagram with STRIDE colors and threat annotations
+        diagram = generate_mermaid(graph, threats=normalized_threats, enhanced=True)
 
         # Build Result
         confirmed = [t for t in normalized_threats if t.tier == "Confirmed"]
@@ -99,7 +99,7 @@ class ThreatAnalyzer:
             timestamp=datetime.now().isoformat()
         )
         
-        # Generate Report
+        # Generate comprehensive markdown report
         result.report_markdown = ReportGenerator.generate_markdown(result)
         
         return result
@@ -204,7 +204,11 @@ class ThreatAnalyzer:
                     affected_data_flows=[],
                     component_id=None,
                     flow_source=None,
-                    flow_target=None
+                    flow_target=None,
+                    owasp_top_10=list(t.owasp_top_10 or []),
+                    cwe=list(t.cwe or []),
+                    mitre_attack=list(t.mitre_attack or []),
+                    nist_800_53=list(t.nist_800_53 or []),
                 )
             
             existing = grouped[key]

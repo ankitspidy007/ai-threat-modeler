@@ -50,9 +50,10 @@ shift
 goto parse_args
 :end_parse
 
-echo ========================================
-echo   AI Threat Modeler - Starting...
-echo ========================================
+echo =====================================================
+echo   AITM - AI Threat Modeler v2.0
+echo   STRIDE Analysis ^| Multi-LLM ^| Compliance Mapping
+echo =====================================================
 echo.
 
 REM Check if Python is installed
@@ -76,11 +77,26 @@ if errorlevel 1 (
 echo [1/4] Checking dependencies...
 echo.
 
-REM Check if backend dependencies are installed
+REM Check if backend directory exists
 if not exist "backend\app" (
     echo ERROR: Backend directory not found
     pause
     exit /b 1
+)
+
+REM Check if backend dependencies are installed (check for uvicorn)
+pip show uvicorn >nul 2>&1
+if errorlevel 1 (
+    echo Installing backend dependencies...
+    cd backend
+    pip install -r requirements.txt
+    if errorlevel 1 (
+        echo ERROR: Failed to install backend dependencies
+        cd ..
+        pause
+        exit /b 1
+    )
+    cd ..
 )
 
 REM Check if frontend dependencies are installed
@@ -101,26 +117,32 @@ echo.
 
 echo [2/4] Starting Backend Server on port %BACKEND_PORT%...
 echo.
-start "AI Threat Modeler - Backend" cmd /k "cd backend && python -m uvicorn app.main:app --reload --port %BACKEND_PORT%"
+start "AITM - Backend" cmd /k "cd backend && python -m uvicorn app.main:app --reload --port %BACKEND_PORT%"
 
 REM Wait for backend to start
 timeout /t 3 /nobreak >nul
 
 echo [3/4] Starting Frontend Server on port %FRONTEND_PORT%...
 echo.
-start "AI Threat Modeler - Frontend" cmd /k "npm run dev -- --port %FRONTEND_PORT%"
+start "AITM - Frontend" cmd /k "npm run dev -- --port %FRONTEND_PORT%"
 
 REM Wait for frontend to start
 timeout /t 3 /nobreak >nul
 
 echo.
-echo ========================================
-echo   AI Threat Modeler - Running!
-echo ========================================
+echo =====================================================
+echo   AITM - AI Threat Modeler - Running!
+echo =====================================================
 echo.
 echo Backend:  http://127.0.0.1:%BACKEND_PORT%
 echo Frontend: http://localhost:%FRONTEND_PORT%
 echo API Docs: http://127.0.0.1:%BACKEND_PORT%/docs
+echo.
+echo Features:
+echo   - STRIDE-based threat analysis
+echo   - CWE, MITRE ATT^&CK, OWASP, NIST compliance mapping
+echo   - Multi-LLM integration (OpenAI, Claude, Gemini)
+echo   - PDF reports with architecture diagrams
 echo.
 echo Press any key to open the application in your browser...
 pause >nul

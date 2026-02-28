@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-const RiskMatrix = ({ threats }) => {
+const RiskMatrix = ({ threats, onCellClick }) => {
+    const [hoveredCell, setHoveredCell] = useState(null);
+
     // Initialize grid counts
     const matrix = {
         High: { High: 0, Medium: 0, Low: 0 },
@@ -8,61 +10,79 @@ const RiskMatrix = ({ threats }) => {
         Low: { High: 0, Medium: 0, Low: 0 },
     };
 
+    // Track threat titles per cell for tooltips
+    const cellThreats = {};
+
     // Populate grid
     threats.forEach(t => {
-        if (matrix[t.severity] && matrix[t.severity][t.likelihood]) {
-            matrix[t.severity][t.likelihood]++;
+        const sev = t.severity === 'Critical' ? 'High' : t.severity;
+        const lik = t.likelihood || 'Medium';
+        if (matrix[sev] && matrix[sev][lik]) {
+            matrix[sev][lik]++;
         }
+        const key = `${sev}-${lik}`;
+        if (!cellThreats[key]) cellThreats[key] = [];
+        cellThreats[key].push(t.title);
     });
 
     const getCellColor = (impact, likelihood) => {
-        if (impact === 'Critical' || impact === 'High') {
-            if (likelihood === 'High' || likelihood === 'Medium') return 'bg-red-500';
-            return 'bg-orange-400';
+        if (impact === 'High') {
+            if (likelihood === 'High') return 'bg-red-500 dark:bg-red-600';
+            if (likelihood === 'Medium') return 'bg-red-400 dark:bg-red-500';
+            return 'bg-orange-400 dark:bg-orange-500';
         }
         if (impact === 'Medium') {
-            if (likelihood === 'High') return 'bg-orange-400';
-            return 'bg-yellow-400';
+            if (likelihood === 'High') return 'bg-orange-400 dark:bg-orange-500';
+            if (likelihood === 'Medium') return 'bg-yellow-400 dark:bg-yellow-500';
+            return 'bg-yellow-300 dark:bg-yellow-400';
         }
-        return 'bg-green-400';
+        return 'bg-green-400 dark:bg-green-500';
     };
 
-    // Helper to map severity to grid label
-    const mapSeverity = (s) => s === 'Critical' ? 'High' : s;
+    const handleClick = (impact, likelihood) => {
+        if (onCellClick) {
+            onCellClick(impact, likelihood);
+        }
+    };
 
     return (
-        <div className="bg-white p-4 rounded-lg shadow border border-gray-200 mb-6 text-black w-full max-w-md mx-auto">
+        <div className="bg-white dark:bg-brand-800 p-4 rounded-lg shadow border border-gray-200 dark:border-brand-700 mb-6 text-black dark:text-white w-full max-w-md mx-auto">
             <h3 className="text-lg font-bold mb-4 text-center">Risk Assessment Matrix</h3>
             <div className="relative">
                 {/* Y-Axis Label */}
-                <div className="absolute -left-8 top-1/2 -translate-y-1/2 -rotate-90 text-xs font-bold uppercase tracking-wider">
+                <div className="absolute -left-8 top-1/2 -translate-y-1/2 -rotate-90 text-xs font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400">
                     Impact
                 </div>
 
                 <div className="grid grid-cols-4 gap-1 text-sm">
                     {/* Header Row */}
                     <div className="font-bold"></div>
-                    <div className="text-center font-bold bg-gray-100 p-1">Low</div>
-                    <div className="text-center font-bold bg-gray-100 p-1">Medium</div>
-                    <div className="text-center font-bold bg-gray-100 p-1">High</div>
+                    <div className="text-center font-bold bg-gray-100 dark:bg-brand-700 p-1 rounded-sm">Low</div>
+                    <div className="text-center font-bold bg-gray-100 dark:bg-brand-700 p-1 rounded-sm">Medium</div>
+                    <div className="text-center font-bold bg-gray-100 dark:bg-brand-700 p-1 rounded-sm">High</div>
 
                     {/* Rows */}
                     {['High', 'Medium', 'Low'].map((impact) => (
                         <React.Fragment key={impact}>
-                            <div className="flex items-center justify-end pr-2 font-bold bg-gray-100">{impact}</div>
+                            <div className="flex items-center justify-end pr-2 font-bold bg-gray-100 dark:bg-brand-700 rounded-sm">{impact}</div>
                             {['Low', 'Medium', 'High'].map((likelihood) => {
-                                const count = matrix[impact][likelihood] || 0;
-                                // Add Critical threats to High Impact for simplicity in 3x3
-                                let displayCount = count;
-                                if (impact === 'High') {
-                                    // Also add Criticals here if likelihood matches
-                                    threats.forEach(t => {
-                                        if (t.severity === 'Critical' && t.likelihood === likelihood) displayCount++;
-                                    });
-                                }
+                                const displayCount = matrix[impact]?.[likelihood] || 0;
+                                const cellKey = `${impact}-${likelihood}`;
+                                const isHovered = hoveredCell === cellKey;
 
                                 return (
-                                    <div key={`${impact}-${likelihood}`} className={`h-16 flex items-center justify-center border border-gray-300 font-bold text-lg ${getCellColor(impact, likelihood)} ${displayCount > 0 ? 'opacity-100' : 'opacity-30'}`}>
+                                    <div
+                                        key={cellKey}
+                                        className={`h-16 flex items-center justify-center border border-gray-300 dark:border-brand-600 font-bold text-lg rounded-sm
+                                            ${getCellColor(impact, likelihood)}
+                                            ${displayCount > 0 ? 'opacity-100 cursor-pointer hover:scale-105 hover:shadow-md' : 'opacity-30'}
+                                            ${isHovered ? 'ring-2 ring-brand-primary' : ''}
+                                            transition-all duration-200`}
+                                        onClick={() => displayCount > 0 && handleClick(impact, likelihood)}
+                                        onMouseEnter={() => setHoveredCell(cellKey)}
+                                        onMouseLeave={() => setHoveredCell(null)}
+                                        title={cellThreats[cellKey]?.join('\n') || ''}
+                                    >
                                         {displayCount > 0 ? displayCount : ''}
                                     </div>
                                 );
@@ -71,12 +91,12 @@ const RiskMatrix = ({ threats }) => {
                     ))}
                 </div>
                 {/* X-Axis Label */}
-                <div className="text-center text-xs font-bold uppercase tracking-wider mt-2">
+                <div className="text-center text-xs font-bold uppercase tracking-wider mt-2 text-brand-600 dark:text-brand-400">
                     Likelihood
                 </div>
             </div>
-            <div className="text-xs text-center mt-2 text-gray-500 italic">
-                Numbers represent count of identified threats
+            <div className="text-xs text-center mt-2 text-gray-500 dark:text-brand-400 italic">
+                {onCellClick ? 'Click a cell to filter threats' : 'Numbers represent count of identified threats'}
             </div>
         </div>
     );

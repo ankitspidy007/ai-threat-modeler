@@ -11,6 +11,10 @@ python-multipart>=0.0.9,<1.0.0
 networkx>=3.4.0,<4.0.0
 pydantic>=2.6.0,<3.0.0
 
+# NLP Libraries (for enhanced parsing)
+spacy>=3.7.0,<4.0.0
+# Note: spaCy language model will be downloaded on first run
+
 # AI/LLM Integration (Optional - for future enhancements)
 # Using >= for flexibility with latest AI model updates
 openai>=1.0.0

@@ -1,0 +1,989 @@
+[
+    {
+        "threat_id": "AWS-S3-001",
+        "threat_name": "Public S3 Bucket Exposure",
+        "component": "Storage",
+        "cloud_platform": [
+            "AWS"
+        ],
+        "cloud_services": [
+            "AWS S3"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "Attacker discovers publicly accessible S3 bucket through enumeration or misconfiguration, accessing sensitive data without authentication.",
+        "likelihood": "High",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality"
+        ],
+        "prerequisites": [
+            "S3 bucket with public read permissions",
+            "Sensitive data stored in bucket",
+            "Lack of bucket policies restricting access"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Enable S3 Block Public Access at account and bucket level",
+                "implementation": "AWS Console → S3 → Block Public Access Settings → Enable all options",
+                "tools": [
+                    "AWS S3",
+                    "AWS Config",
+                    "Terraform"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement least privilege bucket policies",
+                "implementation": "Use IAM policies and bucket policies to restrict access to specific principals only",
+                "tools": [
+                    "AWS IAM",
+                    "AWS S3 Bucket Policies"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Enable S3 access logging and monitor for unauthorized access",
+                "implementation": "Enable server access logging and send logs to CloudWatch for monitoring",
+                "tools": [
+                    "AWS CloudTrail",
+                    "AWS CloudWatch",
+                    "AWS Config"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "AWS Config Rules",
+                "indicators": [
+                    "s3-bucket-public-read-prohibited",
+                    "s3-bucket-public-write-prohibited"
+                ],
+                "tools": [
+                    "AWS Config",
+                    "AWS Security Hub"
+                ]
+            },
+            {
+                "method": "CloudTrail Monitoring",
+                "indicators": [
+                    "GetBucketAcl events",
+                    "PutBucketAcl events with public permissions"
+                ],
+                "tools": [
+                    "AWS CloudTrail",
+                    "AWS CloudWatch Logs Insights"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-732"
+            ],
+            "mitre_attack": [
+                "T1530"
+            ],
+            "owasp": [
+                "A01:2021"
+            ],
+            "nist": [
+                "AC-3",
+                "AC-6"
+            ],
+            "cis": [
+                "CIS AWS 2.1.5"
+            ],
+            "external_links": [
+                "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html"
+            ]
+        },
+        "real_world_examples": [
+            {
+                "incident": "Capital One Data Breach",
+                "year": 2019,
+                "impact": "106 million customer records exposed",
+                "reference": "https://www.capitalone.com/digital/facts2019/"
+            }
+        ],
+        "compliance_relevance": [
+            "PCI-DSS",
+            "HIPAA",
+            "GDPR",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Microservices",
+            "Serverless",
+            "API-first"
+        ],
+        "trust_boundaries": [
+            "Internet ↔ Cloud Storage"
+        ],
+        "severity_score": {
+            "cvss_v3": 7.5
+        },
+        "tags": [
+            "cloud-native",
+            "data-exposure",
+            "misconfiguration"
+        ]
+    },
+    {
+        "threat_id": "AWS-S3-002",
+        "threat_name": "S3 Bucket Encryption Not Enabled",
+        "component": "Storage",
+        "cloud_platform": [
+            "AWS"
+        ],
+        "cloud_services": [
+            "AWS S3"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "Data stored in S3 without encryption at rest can be accessed if bucket permissions are compromised or physical media is accessed.",
+        "likelihood": "Medium",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality"
+        ],
+        "prerequisites": [
+            "S3 bucket without default encryption enabled",
+            "Sensitive data stored unencrypted"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Enable default encryption for all S3 buckets",
+                "implementation": "AWS Console → S3 → Bucket → Properties → Default Encryption → Enable SSE-S3 or SSE-KMS",
+                "tools": [
+                    "AWS S3",
+                    "AWS KMS"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Enforce encryption using bucket policies",
+                "implementation": "Create bucket policy denying PutObject requests without encryption headers",
+                "tools": [
+                    "AWS S3 Bucket Policies"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Monitor for unencrypted objects",
+                "implementation": "Use AWS Config rules to detect unencrypted S3 buckets",
+                "tools": [
+                    "AWS Config",
+                    "AWS Security Hub"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "AWS Config Rules",
+                "indicators": [
+                    "s3-bucket-server-side-encryption-enabled"
+                ],
+                "tools": [
+                    "AWS Config"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-311"
+            ],
+            "mitre_attack": [
+                "T1530"
+            ],
+            "owasp": [
+                "A02:2021"
+            ],
+            "nist": [
+                "SC-28"
+            ],
+            "cis": [
+                "CIS AWS 2.1.1"
+            ],
+            "external_links": [
+                "https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-encryption.html"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "HIPAA",
+            "GDPR"
+        ],
+        "tags": [
+            "encryption",
+            "data-protection",
+            "compliance"
+        ]
+    },
+    {
+        "threat_id": "AWS-IAM-001",
+        "threat_name": "Overly Permissive IAM Policies",
+        "component": "IAM",
+        "cloud_platform": [
+            "AWS"
+        ],
+        "cloud_services": [
+            "AWS IAM"
+        ],
+        "stride_category": "Elevation of Privilege",
+        "attack_vector": "IAM users, roles, or groups with overly broad permissions (e.g., '*:*') can be exploited to gain unauthorized access to resources.",
+        "likelihood": "High",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "IAM policies with wildcard permissions",
+            "Lack of least privilege principle",
+            "Compromised credentials"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Implement least privilege IAM policies",
+                "implementation": "Review and restrict IAM policies to minimum required permissions",
+                "tools": [
+                    "AWS IAM Access Analyzer",
+                    "AWS IAM Policy Simulator"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use AWS managed policies where appropriate",
+                "implementation": "Leverage AWS managed policies that follow least privilege",
+                "tools": [
+                    "AWS IAM"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Regularly audit IAM permissions",
+                "implementation": "Use IAM Access Analyzer to identify overly permissive policies",
+                "tools": [
+                    "AWS IAM Access Analyzer",
+                    "AWS CloudTrail"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "IAM Access Analyzer",
+                "indicators": [
+                    "Policies with '*:*' permissions",
+                    "Unused permissions"
+                ],
+                "tools": [
+                    "AWS IAM Access Analyzer"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-269"
+            ],
+            "mitre_attack": [
+                "T1078"
+            ],
+            "owasp": [
+                "A01:2021"
+            ],
+            "nist": [
+                "AC-6"
+            ],
+            "cis": [
+                "CIS AWS 1.16"
+            ],
+            "external_links": [
+                "https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2",
+            "ISO27001"
+        ],
+        "tags": [
+            "privilege-escalation",
+            "access-control",
+            "iam"
+        ]
+    },
+    {
+        "threat_id": "AWS-IAM-002",
+        "threat_name": "IAM Access Keys Exposed in Code",
+        "component": "IAM",
+        "cloud_platform": [
+            "AWS"
+        ],
+        "cloud_services": [
+            "AWS IAM"
+        ],
+        "stride_category": "Spoofing",
+        "attack_vector": "AWS access keys hardcoded in source code, committed to version control, or exposed in public repositories can be discovered and used for unauthorized access.",
+        "likelihood": "High",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "Access keys hardcoded in application code",
+            "Code repository publicly accessible or compromised",
+            "Lack of secrets management"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Use IAM roles instead of access keys",
+                "implementation": "Assign IAM roles to EC2 instances, Lambda functions, and ECS tasks",
+                "tools": [
+                    "AWS IAM Roles",
+                    "AWS STS"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Store secrets in AWS Secrets Manager or Parameter Store",
+                "implementation": "Migrate hardcoded credentials to Secrets Manager with rotation enabled",
+                "tools": [
+                    "AWS Secrets Manager",
+                    "AWS Systems Manager Parameter Store"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Scan code repositories for exposed credentials",
+                "implementation": "Use git-secrets or similar tools in CI/CD pipeline",
+                "tools": [
+                    "git-secrets",
+                    "truffleHog",
+                    "AWS CodeGuru"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "GitHub Secret Scanning",
+                "indicators": [
+                    "AWS access key patterns in commits"
+                ],
+                "tools": [
+                    "GitHub Advanced Security",
+                    "GitGuardian"
+                ]
+            },
+            {
+                "method": "CloudTrail Monitoring",
+                "indicators": [
+                    "API calls from unexpected IP addresses",
+                    "Unusual access patterns"
+                ],
+                "tools": [
+                    "AWS CloudTrail",
+                    "AWS GuardDuty"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-798"
+            ],
+            "mitre_attack": [
+                "T1552.001"
+            ],
+            "capec": [
+                "CAPEC-191"
+            ],
+            "owasp": [
+                "A07:2021"
+            ],
+            "external_links": [
+                "https://docs.aws.amazon.com/general/latest/gr/aws-access-keys-best-practices.html"
+            ]
+        },
+        "real_world_examples": [
+            {
+                "incident": "Uber Data Breach",
+                "year": 2016,
+                "impact": "57 million users affected due to exposed AWS keys",
+                "reference": "https://www.uber.com/newsroom/2016-data-incident/"
+            }
+        ],
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "CI/CD",
+            "Microservices"
+        ],
+        "tags": [
+            "credential-exposure",
+            "supply-chain",
+            "secrets-management"
+        ]
+    },
+    {
+        "threat_id": "AWS-EC2-001",
+        "threat_name": "EC2 Instance Metadata Service (IMDS) Exploitation",
+        "component": "Service",
+        "cloud_platform": [
+            "AWS"
+        ],
+        "cloud_services": [
+            "AWS EC2"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "Attacker exploits SSRF vulnerability to access EC2 metadata service at 169.254.169.254, retrieving IAM credentials and sensitive instance information.",
+        "likelihood": "Medium",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity"
+        ],
+        "prerequisites": [
+            "SSRF vulnerability in application running on EC2",
+            "IMDSv1 enabled (not requiring session token)",
+            "IAM role attached to instance"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Enforce IMDSv2 (session-oriented)",
+                "implementation": "Require IMDSv2 for all EC2 instances using instance metadata options",
+                "tools": [
+                    "AWS EC2"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement network egress filtering",
+                "implementation": "Block outbound access to 169.254.169.254 from application layer",
+                "tools": [
+                    "AWS Security Groups",
+                    "Network ACLs"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Apply least privilege to instance IAM roles",
+                "implementation": "Limit IAM role permissions to minimum required",
+                "tools": [
+                    "AWS IAM"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "VPC Flow Logs",
+                "indicators": [
+                    "Traffic to 169.254.169.254 from unexpected sources"
+                ],
+                "tools": [
+                    "AWS VPC Flow Logs",
+                    "AWS CloudWatch"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-918"
+            ],
+            "cve": [
+                "CVE-2019-5736"
+            ],
+            "mitre_attack": [
+                "T1552.005"
+            ],
+            "capec": [
+                "CAPEC-664"
+            ],
+            "owasp": [
+                "A10:2021"
+            ],
+            "external_links": [
+                "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html"
+            ]
+        },
+        "real_world_examples": [
+            {
+                "incident": "Capital One Breach (SSRF to IMDS)",
+                "year": 2019,
+                "impact": "Metadata service exploited via SSRF",
+                "reference": "https://krebsonsecurity.com/2019/08/what-we-can-learn-from-the-capital-one-hack/"
+            }
+        ],
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Microservices",
+            "Container-based"
+        ],
+        "tags": [
+            "ssrf",
+            "metadata-service",
+            "emerging"
+        ]
+    },
+    {
+        "threat_id": "AWS-LAMBDA-001",
+        "threat_name": "Lambda Function Over-Privileged Execution Role",
+        "component": "Serverless",
+        "cloud_platform": [
+            "AWS"
+        ],
+        "cloud_services": [
+            "AWS Lambda"
+        ],
+        "stride_category": "Elevation of Privilege",
+        "attack_vector": "Lambda function with overly broad IAM permissions can be exploited through code injection or dependency vulnerabilities to access unauthorized resources.",
+        "likelihood": "High",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "Lambda execution role with excessive permissions",
+            "Vulnerable function code or dependencies",
+            "Lack of least privilege implementation"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Apply least privilege to Lambda execution roles",
+                "implementation": "Grant only specific permissions required for function operation",
+                "tools": [
+                    "AWS IAM",
+                    "AWS Lambda"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use resource-based policies to limit access",
+                "implementation": "Specify exact ARNs of resources the function can access",
+                "tools": [
+                    "AWS IAM"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Monitor Lambda function invocations and errors",
+                "implementation": "Enable CloudWatch Logs and set up alarms for suspicious activity",
+                "tools": [
+                    "AWS CloudWatch",
+                    "AWS X-Ray"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "CloudTrail Analysis",
+                "indicators": [
+                    "Unusual API calls from Lambda execution role",
+                    "Access denied errors"
+                ],
+                "tools": [
+                    "AWS CloudTrail",
+                    "AWS CloudWatch Logs Insights"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-269"
+            ],
+            "mitre_attack": [
+                "T1078.004"
+            ],
+            "owasp": [
+                "Serverless:2021-S1"
+            ],
+            "external_links": [
+                "https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html"
+            ]
+        },
+        "compliance_relevance": [
+            "SOC2",
+            "PCI-DSS"
+        ],
+        "architecture_patterns": [
+            "Serverless",
+            "Event-driven"
+        ],
+        "tags": [
+            "serverless",
+            "privilege-escalation",
+            "iam"
+        ]
+    },
+    {
+        "threat_id": "AWS-RDS-001",
+        "threat_name": "RDS Instance Publicly Accessible",
+        "component": "Database",
+        "cloud_platform": [
+            "AWS"
+        ],
+        "cloud_services": [
+            "AWS RDS"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "RDS database instance configured with public accessibility allows direct internet access, exposing it to brute force attacks and unauthorized access attempts.",
+        "likelihood": "Medium",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "RDS instance with PubliclyAccessible=true",
+            "Security group allowing inbound traffic from 0.0.0.0/0",
+            "Weak database credentials"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Disable public accessibility for RDS instances",
+                "implementation": "Set PubliclyAccessible to false and place in private subnet",
+                "tools": [
+                    "AWS RDS",
+                    "AWS VPC"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Restrict security group rules",
+                "implementation": "Allow database access only from specific application security groups",
+                "tools": [
+                    "AWS Security Groups"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use VPN or Direct Connect for remote access",
+                "implementation": "Access databases through VPN or AWS Direct Connect instead of public internet",
+                "tools": [
+                    "AWS VPN",
+                    "AWS Direct Connect"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "AWS Config Rules",
+                "indicators": [
+                    "rds-instance-public-access-check"
+                ],
+                "tools": [
+                    "AWS Config",
+                    "AWS Security Hub"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-668"
+            ],
+            "mitre_attack": [
+                "T1190"
+            ],
+            "nist": [
+                "AC-3"
+            ],
+            "cis": [
+                "CIS AWS 2.3.1"
+            ],
+            "external_links": [
+                "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "HIPAA",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Microservices",
+            "Monolithic"
+        ],
+        "trust_boundaries": [
+            "Internet ↔ Database"
+        ],
+        "tags": [
+            "database",
+            "network-exposure",
+            "misconfiguration"
+        ]
+    },
+    {
+        "threat_id": "AWS-RDS-002",
+        "threat_name": "RDS Encryption at Rest Not Enabled",
+        "component": "Database",
+        "cloud_platform": [
+            "AWS"
+        ],
+        "cloud_services": [
+            "AWS RDS"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "Unencrypted RDS instances expose data if snapshots are compromised or physical storage is accessed.",
+        "likelihood": "Low",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality"
+        ],
+        "prerequisites": [
+            "RDS instance created without encryption",
+            "Sensitive data stored in database"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Enable encryption at rest for all RDS instances",
+                "implementation": "Enable encryption when creating RDS instance using AWS KMS",
+                "tools": [
+                    "AWS RDS",
+                    "AWS KMS"
+                ]
+            },
+            {
+                "control_type": "Corrective",
+                "description": "Migrate unencrypted instances to encrypted",
+                "implementation": "Create encrypted snapshot and restore to new encrypted instance",
+                "tools": [
+                    "AWS RDS"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "AWS Config Rules",
+                "indicators": [
+                    "rds-storage-encrypted"
+                ],
+                "tools": [
+                    "AWS Config"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-311"
+            ],
+            "nist": [
+                "SC-28"
+            ],
+            "cis": [
+                "CIS AWS 2.3.1"
+            ],
+            "external_links": [
+                "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "HIPAA",
+            "GDPR"
+        ],
+        "tags": [
+            "encryption",
+            "data-protection",
+            "compliance"
+        ]
+    },
+    {
+        "threat_id": "AWS-API-001",
+        "threat_name": "API Gateway Without Authentication",
+        "component": "API",
+        "cloud_platform": [
+            "AWS"
+        ],
+        "cloud_services": [
+            "AWS API Gateway"
+        ],
+        "stride_category": "Spoofing",
+        "attack_vector": "API Gateway endpoints without proper authentication allow unauthorized access to backend services and data.",
+        "likelihood": "High",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity"
+        ],
+        "prerequisites": [
+            "API Gateway method without authorizer configured",
+            "Sensitive operations exposed via API",
+            "Lack of API key requirement"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Implement API Gateway authorizers",
+                "implementation": "Use Lambda authorizers, Cognito User Pools, or IAM authentication",
+                "tools": [
+                    "AWS API Gateway",
+                    "AWS Cognito",
+                    "AWS Lambda"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Enable API keys and usage plans",
+                "implementation": "Require API keys for all methods and implement usage plans for rate limiting",
+                "tools": [
+                    "AWS API Gateway"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Monitor API access logs",
+                "implementation": "Enable CloudWatch Logs for API Gateway and monitor for unauthorized access attempts",
+                "tools": [
+                    "AWS CloudWatch",
+                    "AWS CloudTrail"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "API Gateway Access Logs",
+                "indicators": [
+                    "401/403 errors",
+                    "Unusual request patterns"
+                ],
+                "tools": [
+                    "AWS CloudWatch Logs"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-306"
+            ],
+            "mitre_attack": [
+                "T1190"
+            ],
+            "owasp": [
+                "API2:2023"
+            ],
+            "external_links": [
+                "https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-control-access-to-api.html"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "API-first",
+            "Microservices",
+            "Serverless"
+        ],
+        "tags": [
+            "authentication",
+            "api-security",
+            "access-control"
+        ]
+    },
+    {
+        "threat_id": "AWS-EKS-001",
+        "threat_name": "EKS Cluster with Public API Endpoint",
+        "component": "Container",
+        "cloud_platform": [
+            "AWS"
+        ],
+        "cloud_services": [
+            "AWS EKS"
+        ],
+        "stride_category": "Elevation of Privilege",
+        "attack_vector": "Publicly accessible Kubernetes API server can be targeted for unauthorized access attempts and exploitation of Kubernetes vulnerabilities.",
+        "likelihood": "Medium",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "EKS cluster with public endpoint enabled",
+            "Weak RBAC configuration",
+            "Exposed kubeconfig credentials"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Disable public endpoint access",
+                "implementation": "Configure EKS cluster with private endpoint only",
+                "tools": [
+                    "AWS EKS"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Restrict public endpoint access with CIDR blocks",
+                "implementation": "Limit public endpoint access to specific IP ranges",
+                "tools": [
+                    "AWS EKS"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement strong RBAC policies",
+                "implementation": "Follow least privilege for Kubernetes RBAC roles and bindings",
+                "tools": [
+                    "Kubernetes RBAC"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "EKS Audit Logs",
+                "indicators": [
+                    "Failed authentication attempts",
+                    "Unauthorized API calls"
+                ],
+                "tools": [
+                    "AWS CloudWatch",
+                    "Kubernetes Audit Logs"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-284"
+            ],
+            "mitre_attack": [
+                "T1552.007"
+            ],
+            "cis": [
+                "CIS Kubernetes 1.2.1"
+            ],
+            "external_links": [
+                "https://docs.aws.amazon.com/eks/latest/userguide/cluster-endpoint.html"
+            ]
+        },
+        "compliance_relevance": [
+            "SOC2",
+            "PCI-DSS"
+        ],
+        "architecture_patterns": [
+            "Container-based",
+            "Microservices"
+        ],
+        "tags": [
+            "kubernetes",
+            "container-security",
+            "network-exposure"
+        ]
+    }
+]

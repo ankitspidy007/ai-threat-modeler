@@ -1,7 +1,9 @@
 // Backend API Service
+import { API_BASE_URL } from '../config';
+
 export const analyzeSystem = async (systemDescription, projectName = "Untitled Project") => {
     try {
-        const response = await fetch('http://localhost:8000/analyze', {
+        const response = await fetch(`${API_BASE_URL}/analyze`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -39,6 +41,11 @@ export const analyzeSystem = async (systemDescription, projectName = "Untitled P
                 description: t.description,
                 impact: t.impact || "Unknown",
                 mitigation: t.mitigation,
+                // Compliance & framework mappings
+                cwe: t.cwe || [],
+                mitre_attack: t.mitre_attack || [],
+                owasp_top_10: t.owasp_top_10 || [],
+                nist_800_53: t.nist_800_53 || [],
                 // Aggregated fields
                 affected_components: t.affected_components || [],
                 affected_data_flows: t.affected_data_flows || [],

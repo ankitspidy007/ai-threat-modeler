@@ -1,0 +1,507 @@
+[
+    {
+        "threat_id": "GCP-STORAGE-001",
+        "threat_name": "GCP Cloud Storage Bucket with allUsers Access",
+        "component": "Storage",
+        "cloud_platform": [
+            "GCP"
+        ],
+        "cloud_services": [
+            "GCP Cloud Storage"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "Storage buckets with 'allUsers' or 'allAuthenticatedUsers' IAM bindings allow public access to sensitive data.",
+        "likelihood": "High",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality"
+        ],
+        "prerequisites": [
+            "Bucket with public IAM binding",
+            "Sensitive data stored in bucket",
+            "Uniform bucket-level access not enforced"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Remove public IAM bindings",
+                "implementation": "Remove 'allUsers' and 'allAuthenticatedUsers' from bucket IAM policy",
+                "tools": [
+                    "GCP Cloud Storage",
+                    "GCP IAM"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Enable uniform bucket-level access",
+                "implementation": "Enforce uniform bucket-level access to use only IAM",
+                "tools": [
+                    "GCP Cloud Storage"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Monitor bucket IAM policy changes",
+                "implementation": "Set up Cloud Logging alerts for IAM policy modifications",
+                "tools": [
+                    "GCP Cloud Logging",
+                    "GCP Security Command Center"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Security Command Center",
+                "indicators": [
+                    "Public bucket ACL findings"
+                ],
+                "tools": [
+                    "GCP Security Command Center"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-732"
+            ],
+            "mitre_attack": [
+                "T1530"
+            ],
+            "owasp": [
+                "A01:2021"
+            ],
+            "external_links": [
+                "https://cloud.google.com/storage/docs/access-control/making-data-public"
+            ]
+        },
+        "compliance_relevance": [
+            "GDPR",
+            "HIPAA",
+            "PCI-DSS"
+        ],
+        "architecture_patterns": [
+            "Microservices",
+            "Serverless"
+        ],
+        "tags": [
+            "cloud-native",
+            "data-exposure",
+            "misconfiguration"
+        ]
+    },
+    {
+        "threat_id": "GCP-IAM-001",
+        "threat_name": "GCP Service Account Key Exposure",
+        "component": "IAM",
+        "cloud_platform": [
+            "GCP"
+        ],
+        "cloud_services": [
+            "GCP IAM"
+        ],
+        "stride_category": "Spoofing",
+        "attack_vector": "Service account keys downloaded and stored insecurely can be compromised and used for unauthorized access.",
+        "likelihood": "High",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "Service account keys created and downloaded",
+            "Keys stored in code repositories or insecure locations",
+            "Lack of key rotation"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Use Workload Identity instead of service account keys",
+                "implementation": "Configure Workload Identity for GKE and other services",
+                "tools": [
+                    "GCP Workload Identity"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement service account key rotation",
+                "implementation": "Regularly rotate service account keys and delete old keys",
+                "tools": [
+                    "GCP IAM"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Monitor service account key usage",
+                "implementation": "Track key usage in Cloud Logging and alert on anomalies",
+                "tools": [
+                    "GCP Cloud Logging",
+                    "GCP Security Command Center"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Cloud Logging",
+                "indicators": [
+                    "Service account key creation events",
+                    "Unusual API calls"
+                ],
+                "tools": [
+                    "GCP Cloud Logging"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-798"
+            ],
+            "mitre_attack": [
+                "T1552.001"
+            ],
+            "external_links": [
+                "https://cloud.google.com/iam/docs/best-practices-for-managing-service-account-keys"
+            ]
+        },
+        "compliance_relevance": [
+            "SOC2",
+            "PCI-DSS"
+        ],
+        "architecture_patterns": [
+            "Microservices",
+            "Container-based"
+        ],
+        "tags": [
+            "credential-exposure",
+            "service-account",
+            "secrets-management"
+        ]
+    },
+    {
+        "threat_id": "GCP-COMPUTE-001",
+        "threat_name": "GCP Compute Instance with Default Service Account",
+        "component": "Service",
+        "cloud_platform": [
+            "GCP"
+        ],
+        "cloud_services": [
+            "GCP Compute Engine"
+        ],
+        "stride_category": "Elevation of Privilege",
+        "attack_vector": "Compute instances using default service account have excessive permissions that can be exploited if instance is compromised.",
+        "likelihood": "High",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity"
+        ],
+        "prerequisites": [
+            "Instance using default Compute Engine service account",
+            "Default service account has Editor role",
+            "Instance compromise or code injection vulnerability"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Create custom service accounts with minimal permissions",
+                "implementation": "Create dedicated service accounts for each workload with least privilege",
+                "tools": [
+                    "GCP IAM"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Disable default service account",
+                "implementation": "Configure instances without service account or with custom account",
+                "tools": [
+                    "GCP Compute Engine"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Security Command Center",
+                "indicators": [
+                    "Instances using default service account"
+                ],
+                "tools": [
+                    "GCP Security Command Center"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-269"
+            ],
+            "mitre_attack": [
+                "T1078.004"
+            ],
+            "external_links": [
+                "https://cloud.google.com/compute/docs/access/service-accounts"
+            ]
+        },
+        "compliance_relevance": [
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Monolithic",
+            "Microservices"
+        ],
+        "tags": [
+            "privilege-escalation",
+            "service-account",
+            "iam"
+        ]
+    },
+    {
+        "threat_id": "GCP-FUNC-001",
+        "threat_name": "GCP Cloud Function with Unauthenticated Invocations",
+        "component": "Serverless",
+        "cloud_platform": [
+            "GCP"
+        ],
+        "cloud_services": [
+            "GCP Cloud Functions"
+        ],
+        "stride_category": "Spoofing",
+        "attack_vector": "Cloud Functions allowing unauthenticated invocations can be accessed by anyone with the function URL.",
+        "likelihood": "High",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity"
+        ],
+        "prerequisites": [
+            "Function with 'allUsers' invoker permission",
+            "Sensitive operations exposed via function",
+            "No additional authentication layer"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Remove allUsers from Cloud Functions invoker role",
+                "implementation": "Grant invoker role only to specific service accounts or users",
+                "tools": [
+                    "GCP Cloud Functions",
+                    "GCP IAM"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement authentication in function code",
+                "implementation": "Validate JWT tokens or API keys within function logic",
+                "tools": [
+                    "GCP Identity Platform"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Cloud Logging",
+                "indicators": [
+                    "High volume of function invocations",
+                    "Unusual access patterns"
+                ],
+                "tools": [
+                    "GCP Cloud Logging"
+                ]
+            }
+        },
+        "references": {
+            "cwe": [
+                "CWE-306"
+            ],
+            "mitre_attack": [
+                "T1190"
+            ],
+            "owasp": [
+                "Serverless:2021-S1"
+            ],
+            "external_links": [
+                "https://cloud.google.com/functions/docs/securing/managing-access-iam"
+            ]
+        },
+        "compliance_relevance": [
+            "SOC2",
+            "PCI-DSS"
+        ],
+        "architecture_patterns": [
+            "Serverless",
+            "Event-driven"
+        ],
+        "tags": [
+            "serverless",
+            "authentication",
+            "api-security"
+        ]
+    },
+    {
+        "threat_id": "GCP-SQL-001",
+        "threat_name": "GCP Cloud SQL Instance with Public IP",
+        "component": "Database",
+        "cloud_platform": [
+            "GCP"
+        ],
+        "cloud_services": [
+            "GCP Cloud SQL"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "Cloud SQL instances with public IP addresses are exposed to internet-based attacks and unauthorized access attempts.",
+        "likelihood": "Medium",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "Cloud SQL instance with public IP enabled",
+            "Authorized networks allowing broad IP ranges",
+            "Weak database credentials"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Use private IP for Cloud SQL instances",
+                "implementation": "Configure instances with private IP and VPC peering",
+                "tools": [
+                    "GCP Cloud SQL",
+                    "GCP VPC"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement Cloud SQL Proxy",
+                "implementation": "Use Cloud SQL Proxy for secure connections",
+                "tools": [
+                    "GCP Cloud SQL Proxy"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Restrict authorized networks",
+                "implementation": "Limit authorized networks to specific IP ranges",
+                "tools": [
+                    "GCP Cloud SQL"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Security Command Center",
+                "indicators": [
+                    "Cloud SQL instances with public IP"
+                ],
+                "tools": [
+                    "GCP Security Command Center"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-668"
+            ],
+            "mitre_attack": [
+                "T1190"
+            ],
+            "external_links": [
+                "https://cloud.google.com/sql/docs/mysql/configure-private-ip"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "HIPAA"
+        ],
+        "architecture_patterns": [
+            "Microservices"
+        ],
+        "trust_boundaries": [
+            "Internet ↔ Database"
+        ],
+        "tags": [
+            "database",
+            "network-exposure",
+            "misconfiguration"
+        ]
+    },
+    {
+        "threat_id": "GCP-GKE-001",
+        "threat_name": "GKE Cluster with Legacy Authorization",
+        "component": "Container",
+        "cloud_platform": [
+            "GCP"
+        ],
+        "cloud_services": [
+            "GCP GKE"
+        ],
+        "stride_category": "Elevation of Privilege",
+        "attack_vector": "GKE clusters using legacy ABAC instead of RBAC have overly permissive access controls.",
+        "likelihood": "Medium",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "Legacy authorization enabled",
+            "RBAC not properly configured",
+            "Cluster compromise or pod escape"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Disable legacy authorization",
+                "implementation": "Disable ABAC and use RBAC exclusively",
+                "tools": [
+                    "GCP GKE"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement least privilege RBAC policies",
+                "implementation": "Create specific roles and role bindings for workloads",
+                "tools": [
+                    "Kubernetes RBAC"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "GKE Security Posture",
+                "indicators": [
+                    "Legacy authorization enabled"
+                ],
+                "tools": [
+                    "GCP Security Command Center"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-284"
+            ],
+            "mitre_attack": [
+                "T1552.007"
+            ],
+            "cis": [
+                "CIS Kubernetes 1.2.1"
+            ],
+            "external_links": [
+                "https://cloud.google.com/kubernetes-engine/docs/how-to/role-based-access-control"
+            ]
+        },
+        "compliance_relevance": [
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Container-based",
+            "Microservices"
+        ],
+        "tags": [
+            "kubernetes",
+            "rbac",
+            "access-control"
+        ]
+    }
+]

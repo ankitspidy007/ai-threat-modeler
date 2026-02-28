@@ -1,0 +1,370 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Comprehensive Threat Knowledge Base Schema",
+    "description": "Enhanced schema for enterprise-grade threat modeling with MITRE frameworks, cloud platforms, and industry standards",
+    "type": "object",
+    "properties": {
+        "threat_id": {
+            "type": "string",
+            "description": "Unique identifier (format: CATEGORY-###)",
+            "pattern": "^[A-Z]+-[0-9]{3,4}$"
+        },
+        "threat_name": {
+            "type": "string",
+            "description": "Clear, descriptive threat name"
+        },
+        "component": {
+            "type": "string",
+            "description": "Affected component/service",
+            "enum": [
+                "API",
+                "Database",
+                "WebClient",
+                "Service",
+                "LoadBalancer",
+                "Cache",
+                "MessageQueue",
+                "Storage",
+                "CDN",
+                "DNS",
+                "VPN",
+                "Firewall",
+                "Container",
+                "Serverless",
+                "IAM",
+                "Network",
+                "CI/CD",
+                "External"
+            ]
+        },
+        "cloud_platform": {
+            "type": "array",
+            "description": "Applicable cloud platforms",
+            "items": {
+                "enum": [
+                    "AWS",
+                    "Azure",
+                    "GCP",
+                    "Multi-Cloud",
+                    "On-Premise",
+                    "Hybrid"
+                ]
+            }
+        },
+        "cloud_services": {
+            "type": "array",
+            "description": "Specific cloud services affected",
+            "items": {
+                "type": "string"
+            },
+            "examples": [
+                "AWS S3",
+                "Azure Blob Storage",
+                "GCP Cloud Storage",
+                "AWS Lambda"
+            ]
+        },
+        "stride_category": {
+            "type": "string",
+            "description": "STRIDE threat category",
+            "enum": [
+                "Spoofing",
+                "Tampering",
+                "Repudiation",
+                "Information Disclosure",
+                "Denial of Service",
+                "Elevation of Privilege"
+            ]
+        },
+        "attack_vector": {
+            "type": "string",
+            "description": "Detailed description of how the attack is performed"
+        },
+        "likelihood": {
+            "type": "string",
+            "enum": [
+                "Low",
+                "Medium",
+                "High",
+                "Critical"
+            ]
+        },
+        "impact": {
+            "type": "string",
+            "enum": [
+                "Low",
+                "Medium",
+                "High",
+                "Critical"
+            ]
+        },
+        "affected_cia": {
+            "type": "array",
+            "description": "CIA triad elements affected",
+            "items": {
+                "enum": [
+                    "Confidentiality",
+                    "Integrity",
+                    "Availability"
+                ]
+            }
+        },
+        "prerequisites": {
+            "type": "array",
+            "description": "Conditions required for successful attack",
+            "items": {
+                "type": "string"
+            }
+        },
+        "mitigations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "control_type": {
+                        "enum": [
+                            "Preventive",
+                            "Detective",
+                            "Corrective",
+                            "Compensating"
+                        ]
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "implementation": {
+                        "type": "string",
+                        "description": "Specific implementation steps"
+                    },
+                    "tools": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Tools/services that can implement this mitigation"
+                    }
+                },
+                "required": [
+                    "control_type",
+                    "description",
+                    "implementation"
+                ]
+            }
+        },
+        "detection_methods": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "method": {
+                        "type": "string"
+                    },
+                    "indicators": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "tools": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "references": {
+            "type": "object",
+            "properties": {
+                "cwe": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "pattern": "^CWE-[0-9]+$"
+                    }
+                },
+                "cve": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "pattern": "^CVE-[0-9]{4}-[0-9]+$"
+                    }
+                },
+                "mitre_attack": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$"
+                    },
+                    "description": "MITRE ATT&CK technique IDs"
+                },
+                "capec": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "pattern": "^CAPEC-[0-9]+$"
+                    }
+                },
+                "owasp": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "examples": [
+                        "A01:2021",
+                        "API1:2023"
+                    ]
+                },
+                "nist": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "NIST 800-53 controls"
+                },
+                "cis": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "CIS Controls"
+                },
+                "external_links": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "uri"
+                    }
+                }
+            }
+        },
+        "real_world_examples": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "incident": {
+                        "type": "string"
+                    },
+                    "year": {
+                        "type": "integer"
+                    },
+                    "impact": {
+                        "type": "string"
+                    },
+                    "reference": {
+                        "type": "string",
+                        "format": "uri"
+                    }
+                }
+            }
+        },
+        "compliance_relevance": {
+            "type": "array",
+            "items": {
+                "enum": [
+                    "PCI-DSS",
+                    "HIPAA",
+                    "GDPR",
+                    "SOC2",
+                    "ISO27001",
+                    "FISMA",
+                    "CCPA",
+                    "SOX"
+                ]
+            }
+        },
+        "architecture_patterns": {
+            "type": "array",
+            "items": {
+                "enum": [
+                    "Microservices",
+                    "Monolithic",
+                    "Serverless",
+                    "Container-based",
+                    "Edge",
+                    "Zero-Trust",
+                    "API-first",
+                    "Event-driven",
+                    "Hybrid"
+                ]
+            }
+        },
+        "trust_boundaries": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "examples": [
+                "Internet ↔ DMZ",
+                "DMZ ↔ Internal",
+                "User ↔ Privileged",
+                "Container ↔ Host"
+            ]
+        },
+        "severity_score": {
+            "type": "object",
+            "properties": {
+                "cvss_v3": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 10
+                },
+                "dread": {
+                    "type": "object",
+                    "properties": {
+                        "damage": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10
+                        },
+                        "reproducibility": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10
+                        },
+                        "exploitability": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10
+                        },
+                        "affected_users": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10
+                        },
+                        "discoverability": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10
+                        }
+                    }
+                }
+            }
+        },
+        "tags": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "examples": [
+                "injection",
+                "authentication",
+                "cloud-native",
+                "supply-chain",
+                "emerging"
+            ]
+        }
+    },
+    "required": [
+        "threat_id",
+        "threat_name",
+        "component",
+        "stride_category",
+        "attack_vector",
+        "likelihood",
+        "impact",
+        "mitigations"
+    ]
+}

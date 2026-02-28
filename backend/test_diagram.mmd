@@ -1,0 +1,26 @@
+graph TB
+    subgraph frontend["Frontend Layer / DMZ"]
+        webclient{{"WebClient"}}
+    end
+    style frontend fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    
+    subgraph api_layer["API Layer / DMZ"]
+        api("API")
+    end
+    style api_layer fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    
+    subgraph services["Service Layer / Internal"]
+        identity_provider(["Identity Provider"])
+    end
+    style services fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    
+    subgraph data_layer["Data Layer / Trusted"]
+        mongodb["MongoDB Database"]
+    end
+    style data_layer fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px
+    
+    webclient ==HTTPS==> api
+    api ==TCP==> mongodb
+    api ==HTTPS==> identity_provider
+    
+    style api fill:#FF6B6B,stroke:#333,stroke-width:4px

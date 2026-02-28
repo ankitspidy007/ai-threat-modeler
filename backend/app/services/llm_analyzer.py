@@ -5,6 +5,7 @@ from typing import List, Optional
 from ..models import Threat
 from .openai_service import OpenAIService
 from .claude_service import ClaudeService
+from .gemini_service import GeminiService
 
 class LLMAnalyzer:
     """Orchestrates LLM-based threat analysis and merges with rule-based threats."""
@@ -34,6 +35,8 @@ class LLMAnalyzer:
             service = OpenAIService(api_key, model or "gpt-4")
         elif provider.lower() == "claude":
             service = ClaudeService(api_key, model or "claude-3-5-sonnet-20241022")
+        elif provider.lower() == "gemini":
+            service = GeminiService(api_key, model or "gemini-2.0-flash")
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
         
@@ -56,6 +59,8 @@ class LLMAnalyzer:
                 service = OpenAIService(api_key)
             elif provider.lower() == "claude":
                 service = ClaudeService(api_key)
+            elif provider.lower() == "gemini":
+                service = GeminiService(api_key)
             else:
                 return False
             

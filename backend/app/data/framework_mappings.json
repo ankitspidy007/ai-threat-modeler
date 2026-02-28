@@ -1,0 +1,248 @@
+{
+    "threat_mappings": {
+        "SQL_INJECTION": {
+            "mitre_attack": [
+                "T1190"
+            ],
+            "mitre_attack_names": [
+                "Exploit Public-Facing Application"
+            ],
+            "cwe": [
+                "CWE-89"
+            ],
+            "cwe_names": [
+                "SQL Injection"
+            ],
+            "capec": [
+                "CAPEC-66"
+            ],
+            "capec_names": [
+                "SQL Injection"
+            ],
+            "owasp": [
+                "A03:2021"
+            ],
+            "owasp_names": [
+                "Injection"
+            ],
+            "real_world_examples": [
+                {
+                    "incident": "Imperva Data Breach",
+                    "year": 2019,
+                    "impact": "12M+ customer records exposed",
+                    "reference": "https://www.imperva.com/blog/2019/08/data-breach-notification/"
+                }
+            ]
+        },
+        "BROKEN_ACCESS_CONTROL": {
+            "mitre_attack": [
+                "T1078"
+            ],
+            "mitre_attack_names": [
+                "Valid Accounts"
+            ],
+            "cwe": [
+                "CWE-284",
+                "CWE-285"
+            ],
+            "cwe_names": [
+                "Improper Access Control",
+                "Improper Authorization"
+            ],
+            "capec": [
+                "CAPEC-1",
+                "CAPEC-87"
+            ],
+            "owasp": [
+                "A01:2021"
+            ],
+            "owasp_names": [
+                "Broken Access Control"
+            ]
+        },
+        "CRYPTOGRAPHIC_FAILURES": {
+            "mitre_attack": [
+                "T1040",
+                "T1557"
+            ],
+            "mitre_attack_names": [
+                "Network Sniffing",
+                "Man-in-the-Middle"
+            ],
+            "cwe": [
+                "CWE-311",
+                "CWE-327"
+            ],
+            "cwe_names": [
+                "Missing Encryption",
+                "Use of Broken Crypto"
+            ],
+            "capec": [
+                "CAPEC-20"
+            ],
+            "owasp": [
+                "A02:2021"
+            ],
+            "owasp_names": [
+                "Cryptographic Failures"
+            ]
+        },
+        "SSRF": {
+            "mitre_attack": [
+                "T1190"
+            ],
+            "mitre_attack_names": [
+                "Exploit Public-Facing Application"
+            ],
+            "cwe": [
+                "CWE-918"
+            ],
+            "cwe_names": [
+                "Server-Side Request Forgery"
+            ],
+            "capec": [
+                "CAPEC-664"
+            ],
+            "owasp": [
+                "A10:2021"
+            ],
+            "owasp_names": [
+                "Server-Side Request Forgery"
+            ],
+            "real_world_examples": [
+                {
+                    "incident": "Capital One Data Breach",
+                    "year": 2019,
+                    "impact": "100M+ customer records via SSRF to AWS metadata",
+                    "reference": "https://krebsonsecurity.com/2019/07/capital-one-data-theft-impacts-106m-people/"
+                }
+            ]
+        },
+        "JWT_ISSUES": {
+            "mitre_attack": [
+                "T1550.001"
+            ],
+            "mitre_attack_names": [
+                "Application Access Token"
+            ],
+            "cwe": [
+                "CWE-613",
+                "CWE-347"
+            ],
+            "cwe_names": [
+                "Insufficient Session Expiration",
+                "Improper Verification of Cryptographic Signature"
+            ],
+            "capec": [
+                "CAPEC-21"
+            ],
+            "owasp": [
+                "A07:2021"
+            ],
+            "owasp_names": [
+                "Identification and Authentication Failures"
+            ]
+        },
+        "NOSQL_INJECTION": {
+            "mitre_attack": [
+                "T1190"
+            ],
+            "mitre_attack_names": [
+                "Exploit Public-Facing Application"
+            ],
+            "cwe": [
+                "CWE-943"
+            ],
+            "cwe_names": [
+                "NoSQL Injection"
+            ],
+            "capec": [
+                "CAPEC-676"
+            ],
+            "owasp": [
+                "A03:2021"
+            ],
+            "owasp_names": [
+                "Injection"
+            ]
+        },
+        "XSS": {
+            "mitre_attack": [
+                "T1189"
+            ],
+            "mitre_attack_names": [
+                "Drive-by Compromise"
+            ],
+            "cwe": [
+                "CWE-79"
+            ],
+            "cwe_names": [
+                "Cross-site Scripting"
+            ],
+            "capec": [
+                "CAPEC-86"
+            ],
+            "owasp": [
+                "A03:2021"
+            ],
+            "owasp_names": [
+                "Injection"
+            ]
+        },
+        "EXPOSED_CREDENTIALS": {
+            "mitre_attack": [
+                "T1552.001",
+                "T1552.004"
+            ],
+            "mitre_attack_names": [
+                "Credentials In Files",
+                "Private Keys"
+            ],
+            "cwe": [
+                "CWE-798",
+                "CWE-259"
+            ],
+            "cwe_names": [
+                "Hard-coded Credentials",
+                "Hard-coded Password"
+            ],
+            "capec": [
+                "CAPEC-191"
+            ]
+        },
+        "CONTAINER_ESCAPE": {
+            "mitre_attack": [
+                "T1611"
+            ],
+            "mitre_attack_names": [
+                "Escape to Host"
+            ],
+            "cwe": [
+                "CWE-250"
+            ],
+            "cwe_names": [
+                "Execution with Unnecessary Privileges"
+            ],
+            "capec": [
+                "CAPEC-17"
+            ]
+        },
+        "CLOUD_METADATA_EXPOSURE": {
+            "mitre_attack": [
+                "T1552.005"
+            ],
+            "mitre_attack_names": [
+                "Cloud Instance Metadata API"
+            ],
+            "cwe": [
+                "CWE-200"
+            ],
+            "cwe_names": [
+                "Information Exposure"
+            ],
+            "capec": [
+                "CAPEC-116"
+            ]
+        }
+    }
+}

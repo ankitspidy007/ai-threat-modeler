@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from .engine.analyzer import ThreatAnalyzer
 from .models import AnalysisResult
@@ -41,14 +41,16 @@ class AnalyzeRequest(BaseModel):
     project_name: str = Field(..., min_length=1, max_length=200, description="Name of the project")
     description: str = Field(..., min_length=10, max_length=10000, description="System architecture description")
     
-    @validator('project_name')
+    @field_validator('project_name')
+    @classmethod
     def sanitize_project_name(cls, v):
         # Remove potentially dangerous characters
         import re
         sanitized = re.sub(r'[<>"\'\\/;]', '', v)
         return sanitized.strip()
     
-    @validator('description')
+    @field_validator('description')
+    @classmethod
     def validate_description(cls, v):
         if not v or len(v.strip()) < 10:
             raise ValueError('Description must be at least 10 characters')
@@ -62,10 +64,11 @@ class LLMAnalyzeRequest(BaseModel):
     api_key: str = Field(..., min_length=10, description="API key for the LLM provider")
     model: str = Field(None, description="Optional specific model to use")
     
-    @validator('llm_provider')
+    @field_validator('llm_provider')
+    @classmethod
     def validate_provider(cls, v):
-        if v.lower() not in ['openai', 'claude']:
-            raise ValueError('Provider must be either "openai" or "claude"')
+        if v.lower() not in ['openai', 'claude', 'gemini']:
+            raise ValueError('Provider must be "openai", "claude", or "gemini"')
         return v.lower()
 
 
@@ -73,10 +76,11 @@ class APIKeyValidationRequest(BaseModel):
     provider: str = Field(..., description="LLM provider: 'openai' or 'claude'")
     api_key: str = Field(..., min_length=10)
     
-    @validator('provider')
+    @field_validator('provider')
+    @classmethod
     def validate_provider(cls, v):
-        if v.lower() not in ['openai', 'claude']:
-            raise ValueError('Provider must be either "openai" or "claude"')
+        if v.lower() not in ['openai', 'claude', 'gemini']:
+            raise ValueError('Provider must be "openai", "claude", or "gemini"')
         return v.lower()
 
 

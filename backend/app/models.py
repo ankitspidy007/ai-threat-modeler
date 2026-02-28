@@ -35,6 +35,11 @@ class Threat(BaseModel):
     status: Optional[str] = "Identified"
     evidence: List[str] = Field(default_factory=list)
     mitigation: str
+    # Compliance & framework mappings
+    owasp_top_10: Optional[List[str]] = Field(default_factory=list)
+    cwe: Optional[List[str]] = Field(default_factory=list)
+    mitre_attack: Optional[List[str]] = Field(default_factory=list)
+    nist_800_53: Optional[List[str]] = Field(default_factory=list)
     # Aggregated fields
     affected_components: List[str] = Field(default_factory=list)
     affected_data_flows: List[str] = Field(default_factory=list)

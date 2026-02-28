@@ -1,0 +1,431 @@
+[
+    {
+        "threat_id": "OWASP-WEB-001",
+        "threat_name": "Broken Access Control",
+        "component": "API",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "stride_category": "Elevation of Privilege",
+        "attack_vector": "Users can access resources or perform actions beyond their intended permissions due to improper access control implementation.",
+        "likelihood": "High",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity"
+        ],
+        "prerequisites": [
+            "Inadequate authorization checks",
+            "Insecure direct object references (IDOR)",
+            "Missing function-level access control"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Implement deny-by-default access control",
+                "implementation": "Require explicit authorization for all resources and actions",
+                "tools": [
+                    "Application Framework",
+                    "API Gateway"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use centralized access control mechanism",
+                "implementation": "Implement consistent authorization checks across application",
+                "tools": [
+                    "OAuth 2.0",
+                    "RBAC",
+                    "ABAC"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Log and monitor access control failures",
+                "implementation": "Alert on repeated authorization failures",
+                "tools": [
+                    "SIEM",
+                    "Application Logs"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Application Logging",
+                "indicators": [
+                    "403 Forbidden responses",
+                    "Unauthorized access attempts"
+                ],
+                "tools": [
+                    "ELK Stack",
+                    "Splunk",
+                    "Datadog"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-284",
+                "CWE-285",
+                "CWE-639"
+            ],
+            "mitre_attack": [
+                "T1078"
+            ],
+            "capec": [
+                "CAPEC-87"
+            ],
+            "owasp": [
+                "A01:2021"
+            ],
+            "nist": [
+                "AC-3",
+                "AC-6"
+            ],
+            "external_links": [
+                "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2",
+            "HIPAA"
+        ],
+        "architecture_patterns": [
+            "API-first",
+            "Microservices",
+            "Monolithic"
+        ],
+        "tags": [
+            "owasp-top-10",
+            "access-control",
+            "authorization"
+        ]
+    },
+    {
+        "threat_id": "OWASP-WEB-002",
+        "threat_name": "Cryptographic Failures",
+        "component": "API",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "Sensitive data exposed due to weak or missing encryption, insecure protocols, or improper key management.",
+        "likelihood": "High",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality"
+        ],
+        "prerequisites": [
+            "Data transmitted over unencrypted channels",
+            "Weak encryption algorithms used",
+            "Hardcoded encryption keys"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Encrypt all sensitive data in transit and at rest",
+                "implementation": "Use TLS 1.2+ for transit, AES-256 for rest",
+                "tools": [
+                    "TLS/SSL",
+                    "AWS KMS",
+                    "Azure Key Vault",
+                    "GCP KMS"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use strong, up-to-date cryptographic algorithms",
+                "implementation": "Avoid deprecated algorithms like MD5, SHA1, DES",
+                "tools": [
+                    "OpenSSL",
+                    "Cryptography Libraries"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement proper key management",
+                "implementation": "Use dedicated key management services with rotation",
+                "tools": [
+                    "AWS KMS",
+                    "Azure Key Vault",
+                    "HashiCorp Vault"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "TLS/SSL Scanning",
+                "indicators": [
+                    "Weak ciphers",
+                    "Expired certificates",
+                    "Unencrypted connections"
+                ],
+                "tools": [
+                    "SSL Labs",
+                    "Qualys",
+                    "Nmap"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-311",
+                "CWE-327",
+                "CWE-326"
+            ],
+            "mitre_attack": [
+                "T1040",
+                "T1557"
+            ],
+            "owasp": [
+                "A02:2021"
+            ],
+            "nist": [
+                "SC-8",
+                "SC-12",
+                "SC-13"
+            ],
+            "external_links": [
+                "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "HIPAA",
+            "GDPR"
+        ],
+        "tags": [
+            "owasp-top-10",
+            "encryption",
+            "data-protection"
+        ]
+    },
+    {
+        "threat_id": "OWASP-WEB-003",
+        "threat_name": "Injection Attacks",
+        "component": "API",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "stride_category": "Tampering",
+        "attack_vector": "Untrusted data sent to interpreter as part of command or query, leading to unintended execution (SQL, NoSQL, OS, LDAP injection).",
+        "likelihood": "High",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "Lack of input validation",
+            "Dynamic query construction",
+            "Insufficient output encoding"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Use parameterized queries or prepared statements",
+                "implementation": "Never concatenate user input into queries",
+                "tools": [
+                    "ORM Frameworks",
+                    "Database Drivers"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement input validation and sanitization",
+                "implementation": "Validate all input against whitelist of allowed values",
+                "tools": [
+                    "Input Validation Libraries"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use least privilege database accounts",
+                "implementation": "Limit database user permissions to minimum required",
+                "tools": [
+                    "Database Access Control"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "WAF Rules",
+                "indicators": [
+                    "SQL keywords in parameters",
+                    "Command injection patterns"
+                ],
+                "tools": [
+                    "AWS WAF",
+                    "Azure WAF",
+                    "ModSecurity"
+                ]
+            },
+            {
+                "method": "Database Monitoring",
+                "indicators": [
+                    "Unusual queries",
+                    "Error patterns"
+                ],
+                "tools": [
+                    "Database Activity Monitoring"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-89",
+                "CWE-78",
+                "CWE-79"
+            ],
+            "mitre_attack": [
+                "T1190"
+            ],
+            "capec": [
+                "CAPEC-66",
+                "CAPEC-88"
+            ],
+            "owasp": [
+                "A03:2021"
+            ],
+            "external_links": [
+                "https://owasp.org/Top10/A03_2021-Injection/"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "API-first",
+            "Microservices",
+            "Monolithic"
+        ],
+        "tags": [
+            "owasp-top-10",
+            "injection",
+            "input-validation"
+        ]
+    },
+    {
+        "threat_id": "OWASP-WEB-010",
+        "threat_name": "Server-Side Request Forgery (SSRF)",
+        "component": "API",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "Application fetches remote resources without validating user-supplied URL, allowing access to internal systems or cloud metadata services.",
+        "likelihood": "Medium",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity"
+        ],
+        "prerequisites": [
+            "Application accepts URLs from user input",
+            "Insufficient URL validation",
+            "Access to internal network or metadata services"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Validate and sanitize all URLs",
+                "implementation": "Use allowlist of permitted domains and protocols",
+                "tools": [
+                    "URL Validation Libraries"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Disable unused URL schemas",
+                "implementation": "Block file://, gopher://, and other dangerous protocols",
+                "tools": [
+                    "Application Configuration"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement network segmentation",
+                "implementation": "Restrict outbound connections from application servers",
+                "tools": [
+                    "Firewall",
+                    "Security Groups"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Block access to metadata services",
+                "implementation": "Prevent access to 169.254.169.254 and metadata.google.internal",
+                "tools": [
+                    "Network ACLs",
+                    "IMDSv2"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Network Monitoring",
+                "indicators": [
+                    "Requests to internal IPs",
+                    "Metadata service access"
+                ],
+                "tools": [
+                    "VPC Flow Logs",
+                    "Network IDS"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-918"
+            ],
+            "mitre_attack": [
+                "T1552.005"
+            ],
+            "capec": [
+                "CAPEC-664"
+            ],
+            "owasp": [
+                "A10:2021"
+            ],
+            "external_links": [
+                "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/"
+            ]
+        },
+        "real_world_examples": [
+            {
+                "incident": "Capital One Breach",
+                "year": 2019,
+                "impact": "SSRF used to access EC2 metadata service",
+                "reference": "https://krebsonsecurity.com/2019/08/what-we-can-learn-from-the-capital-one-hack/"
+            }
+        ],
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Microservices",
+            "Serverless"
+        ],
+        "tags": [
+            "owasp-top-10",
+            "ssrf",
+            "emerging"
+        ]
+    }
+]

@@ -560,93 +560,148 @@ class ArchitectureParser:
     def _infer_flows(self, text: str, components: Dict[str, Component]) -> List[DataFlow]:
         """
         Infer data flows between components based on descriptions and typical patterns.
+        Uses flexible type-based matching instead of hardcoded IDs.
         """
         flows = []
         text_lower = text.lower()
         
-        # Standard flow pattern: WebClient → API Gateway → Services → Databases
-        comp_ids = list(components.keys())
+        # Get components by type
+        frontend_comps = [cid for cid, c in components.items() if c.type in ['WebClient', 'Mobile App']]
+        api_comps = [cid for cid, c in components.items() if c.type in ['API', 'API Gateway', 'Load Balancer']]
+        service_comps = [cid for cid, c in components.items() if c.type == 'Service']
+        db_comps = [cid for cid, c in components.items() if c.type == 'Database']
+        storage_comps = [cid for cid, c in components.items() if c.type == 'Object Storage']
+        queue_comps = [cid for cid, c in components.items() if c.type == 'Queue']
+        idp_comps = [cid for cid, c in components.items() if c.type == 'Identity Provider']
+        external_comps = [cid for cid, c in components.items() if c.properties.get('external', False)]
         
-        # 1. Frontend to API Gateway
-        if 'webclient' in comp_ids and 'api_gateway' in comp_ids:
-            flows.append(DataFlow(
-                source_id='webclient',
-                target_id='api_gateway',
-                protocol='https',
-                properties={'trust_boundary': 'internet'}
-            ))
-        
-        # 2. API Gateway to Services
-        if 'api_gateway' in comp_ids:
-            service_ids = [cid for cid in comp_ids if components[cid].type == 'Service']
-            for service_id in service_ids:
+        # 1. Frontend → API/Gateway (typical web/mobile app pattern)
+        for frontend_id in frontend_comps:
+            for api_id in api_comps:
                 flows.append(DataFlow(
-                    source_id='api_gateway',
-                    target_id=service_id,
-                    protocol='https',
+                    source_id=frontend_id,
+                    target_id=api_id,
+                    protocol='HTTPS',
+                    properties={'trust_boundary': 'internet', 'crosses_trust_boundary': True}
+                ))
+        
+        # 2. API/Gateway → Services (if services exist)
+        if service_comps:
+            for api_id in api_comps:
+                for service_id in service_comps:
+                    flows.append(DataFlow(
+                        source_id=api_id,
+                        target_id=service_id,
+                        protocol='HTTPS',
+                        properties={'trust_boundary': 'internal'}
+                    ))
+        
+        # 3. API → Database (direct connection if no services layer)
+        if not service_comps and api_comps and db_comps:
+            for api_id in api_comps:
+                for db_id in db_comps:
+                    flows.append(DataFlow(
+                        source_id=api_id,
+                        target_id=db_id,
+                        protocol='TCP',
+                        properties={'trust_boundary': 'internal'}
+                    ))
+        
+        # 4. Services → Databases
+        for service_id in service_comps:
+            for db_id in db_comps:
+                # Check if database is mentioned in service description or just connect all
+                flows.append(DataFlow(
+                    source_id=service_id,
+                    target_id=db_id,
+                    protocol='TCP',
                     properties={'trust_boundary': 'internal'}
                 ))
         
-        # 3. Services to Databases (infer from service descriptions)
-        service_ids = [cid for cid in comp_ids if components[cid].type == 'Service']
-        db_ids = [cid for cid in comp_ids if components[cid].type == 'Database']
-        
-        for service_id in service_ids:
-            service = components[service_id]
-            service_desc = service.properties.get('description', '').lower()
-            
-            # Try to match service to database
-            for db_id in db_ids:
-                db_name = components[db_id].name.lower()
-                # Simple heuristic: if database name mentioned in service description
-                if db_name in service_desc or db_id in service_desc:
+        # 5. API/Services → Identity Provider (for authentication)
+        if idp_comps:
+            auth_consumers = api_comps + service_comps
+            for consumer_id in auth_consumers:
+                for idp_id in idp_comps:
                     flows.append(DataFlow(
-                        source_id=service_id,
-                        target_id=db_id,
-                        protocol='tcp',
+                        source_id=consumer_id,
+                        target_id=idp_id,
+                        protocol='HTTPS',
                         properties={'trust_boundary': 'internal'}
                     ))
         
-        # 4. Services to Third-Party APIs
-        for service_id in service_ids:
-            service = components[service_id]
-            service_desc = service.properties.get('description', '').lower()
-            
-            # Check for third-party integrations
-            external_ids = [cid for cid in comp_ids if components[cid].properties.get('external', False)]
-            for ext_id in external_ids:
+        # 6. Services → Object Storage (if storage mentioned)
+        if storage_comps:
+            for service_id in service_comps:
+                service_desc = components[service_id].properties.get('description', '').lower()
+                if 's3' in service_desc or 'upload' in service_desc or 'storage' in service_desc or 'file' in service_desc:
+                    for storage_id in storage_comps:
+                        flows.append(DataFlow(
+                            source_id=service_id,
+                            target_id=storage_id,
+                            protocol='HTTPS',
+                            properties={'trust_boundary': 'internal'}
+                        ))
+        
+        # 7. Services → Queue (if queue mentioned)
+        if queue_comps:
+            for service_id in service_comps:
+                service_desc = components[service_id].properties.get('description', '').lower()
+                if 'kafka' in service_desc or 'queue' in service_desc or 'message' in service_desc or 'event' in service_desc:
+                    for queue_id in queue_comps:
+                        flows.append(DataFlow(
+                            source_id=service_id,
+                            target_id=queue_id,
+                            protocol='TCP',
+                            properties={'trust_boundary': 'internal'}
+                        ))
+        
+        # 8. Services → External APIs (third-party integrations)
+        for service_id in service_comps:
+            service_desc = components[service_id].properties.get('description', '').lower()
+            for ext_id in external_comps:
                 ext_name = components[ext_id].name.lower()
-                if ext_name in service_desc:
+                if ext_name in service_desc or ext_id in service_desc:
                     flows.append(DataFlow(
                         source_id=service_id,
                         target_id=ext_id,
-                        protocol='https',
+                        protocol='HTTPS',
                         properties={'trust_boundary': 'external', 'crosses_trust_boundary': True}
                     ))
         
-        # 5. Services to Object Storage
-        if 'object_storage' in comp_ids:
-            for service_id in service_ids:
-                service_desc = components[service_id].properties.get('description', '').lower()
-                if 's3' in service_desc or 'upload' in service_desc or 'storage' in service_desc:
-                    flows.append(DataFlow(
-                        source_id=service_id,
-                        target_id='object_storage',
-                        protocol='https',
-                        properties={'trust_boundary': 'internal'}
-                    ))
+        # 9. Infer from text patterns (e.g., "A connected to B")
+        connection_patterns = [
+            (r'(\w+)\s+connected to\s+(\w+)', 'TCP'),
+            (r'(\w+)\s+communicates with\s+(\w+)', 'HTTPS'),
+            (r'(\w+)\s+sends data to\s+(\w+)', 'HTTPS'),
+            (r'(\w+)\s+queries\s+(\w+)', 'TCP'),
+            (r'(\w+)\s+uses\s+(\w+)', 'HTTPS'),
+        ]
         
-        # 6. Services to Queue
-        if 'queue' in comp_ids:
-            for service_id in service_ids:
-                service_desc = components[service_id].properties.get('description', '').lower()
-                if 'kafka' in service_desc or 'queue' in service_desc or 'message' in service_desc:
-                    flows.append(DataFlow(
-                        source_id=service_id,
-                        target_id='queue',
-                        protocol='tcp',
-                        properties={'trust_boundary': 'internal'}
-                    ))
+        import re
+        for pattern, protocol in connection_patterns:
+            matches = re.findall(pattern, text_lower)
+            for source_name, target_name in matches:
+                # Try to find matching components
+                source_id = None
+                target_id = None
+                
+                for cid, comp in components.items():
+                    if source_name in comp.name.lower() or source_name in cid.lower():
+                        source_id = cid
+                    if target_name in comp.name.lower() or target_name in cid.lower():
+                        target_id = cid
+                
+                if source_id and target_id and source_id != target_id:
+                    # Avoid duplicates
+                    existing = any(f.source_id == source_id and f.target_id == target_id for f in flows)
+                    if not existing:
+                        flows.append(DataFlow(
+                            source_id=source_id,
+                            target_id=target_id,
+                            protocol=protocol,
+                            properties={'trust_boundary': 'inferred'}
+                        ))
         
         return flows
 
@@ -665,14 +720,61 @@ class ArchitectureParser:
             'compliance_frameworks': []
         }
         
+        # Cloud provider detection
+        if 'aws' in text_lower or 's3' in text_lower or 'ec2' in text_lower or 'lambda' in text_lower or 'rds' in text_lower or 'cognito' in text_lower:
+            props['cloud_provider'] = 'aws'
+        elif 'azure' in text_lower or 'blob storage' in text_lower or 'azure ad' in text_lower:
+            props['cloud_provider'] = 'azure'
+        elif 'gcp' in text_lower or 'google cloud' in text_lower or 'firestore' in text_lower or 'cloud storage' in text_lower:
+            props['cloud_provider'] = 'gcp'
+        
+        # Database type detection
+        if component_type == 'Database':
+            if 'mongodb' in text_lower or 'mongo' in text_lower:
+                props['db_type'] = 'mongodb'
+            elif 'dynamodb' in text_lower:
+                props['db_type'] = 'dynamodb'
+            elif 'cosmosdb' in text_lower:
+                props['db_type'] = 'cosmosdb'
+            elif 'firestore' in text_lower:
+                props['db_type'] = 'firestore'
+            elif 'cassandra' in text_lower:
+                props['db_type'] = 'cassandra'
+            elif 'redis' in text_lower:
+                props['db_type'] = 'redis'
+            elif 'mysql' in text_lower:
+                props['db_type'] = 'mysql'
+            elif 'postgresql' in text_lower or 'postgres' in text_lower:
+                props['db_type'] = 'postgresql'
+            elif 'mssql' in text_lower or 'sql server' in text_lower:
+                props['db_type'] = 'mssql'
+            elif 'oracle' in text_lower:
+                props['db_type'] = 'oracle'
+        
         # Public access detection
         if component_type in ['WebClient', 'API Gateway', 'CDN']:
             props['public_access'] = True
         if 'public' in text_lower or 'internet' in text_lower:
             props['public_access'] = True
         
-        # Authentication detection
-        if 'jwt' in text_lower or 'json web token' in text_lower:
+        # Managed Authentication Service Detection (takes precedence)
+        if 'cognito' in text_lower:
+            props['auth_type'] = 'cognito'
+            props['idp_integration'] = True
+        elif 'auth0' in text_lower:
+            props['auth_type'] = 'auth0'
+            props['idp_integration'] = True
+        elif 'okta' in text_lower:
+            props['auth_type'] = 'okta'
+            props['idp_integration'] = True
+        elif 'azure ad' in text_lower or 'azure active directory' in text_lower:
+            props['auth_type'] = 'azure_ad'
+            props['idp_integration'] = True
+        elif 'google identity' in text_lower or 'firebase auth' in text_lower:
+            props['auth_type'] = 'google_identity'
+            props['idp_integration'] = True
+        # Standard authentication methods (lower priority than managed services)
+        elif 'jwt' in text_lower or 'json web token' in text_lower:
             props['auth_type'] = 'jwt'
             props['has_jwt'] = True
         elif 'oauth' in text_lower or 'oauth2' in text_lower or 'oidc' in text_lower:

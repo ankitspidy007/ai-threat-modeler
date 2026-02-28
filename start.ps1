@@ -1,4 +1,4 @@
-# AI Threat Modeler - Startup Script with Configurable Ports
+# AITM - AI Threat Modeler v2.0 - Startup Script
 # Usage: .\start.ps1 [-BackendPort 8000] [-FrontendPort 5173]
 
 param(
@@ -6,9 +6,10 @@ param(
     [int]$FrontendPort = 5173
 )
 
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  AI Threat Modeler - Starting..." -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "=====================================================" -ForegroundColor Cyan
+Write-Host "  AITM - AI Threat Modeler v2.0" -ForegroundColor Cyan
+Write-Host "  STRIDE Analysis | Multi-LLM | Compliance Mapping" -ForegroundColor Cyan
+Write-Host "=====================================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Check if Python is installed
@@ -84,9 +85,9 @@ $frontendJob = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd
 Start-Sleep -Seconds 3
 
 Write-Host ""
-Write-Host "========================================" -ForegroundColor Green
-Write-Host "  AI Threat Modeler - Running!" -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Green
+Write-Host "=====================================================" -ForegroundColor Green
+Write-Host "  AITM - AI Threat Modeler - Running!" -ForegroundColor Green
+Write-Host "=====================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Backend:  " -NoNewline
 Write-Host "http://127.0.0.1:$BackendPort" -ForegroundColor Cyan
@@ -94,6 +95,12 @@ Write-Host "Frontend: " -NoNewline
 Write-Host "http://localhost:$FrontendPort" -ForegroundColor Cyan
 Write-Host "API Docs: " -NoNewline
 Write-Host "http://127.0.0.1:$BackendPort/docs" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Features:" -ForegroundColor Cyan
+Write-Host "  - STRIDE-based threat analysis" -ForegroundColor Gray
+Write-Host "  - CWE, MITRE ATT&CK, OWASP, NIST compliance mapping" -ForegroundColor Gray
+Write-Host "  - Multi-LLM integration (OpenAI, Claude, Gemini)" -ForegroundColor Gray
+Write-Host "  - PDF reports with architecture diagrams" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Opening application in browser..." -ForegroundColor Yellow
 Start-Sleep -Seconds 2

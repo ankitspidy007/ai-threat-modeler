@@ -1,0 +1,503 @@
+[
+    {
+        "threat_id": "K8S-001",
+        "threat_name": "Container Running as Root",
+        "component": "Container",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "cloud_services": [
+            "AWS EKS",
+            "Azure AKS",
+            "GCP GKE"
+        ],
+        "stride_category": "Elevation of Privilege",
+        "attack_vector": "Containers running with root privileges can escape to host system if container runtime vulnerability is exploited.",
+        "likelihood": "High",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "Container configured to run as root (UID 0)",
+            "No security context constraints",
+            "Container runtime vulnerability"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Run containers as non-root user",
+                "implementation": "Set runAsNonRoot: true in pod security context",
+                "tools": [
+                    "Kubernetes Pod Security"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use Pod Security Standards",
+                "implementation": "Enforce 'restricted' pod security standard",
+                "tools": [
+                    "Kubernetes Pod Security Admission"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Drop unnecessary capabilities",
+                "implementation": "Remove all capabilities and add only required ones",
+                "tools": [
+                    "Kubernetes Security Context"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Admission Controller",
+                "indicators": [
+                    "Pods running as root"
+                ],
+                "tools": [
+                    "OPA Gatekeeper",
+                    "Kyverno",
+                    "Pod Security Admission"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-250"
+            ],
+            "mitre_attack": [
+                "T1611"
+            ],
+            "capec": [
+                "CAPEC-233"
+            ],
+            "cis": [
+                "CIS Kubernetes 5.2.6"
+            ],
+            "external_links": [
+                "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Container-based",
+            "Microservices"
+        ],
+        "tags": [
+            "kubernetes",
+            "container-security",
+            "privilege-escalation"
+        ]
+    },
+    {
+        "threat_id": "K8S-002",
+        "threat_name": "Exposed Kubernetes Dashboard",
+        "component": "Container",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "cloud_services": [
+            "AWS EKS",
+            "Azure AKS",
+            "GCP GKE"
+        ],
+        "stride_category": "Elevation of Privilege",
+        "attack_vector": "Publicly accessible Kubernetes Dashboard with weak or no authentication allows cluster takeover.",
+        "likelihood": "Medium",
+        "impact": "Critical",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "Dashboard exposed to internet",
+            "Weak authentication or anonymous access",
+            "Overly permissive service account"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Disable or remove Kubernetes Dashboard",
+                "implementation": "Use kubectl or cloud provider console instead",
+                "tools": [
+                    "kubectl"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Restrict dashboard access with RBAC",
+                "implementation": "Limit dashboard service account to read-only permissions",
+                "tools": [
+                    "Kubernetes RBAC"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use network policies to restrict access",
+                "implementation": "Allow access only from specific IP ranges or VPN",
+                "tools": [
+                    "Kubernetes Network Policies"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Network Scanning",
+                "indicators": [
+                    "Dashboard accessible from internet"
+                ],
+                "tools": [
+                    "Nmap",
+                    "Shodan"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-306"
+            ],
+            "mitre_attack": [
+                "T1552.007"
+            ],
+            "cis": [
+                "CIS Kubernetes 1.2.1"
+            ],
+            "external_links": [
+                "https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/"
+            ]
+        },
+        "real_world_examples": [
+            {
+                "incident": "Tesla Kubernetes Cryptojacking",
+                "year": 2018,
+                "impact": "Exposed dashboard led to cryptomining malware",
+                "reference": "https://redlock.io/blog/cryptojacking-tesla"
+            }
+        ],
+        "compliance_relevance": [
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Container-based"
+        ],
+        "tags": [
+            "kubernetes",
+            "dashboard",
+            "authentication"
+        ]
+    },
+    {
+        "threat_id": "K8S-003",
+        "threat_name": "Secrets Stored as Environment Variables",
+        "component": "Container",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "cloud_services": [
+            "AWS EKS",
+            "Azure AKS",
+            "GCP GKE"
+        ],
+        "stride_category": "Information Disclosure",
+        "attack_vector": "Secrets exposed as environment variables can be accessed through container inspection or process listing.",
+        "likelihood": "High",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality"
+        ],
+        "prerequisites": [
+            "Secrets mounted as environment variables",
+            "Container access or compromise",
+            "Lack of secrets encryption"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Use Kubernetes Secrets with volume mounts",
+                "implementation": "Mount secrets as files instead of environment variables",
+                "tools": [
+                    "Kubernetes Secrets"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use external secrets management",
+                "implementation": "Integrate with AWS Secrets Manager, Azure Key Vault, or HashiCorp Vault",
+                "tools": [
+                    "External Secrets Operator",
+                    "Secrets Store CSI Driver"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Enable secrets encryption at rest",
+                "implementation": "Configure encryption provider for etcd",
+                "tools": [
+                    "Kubernetes Encryption at Rest"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Static Analysis",
+                "indicators": [
+                    "Environment variables containing secrets"
+                ],
+                "tools": [
+                    "kube-score",
+                    "Checkov"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-200"
+            ],
+            "mitre_attack": [
+                "T1552.001"
+            ],
+            "cis": [
+                "CIS Kubernetes 5.4.1"
+            ],
+            "external_links": [
+                "https://kubernetes.io/docs/concepts/configuration/secret/"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Container-based",
+            "Microservices"
+        ],
+        "tags": [
+            "kubernetes",
+            "secrets-management",
+            "credential-exposure"
+        ]
+    },
+    {
+        "threat_id": "K8S-004",
+        "threat_name": "Unrestricted Network Policies",
+        "component": "Container",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "cloud_services": [
+            "AWS EKS",
+            "Azure AKS",
+            "GCP GKE"
+        ],
+        "stride_category": "Tampering",
+        "attack_vector": "Lack of network policies allows lateral movement between pods and access to sensitive services.",
+        "likelihood": "High",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity"
+        ],
+        "prerequisites": [
+            "No network policies configured",
+            "Default allow-all traffic",
+            "Pod compromise"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Implement default-deny network policies",
+                "implementation": "Create network policies denying all traffic by default",
+                "tools": [
+                    "Kubernetes Network Policies",
+                    "Calico",
+                    "Cilium"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Define explicit allow rules",
+                "implementation": "Create specific policies for required pod-to-pod communication",
+                "tools": [
+                    "Kubernetes Network Policies"
+                ]
+            },
+            {
+                "control_type": "Detective",
+                "description": "Monitor network traffic",
+                "implementation": "Use service mesh or CNI for traffic visibility",
+                "tools": [
+                    "Istio",
+                    "Linkerd",
+                    "Cilium Hubble"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Policy Audit",
+                "indicators": [
+                    "Namespaces without network policies"
+                ],
+                "tools": [
+                    "kubectl",
+                    "Polaris"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-923"
+            ],
+            "mitre_attack": [
+                "T1021"
+            ],
+            "cis": [
+                "CIS Kubernetes 5.3.2"
+            ],
+            "external_links": [
+                "https://kubernetes.io/docs/concepts/services-networking/network-policies/"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Container-based",
+            "Microservices",
+            "Zero-Trust"
+        ],
+        "trust_boundaries": [
+            "Pod ↔ Pod",
+            "Namespace ↔ Namespace"
+        ],
+        "tags": [
+            "kubernetes",
+            "network-segmentation",
+            "lateral-movement"
+        ]
+    },
+    {
+        "threat_id": "K8S-005",
+        "threat_name": "Vulnerable Container Images",
+        "component": "Container",
+        "cloud_platform": [
+            "AWS",
+            "Azure",
+            "GCP",
+            "On-Premise"
+        ],
+        "cloud_services": [
+            "AWS ECR",
+            "Azure ACR",
+            "GCP GCR"
+        ],
+        "stride_category": "Elevation of Privilege",
+        "attack_vector": "Container images with known vulnerabilities can be exploited to compromise containers and potentially escape to host.",
+        "likelihood": "High",
+        "impact": "High",
+        "affected_cia": [
+            "Confidentiality",
+            "Integrity",
+            "Availability"
+        ],
+        "prerequisites": [
+            "Outdated base images",
+            "Vulnerable dependencies",
+            "No image scanning"
+        ],
+        "mitigations": [
+            {
+                "control_type": "Preventive",
+                "description": "Scan images for vulnerabilities",
+                "implementation": "Integrate image scanning in CI/CD pipeline",
+                "tools": [
+                    "Trivy",
+                    "Clair",
+                    "Snyk",
+                    "AWS ECR Scanning",
+                    "Azure Defender"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Use minimal base images",
+                "implementation": "Use distroless or alpine images to reduce attack surface",
+                "tools": [
+                    "Google Distroless",
+                    "Alpine Linux"
+                ]
+            },
+            {
+                "control_type": "Preventive",
+                "description": "Implement admission control",
+                "implementation": "Block deployment of images with high/critical vulnerabilities",
+                "tools": [
+                    "OPA Gatekeeper",
+                    "Kyverno"
+                ]
+            }
+        ],
+        "detection_methods": [
+            {
+                "method": "Container Registry Scanning",
+                "indicators": [
+                    "Images with CVEs"
+                ],
+                "tools": [
+                    "Trivy",
+                    "AWS ECR",
+                    "Azure ACR",
+                    "GCP Artifact Analysis"
+                ]
+            }
+        ],
+        "references": {
+            "cwe": [
+                "CWE-1104"
+            ],
+            "mitre_attack": [
+                "T1525"
+            ],
+            "cis": [
+                "CIS Kubernetes 5.2.1"
+            ],
+            "external_links": [
+                "https://kubernetes.io/docs/concepts/containers/images/"
+            ]
+        },
+        "compliance_relevance": [
+            "PCI-DSS",
+            "SOC2"
+        ],
+        "architecture_patterns": [
+            "Container-based",
+            "Microservices"
+        ],
+        "tags": [
+            "kubernetes",
+            "container-security",
+            "vulnerability-management",
+            "supply-chain"
+        ]
+    }
+]

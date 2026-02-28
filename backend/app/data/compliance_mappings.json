@@ -1,0 +1,245 @@
+{
+    "PCI_DSS": {
+        "name": "Payment Card Industry Data Security Standard",
+        "version": "4.0",
+        "requirements": {
+            "6.5.1": {
+                "title": "Injection flaws",
+                "threats": [
+                    "SQL_INJECTION",
+                    "NOSQL_INJECTION",
+                    "XSS"
+                ],
+                "description": "Validate input to prevent injection attacks"
+            },
+            "6.5.3": {
+                "title": "Insecure cryptographic storage",
+                "threats": [
+                    "CRYPTOGRAPHIC_FAILURES"
+                ],
+                "description": "Protect stored cardholder data"
+            },
+            "6.5.10": {
+                "title": "Broken authentication and session management",
+                "threats": [
+                    "JWT_ISSUES",
+                    "BROKEN_ACCESS_CONTROL"
+                ],
+                "description": "Implement proper authentication"
+            },
+            "8.2.1": {
+                "title": "Strong authentication",
+                "threats": [
+                    "BROKEN_ACCESS_CONTROL"
+                ],
+                "description": "Use strong authentication mechanisms"
+            },
+            "8.3": {
+                "title": "Secure authentication",
+                "threats": [
+                    "JWT_ISSUES",
+                    "EXPOSED_CREDENTIALS"
+                ],
+                "description": "Secure all authentication credentials"
+            }
+        }
+    },
+    "HIPAA": {
+        "name": "Health Insurance Portability and Accountability Act",
+        "security_rule": {
+            "164.308(a)(1)": {
+                "title": "Security Management Process",
+                "threats": [
+                    "BROKEN_ACCESS_CONTROL",
+                    "CRYPTOGRAPHIC_FAILURES"
+                ],
+                "description": "Implement policies to prevent unauthorized access to ePHI"
+            },
+            "164.308(a)(3)": {
+                "title": "Workforce Security",
+                "threats": [
+                    "BROKEN_ACCESS_CONTROL"
+                ],
+                "description": "Ensure workforce members have appropriate access"
+            },
+            "164.312(a)(1)": {
+                "title": "Access Control",
+                "threats": [
+                    "BROKEN_ACCESS_CONTROL",
+                    "JWT_ISSUES"
+                ],
+                "description": "Implement technical policies for access control"
+            },
+            "164.312(e)(1)": {
+                "title": "Transmission Security",
+                "threats": [
+                    "CRYPTOGRAPHIC_FAILURES",
+                    "SSRF"
+                ],
+                "description": "Implement technical security measures for ePHI transmission"
+            }
+        }
+    },
+    "GDPR": {
+        "name": "General Data Protection Regulation",
+        "articles": {
+            "Article 5": {
+                "title": "Principles relating to processing",
+                "threats": [
+                    "BROKEN_ACCESS_CONTROL",
+                    "CRYPTOGRAPHIC_FAILURES"
+                ],
+                "description": "Personal data must be processed securely"
+            },
+            "Article 25": {
+                "title": "Data protection by design and default",
+                "threats": [
+                    "CRYPTOGRAPHIC_FAILURES",
+                    "BROKEN_ACCESS_CONTROL"
+                ],
+                "description": "Implement appropriate technical measures"
+            },
+            "Article 32": {
+                "title": "Security of processing",
+                "threats": [
+                    "CRYPTOGRAPHIC_FAILURES",
+                    "SQL_INJECTION",
+                    "BROKEN_ACCESS_CONTROL"
+                ],
+                "description": "Implement appropriate security measures"
+            }
+        }
+    },
+    "SOC2": {
+        "name": "Service Organization Control 2",
+        "trust_criteria": {
+            "CC6.1": {
+                "title": "Logical and Physical Access Controls",
+                "threats": [
+                    "BROKEN_ACCESS_CONTROL",
+                    "EXPOSED_CREDENTIALS"
+                ],
+                "description": "Restrict access to authorized users"
+            },
+            "CC6.6": {
+                "title": "Encryption",
+                "threats": [
+                    "CRYPTOGRAPHIC_FAILURES"
+                ],
+                "description": "Protect data with encryption"
+            },
+            "CC6.7": {
+                "title": "System Operations",
+                "threats": [
+                    "SQL_INJECTION",
+                    "SSRF"
+                ],
+                "description": "Detect and prevent processing deviations"
+            },
+            "CC7.2": {
+                "title": "System Monitoring",
+                "threats": [
+                    "BROKEN_ACCESS_CONTROL",
+                    "SQL_INJECTION"
+                ],
+                "description": "Monitor system components"
+            }
+        }
+    },
+    "ISO27001": {
+        "name": "ISO/IEC 27001:2022",
+        "controls": {
+            "A.5.15": {
+                "title": "Access Control",
+                "threats": [
+                    "BROKEN_ACCESS_CONTROL"
+                ],
+                "description": "Control access to information and systems"
+            },
+            "A.8.24": {
+                "title": "Use of Cryptography",
+                "threats": [
+                    "CRYPTOGRAPHIC_FAILURES"
+                ],
+                "description": "Define and implement rules for cryptography"
+            },
+            "A.8.16": {
+                "title": "Monitoring Activities",
+                "threats": [
+                    "SQL_INJECTION",
+                    "SSRF"
+                ],
+                "description": "Monitor for anomalous behavior"
+            }
+        }
+    },
+    "NIST_CSF": {
+        "name": "NIST Cybersecurity Framework",
+        "version": "1.1",
+        "categories": {
+            "PR.AC": {
+                "title": "Identity Management and Access Control",
+                "threats": [
+                    "BROKEN_ACCESS_CONTROL",
+                    "JWT_ISSUES"
+                ],
+                "description": "Limit access to authorized users"
+            },
+            "PR.DS": {
+                "title": "Data Security",
+                "threats": [
+                    "CRYPTOGRAPHIC_FAILURES",
+                    "SQL_INJECTION"
+                ],
+                "description": "Protect data at rest and in transit"
+            },
+            "DE.CM": {
+                "title": "Security Continuous Monitoring",
+                "threats": [
+                    "SQL_INJECTION",
+                    "SSRF",
+                    "BROKEN_ACCESS_CONTROL"
+                ],
+                "description": "Monitor systems for anomalies"
+            }
+        }
+    },
+    "CIS_CONTROLS": {
+        "name": "CIS Critical Security Controls",
+        "version": "8",
+        "controls": {
+            "CIS-3": {
+                "title": "Data Protection",
+                "threats": [
+                    "CRYPTOGRAPHIC_FAILURES"
+                ],
+                "description": "Protect data through encryption"
+            },
+            "CIS-5": {
+                "title": "Account Management",
+                "threats": [
+                    "BROKEN_ACCESS_CONTROL",
+                    "EXPOSED_CREDENTIALS"
+                ],
+                "description": "Manage lifecycle of accounts"
+            },
+            "CIS-6": {
+                "title": "Access Control Management",
+                "threats": [
+                    "BROKEN_ACCESS_CONTROL",
+                    "JWT_ISSUES"
+                ],
+                "description": "Use processes to assign access rights"
+            },
+            "CIS-16": {
+                "title": "Application Software Security",
+                "threats": [
+                    "SQL_INJECTION",
+                    "XSS",
+                    "SSRF"
+                ],
+                "description": "Secure application development"
+            }
+        }
+    }
+}
