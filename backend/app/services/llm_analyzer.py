@@ -32,11 +32,11 @@ class LLMAnalyzer:
             List of threats detected by LLM
         """
         if provider.lower() == "openai":
-            service = OpenAIService(api_key, model or "gpt-4")
+            service = OpenAIService(api_key, model or "gpt-4o-mini")
         elif provider.lower() == "claude":
-            service = ClaudeService(api_key, model or "claude-3-5-sonnet-20241022")
+            service = ClaudeService(api_key, model or "claude-opus-4.6-20260205")
         elif provider.lower() == "gemini":
-            service = GeminiService(api_key, model or "gemini-2.0-flash")
+            service = GeminiService(api_key, model or "gemini-3.1-pro")
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
         

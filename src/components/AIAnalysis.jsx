@@ -3,8 +3,32 @@ import { Sparkles, Key, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
 import { useToast } from './Toast';
 import { API_BASE_URL } from '../config';
 
+const MODEL_OPTIONS = {
+    openai: [
+        { value: 'gpt-5.2', label: 'GPT-5.2 (Latest)' },
+        { value: 'gpt-5', label: 'GPT-5' },
+        { value: 'gpt-5-mini', label: 'GPT-5 Mini' },
+        { value: 'gpt-4o', label: 'GPT-4o' },
+        { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+    ],
+    claude: [
+        { value: 'claude-opus-4.6-20260205', label: 'Claude Opus 4.6 (Latest)' },
+        { value: 'claude-sonnet-4.6-20260217', label: 'Claude Sonnet 4.6' },
+        { value: 'claude-haiku-4.5-20251015', label: 'Claude Haiku 4.5' },
+        { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+    ],
+    gemini: [
+        { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro (Latest)' },
+        { value: 'gemini-3-flash', label: 'Gemini 3 Flash' },
+        { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+        { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+        { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    ],
+};
+
 const AIAnalysis = ({ onAnalysisComplete }) => {
     const [provider, setProvider] = useState('openai');
+    const [model, setModel] = useState(MODEL_OPTIONS.openai[0].value);
     const [apiKey, setApiKey] = useState('');
     const [description, setDescription] = useState('');
     const [projectName, setProjectName] = useState('');
@@ -12,6 +36,12 @@ const AIAnalysis = ({ onAnalysisComplete }) => {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [keyValid, setKeyValid] = useState(null);
     const toast = useToast();
+
+    const handleProviderChange = (newProvider) => {
+        setProvider(newProvider);
+        setModel(MODEL_OPTIONS[newProvider][0].value);
+        setKeyValid(null);
+    };
 
     const validateApiKey = async () => {
         if (!apiKey || apiKey.length < 10) {
@@ -65,13 +95,14 @@ const AIAnalysis = ({ onAnalysisComplete }) => {
                     description: description,
                     llm_provider: provider,
                     api_key: apiKey,
-                    model: null
+                    model: model
                 })
             });
 
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || 'Analysis failed');
+                const errData = await response.json();
+                const msg = typeof errData.detail === 'string' ? errData.detail : Array.isArray(errData.detail) ? errData.detail.map(e => e.msg).join(', ') : 'Analysis failed';
+                throw new Error(msg);
             }
 
             const result = await response.json();
@@ -93,7 +124,7 @@ const AIAnalysis = ({ onAnalysisComplete }) => {
                     <h2 className="text-3xl font-bold text-brand-900 dark:text-white">AI-Powered Threat Analysis</h2>
                 </div>
                 <p className="text-brand-600 dark:text-brand-400">
-                    Enhance your threat detection with OpenAI GPT-4, Claude 3.5 Sonnet, or Google Gemini
+                    Enhance your threat detection with OpenAI GPT-5.2, Claude Opus 4.6, or Google Gemini 3.1
                 </p>
             </div>
 
@@ -104,42 +135,52 @@ const AIAnalysis = ({ onAnalysisComplete }) => {
                 </label>
                 <div className="grid grid-cols-3 gap-4">
                     <button
-                        onClick={() => {
-                            setProvider('openai');
-                            setKeyValid(null);
-                        }}
+                        onClick={() => handleProviderChange('openai')}
                         className={`p-4 border-2 rounded-lg transition-all ${provider === 'openai'
                             ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
                             : 'border-brand-200 dark:border-brand-600 hover:border-brand-300 dark:hover:border-brand-500'}`}
                     >
                         <div className="font-bold text-lg mb-1 dark:text-white">OpenAI</div>
-                        <div className="text-sm text-brand-600 dark:text-brand-400">GPT-4 / GPT-4 Turbo</div>
+                        <div className="text-sm text-brand-600 dark:text-brand-400">GPT-5.2 / GPT-5</div>
                     </button>
                     <button
-                        onClick={() => {
-                            setProvider('claude');
-                            setKeyValid(null);
-                        }}
+                        onClick={() => handleProviderChange('claude')}
                         className={`p-4 border-2 rounded-lg transition-all ${provider === 'claude'
                             ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
                             : 'border-brand-200 dark:border-brand-600 hover:border-brand-300 dark:hover:border-brand-500'}`}
                     >
                         <div className="font-bold text-lg mb-1 dark:text-white">Claude</div>
-                        <div className="text-sm text-brand-600 dark:text-brand-400">Claude 3.5 Sonnet</div>
+                        <div className="text-sm text-brand-600 dark:text-brand-400">Opus 4.6 / Sonnet 4.6</div>
                     </button>
                     <button
-                        onClick={() => {
-                            setProvider('gemini');
-                            setKeyValid(null);
-                        }}
+                        onClick={() => handleProviderChange('gemini')}
                         className={`p-4 border-2 rounded-lg transition-all ${provider === 'gemini'
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                             : 'border-brand-200 dark:border-brand-600 hover:border-brand-300 dark:hover:border-brand-500'}`}
                     >
                         <div className="font-bold text-lg mb-1 dark:text-white">Gemini</div>
-                        <div className="text-sm text-brand-600 dark:text-brand-400">Gemini 2.0 Flash</div>
+                        <div className="text-sm text-brand-600 dark:text-brand-400">3.1 Pro / 3 Flash</div>
                     </button>
                 </div>
+            </div>
+
+            {/* Model Selection */}
+            <div className="bg-white dark:bg-brand-800 border border-brand-200 dark:border-brand-700 rounded-lg p-6 shadow-sm">
+                <label className="block text-sm font-bold text-brand-900 dark:text-white mb-2">
+                    Select Model
+                </label>
+                <select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="w-full px-4 py-2 border border-brand-300 dark:border-brand-600 dark:bg-brand-700 dark:text-white rounded focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                >
+                    {MODEL_OPTIONS[provider].map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                </select>
+                <p className="mt-2 text-xs text-brand-500 dark:text-brand-400">
+                    Make sure your API key has access to the selected model.
+                </p>
             </div>
 
             {/* API Key Input */}

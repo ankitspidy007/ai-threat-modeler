@@ -51,10 +51,43 @@ function App() {
   };
 
   const handleAIAnalysisComplete = (result, name) => {
-    setData(result);
+    // Map backend response -> frontend expected format (same as static analysis)
+    const mappedResult = {
+      summary: result.summary,
+      projectName: result.project_name,
+      score: result.score,
+      architecture: result.architecture,
+      timestamp: new Date().toLocaleString(),
+      threats: (result.threats || []).map(t => ({
+        id: t.id,
+        category: t.category,
+        stride_category: t.stride_category || t.category,
+        title: t.title,
+        severity: t.severity,
+        likelihood: t.likelihood || 'Medium',
+        confidence: t.confidence || 'Medium',
+        tier: t.tier || 'Potential',
+        status: t.status || 'Identified',
+        evidence: t.evidence || [],
+        description: t.description,
+        impact: t.impact || 'Unknown',
+        mitigation: t.mitigation,
+        cwe: t.cwe || [],
+        mitre_attack: t.mitre_attack || [],
+        owasp_top_10: t.owasp_top_10 || [],
+        nist_800_53: t.nist_800_53 || [],
+        affected_components: t.affected_components || [],
+        affected_data_flows: t.affected_data_flows || [],
+        component_id: t.component_id,
+        mapped_controls: t.mapped_controls || null
+      })),
+      diagram: result.mermaid_diagram || "graph LR; Error[No Diagram Generated];",
+      report_markdown: result.report_markdown
+    };
+    setData(mappedResult);
     setProjectName(name);
     // Auto-save AI analysis too
-    saveAnalysis(name, result);
+    saveAnalysis(name, mappedResult);
   };
 
   const handleLoadFromHistory = (analysisData, name) => {

@@ -9,7 +9,7 @@ import json
 class OpenAIService:
     """Service for analyzing architecture using OpenAI GPT models."""
     
-    def __init__(self, api_key: str, model: str = "gpt-4"):
+    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
         """
         Initialize OpenAI service.
         
@@ -69,7 +69,7 @@ class OpenAIService:
             
         except Exception as e:
             print(f"OpenAI analysis failed: {e}")
-            return []
+            raise RuntimeError(f"OpenAI API call failed: {e}") from e
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for threat analysis."""
@@ -147,6 +147,21 @@ Provide detailed, actionable findings with specific evidence from the descriptio
         
         for threat_dict in threats_data.get("threats", []):
             try:
+                # Normalize compliance fields — LLM may return strings or lists
+                owasp_raw = threat_dict.get("owasp_top_10", [])
+                cwe_raw = threat_dict.get("cwe_id") or threat_dict.get("cwe", [])
+                mitre_raw = threat_dict.get("mitre_attack", [])
+                
+                # Ensure they are lists
+                owasp = [owasp_raw] if isinstance(owasp_raw, str) else (owasp_raw or [])
+                cwe = [cwe_raw] if isinstance(cwe_raw, str) else (cwe_raw or [])
+                mitre = [mitre_raw] if isinstance(mitre_raw, str) else (mitre_raw or [])
+                
+                # Ensure evidence is a list
+                evidence = threat_dict.get("evidence", [])
+                if isinstance(evidence, str):
+                    evidence = [evidence]
+                
                 threat = Threat(
                     id=threat_dict.get("id", "LLM-UNKNOWN"),
                     category=threat_dict.get("category", "Unknown"),
@@ -160,16 +175,17 @@ Provide detailed, actionable findings with specific evidence from the descriptio
                         threat_dict.get("likelihood", "Medium")
                     ),
                     mitigation=threat_dict.get("mitigation", ""),
-                    confidence="High",  # LLM threats are high confidence
-                    evidence=threat_dict.get("evidence", []),
+                    confidence="High",
+                    evidence=evidence,
                     status="Identified",
                     tier="Confirmed",
-                    owasp_top_10=threat_dict.get("owasp_top_10"),
-                    cwe_id=threat_dict.get("cwe_id")
+                    owasp_top_10=owasp,
+                    cwe=cwe,
+                    mitre_attack=mitre,
                 )
                 threats.append(threat)
             except Exception as e:
-                print(f"Failed to parse threat: {e}")
+                print(f"Failed to parse LLM threat: {e} | Data: {threat_dict}")
                 continue
         
         return threats

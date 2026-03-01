@@ -10,7 +10,7 @@ from ..models import Threat
 class GeminiService:
     """Service for analyzing architecture using Google Gemini models."""
     
-    def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
+    def __init__(self, api_key: str, model: str = "gemini-3.1-pro"):
         """
         Initialize Gemini service.
         
@@ -92,7 +92,7 @@ class GeminiService:
             
         except Exception as e:
             print(f"Gemini analysis failed: {e}")
-            return []
+            raise RuntimeError(f"Gemini API call failed: {e}") from e
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for threat analysis."""
@@ -174,6 +174,19 @@ Return your response as a JSON object with a "threats" array as specified in the
         
         for threat_dict in threats_data.get("threats", []):
             try:
+                # Normalize compliance fields — LLM may return strings or lists
+                owasp_raw = threat_dict.get("owasp_top_10", [])
+                cwe_raw = threat_dict.get("cwe_id") or threat_dict.get("cwe", [])
+                mitre_raw = threat_dict.get("mitre_attack", [])
+                
+                owasp = [owasp_raw] if isinstance(owasp_raw, str) else (owasp_raw or [])
+                cwe = [cwe_raw] if isinstance(cwe_raw, str) else (cwe_raw or [])
+                mitre = [mitre_raw] if isinstance(mitre_raw, str) else (mitre_raw or [])
+                
+                evidence = threat_dict.get("evidence", [])
+                if isinstance(evidence, str):
+                    evidence = [evidence]
+                
                 threat = Threat(
                     id=threat_dict.get("id", "LLM-UNKNOWN"),
                     category=threat_dict.get("category", "Unknown"),
@@ -188,11 +201,12 @@ Return your response as a JSON object with a "threats" array as specified in the
                     ),
                     mitigation=threat_dict.get("mitigation", ""),
                     confidence="High",
-                    evidence=threat_dict.get("evidence", []),
+                    evidence=evidence,
                     status="Identified",
                     tier="Confirmed",
-                    owasp_top_10=threat_dict.get("owasp_top_10"),
-                    cwe_id=threat_dict.get("cwe_id")
+                    owasp_top_10=owasp,
+                    cwe=cwe,
+                    mitre_attack=mitre,
                 )
                 threats.append(threat)
             except Exception as e:
