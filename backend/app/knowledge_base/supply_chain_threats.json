@@ -1,0 +1,386 @@
+[
+    {
+        "id": "SC-001",
+        "category": "Tampering",
+        "resource_type": [
+            "Service",
+            "API",
+            "Web Server"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "dependency_scanning",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "sbom",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Vulnerable Third-Party Dependencies",
+            "description": "Application uses open-source libraries with known CVEs. Attackers exploit publicly disclosed vulnerabilities in dependencies (Log4Shell, Spring4Shell patterns)."
+        },
+        "risk": {
+            "severity": "Critical",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 88.0
+        },
+        "mitigation": {
+            "primary": "Implement automated dependency scanning (Dependabot, Snyk, OWASP Dependency-Check) in CI/CD pipeline.",
+            "defense_in_depth": [
+                "SBOM generation",
+                "Dependency pinning",
+                "Private registry mirroring",
+                "Automated patching"
+            ]
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A06:2021-Vulnerable and Outdated Components"
+            ],
+            "cwe": [
+                "CWE-1104"
+            ],
+            "nist_800_53": [
+                "SA-11",
+                "RA-5"
+            ]
+        },
+        "tags": [
+            "supply-chain",
+            "dependencies",
+            "cve",
+            "sca"
+        ]
+    },
+    {
+        "id": "SC-002",
+        "category": "Tampering",
+        "resource_type": [
+            "Service",
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "ci_cd_security",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "pipeline_hardening",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "CI/CD Pipeline Compromise",
+            "description": "Build pipeline lacks integrity controls. Attackers can inject malicious code through compromised build scripts, poisoned base images, or tampered artifacts (SolarWinds-style attack)."
+        },
+        "risk": {
+            "severity": "Critical",
+            "likelihood": "Medium",
+            "impact": "Critical",
+            "risk_score": 90.0
+        },
+        "mitigation": {
+            "primary": "Secure CI/CD pipeline: use signed commits, artifact signing, ephemeral build agents, and SLSA compliance.",
+            "defense_in_depth": [
+                "Build provenance attestation",
+                "Pinned base images",
+                "Reproducible builds",
+                "Pipeline access controls"
+            ]
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A08:2021-Software and Data Integrity Failures"
+            ],
+            "cwe": [
+                "CWE-494"
+            ],
+            "nist_800_53": [
+                "SA-12",
+                "SI-7"
+            ]
+        },
+        "tags": [
+            "supply-chain",
+            "ci-cd",
+            "build-security",
+            "slsa"
+        ]
+    },
+    {
+        "id": "SC-003",
+        "category": "Tampering",
+        "resource_type": [
+            "Service",
+            "Web Server"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "container_scanning",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "type",
+                        "op": "in",
+                        "value": [
+                            "Service",
+                            "API",
+                            "Web Server"
+                        ]
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Malicious Container Base Images",
+            "description": "Application deployed using unverified container images that may contain backdoors, cryptominers, or vulnerability exploits."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 75.0
+        },
+        "mitigation": {
+            "primary": "Use only verified, signed base images from trusted registries. Scan all images with Trivy, Grype, or Clair.",
+            "defense_in_depth": [
+                "Image signing (Cosign/Notary)",
+                "Admission controllers",
+                "Minimal/distroless base images"
+            ]
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A08:2021-Software and Data Integrity Failures"
+            ],
+            "cwe": [
+                "CWE-829"
+            ],
+            "nist_800_53": [
+                "SA-12",
+                "CM-7"
+            ]
+        },
+        "tags": [
+            "supply-chain",
+            "container",
+            "image-security"
+        ]
+    },
+    {
+        "id": "SC-004",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "Service",
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "secrets_in_code",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "secrets_scanning",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Hardcoded Secrets in Source Code",
+            "description": "API keys, database passwords, or tokens committed to source code repositories. Exposed through code repos, container images, or CI/CD logs."
+        },
+        "risk": {
+            "severity": "Critical",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 87.0
+        },
+        "mitigation": {
+            "primary": "Use secrets management (HashiCorp Vault, AWS Secrets Manager). Implement pre-commit hooks for secret detection (git-secrets, TruffleHog).",
+            "defense_in_depth": [
+                "Environment variables",
+                "Secrets rotation",
+                "Git history scanning",
+                "Repository access controls"
+            ]
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A07:2021-Identification and Authentication Failures"
+            ],
+            "cwe": [
+                "CWE-798",
+                "CWE-540"
+            ],
+            "nist_800_53": [
+                "IA-5",
+                "SC-12"
+            ]
+        },
+        "tags": [
+            "supply-chain",
+            "secrets",
+            "credentials",
+            "code-security"
+        ]
+    },
+    {
+        "id": "SC-005",
+        "category": "Tampering",
+        "resource_type": [
+            "Service",
+            "API",
+            "Web Server"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "sri_enabled",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "cdn_integrity",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "CDN/Third-Party Script Tampering",
+            "description": "JavaScript or CSS loaded from third-party CDNs without Subresource Integrity (SRI) verification. Compromised CDN can inject malicious code (Magecart-style attacks)."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 72.0
+        },
+        "mitigation": {
+            "primary": "Use Subresource Integrity (SRI) for all third-party resources. Self-host critical dependencies.",
+            "defense_in_depth": [
+                "Content Security Policy",
+                "Vendor monitoring",
+                "Third-party audit"
+            ]
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A08:2021-Software and Data Integrity Failures"
+            ],
+            "cwe": [
+                "CWE-353"
+            ],
+            "nist_800_53": [
+                "SI-7",
+                "SC-8"
+            ]
+        },
+        "tags": [
+            "supply-chain",
+            "cdn",
+            "sri",
+            "third-party"
+        ]
+    },
+    {
+        "id": "SC-006",
+        "category": "Tampering",
+        "resource_type": [
+            "Service",
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "code_review",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "branch_protection",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "low"
+        },
+        "threat": {
+            "title": "Insider Threat via Code Commit",
+            "description": "Malicious or compromised developers can push backdoored code without peer review. Lack of branch protection enables direct pushes to main branch."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Low",
+            "impact": "Critical",
+            "risk_score": 68.0
+        },
+        "mitigation": {
+            "primary": "Enforce branch protection rules, mandatory code reviews, and signed commits.",
+            "defense_in_depth": [
+                "Automated SAST scanning",
+                "Behavioral analytics",
+                "Separation of duties",
+                "Two-person integrity"
+            ]
+        },
+        "mapped_controls": {
+            "cwe": [
+                "CWE-507"
+            ],
+            "nist_800_53": [
+                "CM-5",
+                "SA-15"
+            ]
+        },
+        "tags": [
+            "supply-chain",
+            "insider-threat",
+            "code-review"
+        ]
+    }
+]

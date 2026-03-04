@@ -1,0 +1,371 @@
+[
+    {
+        "id": "EMG-001",
+        "category": "Tampering",
+        "resource_type": [
+            "Service",
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "ml_model_serving",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "input_validation",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "AI/ML Model Adversarial Attack",
+            "description": "Machine learning models are vulnerable to adversarial inputs — crafted inputs designed to cause misclassification or unexpected behavior. Model inference endpoints lack input validation."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 72.0
+        },
+        "mitigation": {
+            "primary": "Implement adversarial input detection, model robustness testing, and input validation on all ML serving endpoints.",
+            "defense_in_depth": [
+                "Model versioning",
+                "Ensemble methods",
+                "Anomaly detection on inputs",
+                "Human-in-the-loop for critical decisions"
+            ]
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A04:2021-Insecure Design"
+            ],
+            "cwe": [
+                "CWE-20"
+            ]
+        },
+        "tags": [
+            "ai-ml",
+            "adversarial",
+            "model-security",
+            "emerging"
+        ]
+    },
+    {
+        "id": "EMG-002",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "Service",
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "ml_model_serving",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "model_access_control",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "ML Model Data Extraction",
+            "description": "Attackers can extract training data or model weights through repeated queries (model inversion, membership inference). Exposes proprietary training data and PII."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 70.0
+        },
+        "mitigation": {
+            "primary": "Rate limit model inference endpoints. Apply differential privacy to training. Monitor for extraction patterns.",
+            "defense_in_depth": [
+                "Output perturbation",
+                "Query auditing",
+                "Model watermarking",
+                "Federated learning"
+            ]
+        },
+        "mapped_controls": {
+            "cwe": [
+                "CWE-200"
+            ],
+            "nist_800_53": [
+                "AC-3",
+                "SI-10"
+            ]
+        },
+        "tags": [
+            "ai-ml",
+            "model-extraction",
+            "privacy",
+            "emerging"
+        ]
+    },
+    {
+        "id": "EMG-003",
+        "category": "Tampering",
+        "resource_type": [
+            "Service",
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "llm_integration",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "prompt_sanitization",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "LLM Prompt Injection",
+            "description": "Applications using Large Language Models are vulnerable to prompt injection. Attackers craft inputs that override system prompts, causing the LLM to leak data, execute unintended actions, or bypass guardrails."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 82.0
+        },
+        "mitigation": {
+            "primary": "Implement prompt sanitization, output filtering, and guardrails. Separate system and user prompts. Never trust LLM output for security decisions.",
+            "defense_in_depth": [
+                "Input/output content filtering",
+                "Canary tokens",
+                "Rate limiting",
+                "Human review for sensitive operations"
+            ]
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A03:2021-Injection"
+            ],
+            "cwe": [
+                "CWE-74"
+            ]
+        },
+        "tags": [
+            "ai-ml",
+            "llm",
+            "prompt-injection",
+            "emerging"
+        ]
+    },
+    {
+        "id": "EMG-004",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "Service",
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "llm_integration",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "data_leakage_prevention",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "LLM Training Data Leakage",
+            "description": "LLM responses may inadvertently reveal sensitive training data, including PII, proprietary information, or internal documentation that was included in fine-tuning datasets."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 74.0
+        },
+        "mitigation": {
+            "primary": "Sanitize training data. Implement output filtering for PII detection. Use retrieval-augmented generation instead of fine-tuning with sensitive data.",
+            "defense_in_depth": [
+                "PII detection in outputs",
+                "Data classification before training",
+                "Regular red-teaming"
+            ]
+        },
+        "mapped_controls": {
+            "cwe": [
+                "CWE-200",
+                "CWE-359"
+            ],
+            "nist_800_53": [
+                "AC-3",
+                "SI-19"
+            ]
+        },
+        "tags": [
+            "ai-ml",
+            "llm",
+            "data-leakage",
+            "emerging"
+        ]
+    },
+    {
+        "id": "EMG-005",
+        "category": "Denial of Service",
+        "resource_type": [
+            "Service",
+            "API",
+            "Serverless"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "type",
+                        "op": "in",
+                        "value": [
+                            "Serverless",
+                            "Lambda",
+                            "Function"
+                        ]
+                    },
+                    {
+                        "field": "concurrency_limits",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Serverless Function Abuse",
+            "description": "Serverless functions without concurrency limits or invocation controls. Attackers trigger massive invocations causing extreme cloud billing or resource exhaustion."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 76.0
+        },
+        "mitigation": {
+            "primary": "Set concurrency limits, execution timeouts, and billing alerts on all serverless functions.",
+            "defense_in_depth": [
+                "Reserved concurrency",
+                "Dead letter queues",
+                "Cost anomaly detection",
+                "API Gateway throttling"
+            ]
+        },
+        "mapped_controls": {
+            "cwe": [
+                "CWE-770"
+            ],
+            "nist_800_53": [
+                "SC-5",
+                "SC-6"
+            ]
+        },
+        "tags": [
+            "serverless",
+            "lambda",
+            "cloud-billing",
+            "emerging"
+        ]
+    },
+    {
+        "id": "EMG-006",
+        "category": "Spoofing",
+        "resource_type": [
+            "Service",
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "api_key_auth",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "key_rotation",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "API Key Leakage via AI Assistants",
+            "description": "Developers using AI coding assistants may inadvertently expose API keys through code suggestions that are shared with third-party AI models, or through autocomplete in public repos."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 70.0
+        },
+        "mitigation": {
+            "primary": "Use short-lived tokens instead of long-lived API keys. Implement automated key rotation and secret scanning.",
+            "defense_in_depth": [
+                "AI tool data classification",
+                "Code review for secrets",
+                "Key usage monitoring",
+                "Just-in-time access"
+            ]
+        },
+        "mapped_controls": {
+            "cwe": [
+                "CWE-798"
+            ],
+            "nist_800_53": [
+                "IA-5",
+                "SC-12"
+            ]
+        },
+        "tags": [
+            "ai-ml",
+            "api-keys",
+            "secrets",
+            "emerging"
+        ]
+    }
+]

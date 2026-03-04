@@ -273,7 +273,7 @@
         ]
     },
     {
-        "threat_id": "DB-001",
+        "threat_id": "AUTH-DB-001",
         "threat_name": "SQL Injection via Stored Procedures",
         "component": "Database",
         "cloud_platform": [

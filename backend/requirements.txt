@@ -19,6 +19,7 @@ spacy>=3.7.0,<4.0.0
 # Embedding & Semantic Search
 sentence-transformers>=2.6.0,<4.0.0
 faiss-cpu>=1.8.0,<2.0.0
+scikit-learn>=1.4.0,<2.0.0
 
 # AI/LLM Integration (Optional - for LLM-enhanced analysis)
 openai>=1.0.0

@@ -1,6 +1,7 @@
 import os
+import json
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
@@ -159,6 +160,74 @@ async def clear_cache():
     count = len(_analysis_cache)
     _analysis_cache = {}
     return {"message": f"Cleared {count} cached entries"}
+
+
+@app.websocket("/ws/analyze")
+async def websocket_analyze(websocket: WebSocket):
+    """
+    WebSocket endpoint for streaming analysis progress.
+    
+    Client sends: {"description": "...", "project_name": "..."}
+    Server streams: {"type": "progress", "phase": "...", "progress": 0-100, "message": "..."}
+    Final message:  {"type": "result", "data": <full analysis result>}
+    """
+    await websocket.accept()
+    
+    try:
+        # Receive analysis request
+        data = await websocket.receive_text()
+        payload = json.loads(data)
+        
+        description = payload.get('description', '')
+        project_name = payload.get('project_name', 'Untitled Project')
+        
+        if not description or len(description) < 10:
+            await websocket.send_json({
+                "type": "error",
+                "message": "Description must be at least 10 characters"
+            })
+            await websocket.close()
+            return
+        
+        # Create streaming analyzer with WebSocket callback
+        from .engine.streaming_analyzer import StreamingAnalyzer
+        
+        async def send_progress(event):
+            try:
+                await websocket.send_json(event)
+            except Exception:
+                pass  # Client may have disconnected
+        
+        streaming_analyzer = StreamingAnalyzer(progress_callback=send_progress)
+        result = await streaming_analyzer.analyze_streaming(description, project_name)
+        
+        # Send final result
+        result_dict = result.model_dump() if hasattr(result, 'model_dump') else result.dict()
+        await websocket.send_json({
+            "type": "result",
+            "data": result_dict
+        })
+        
+    except WebSocketDisconnect:
+        pass  # Client disconnected
+    except json.JSONDecodeError:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Invalid JSON payload"
+        })
+    except Exception as e:
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"Analysis failed: {str(e)}"
+            })
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 @app.post("/analyze-with-llm", response_model=AnalysisResult)

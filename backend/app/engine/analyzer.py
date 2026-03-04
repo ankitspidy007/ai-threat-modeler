@@ -18,11 +18,23 @@ except ImportError:
     logger.warning("Semantic matcher not available")
 
 try:
+    from .stride_classifier import get_stride_classifier
+    STRIDE_CLASSIFIER_AVAILABLE = True
+except ImportError:
+    STRIDE_CLASSIFIER_AVAILABLE = False
+
+try:
     from .attack_chain import AttackChainAnalyzer, SeverityClassifier
     ATTACK_CHAIN_AVAILABLE = True
 except ImportError:
     ATTACK_CHAIN_AVAILABLE = False
     logger.warning("Attack chain analyzer not available")
+
+try:
+    from .architecture_intelligence import ArchitectureIntelligence
+    ARCH_INTELLIGENCE_AVAILABLE = True
+except ImportError:
+    ARCH_INTELLIGENCE_AVAILABLE = False
 
 
 # STRIDE Category Mapping
@@ -48,20 +60,32 @@ class ThreatAnalyzer:
         self._semantic_matcher = None
         self._attack_chain_analyzer = None
         self._severity_classifier = None
+        self._stride_classifier = None
         self._init_ml_components()
     
     def _init_ml_components(self):
         """Initialize ML/NLP components (graceful fallback)."""
+        all_threats = self.rule_engine.get_all_threats()
+        
         if SEMANTIC_AVAILABLE:
             try:
                 self._semantic_matcher = get_semantic_matcher()
                 # Vectorize the knowledge base for semantic search
-                all_threats = self.rule_engine.get_all_threats()
                 if all_threats:
                     self._semantic_matcher.vectorize_knowledge_base(all_threats)
                     logger.info(f"Vectorized {len(all_threats)} threats for semantic search")
             except Exception as e:
                 logger.warning(f"Semantic matcher init failed: {e}")
+        
+        if STRIDE_CLASSIFIER_AVAILABLE:
+            try:
+                self._stride_classifier = get_stride_classifier()
+                if all_threats:
+                    self._stride_classifier.load_or_train(all_threats)
+                    if self._stride_classifier.is_trained:
+                        logger.info(f"STRIDE classifier ready (accuracy: {self._stride_classifier.accuracy:.1%})")
+            except Exception as e:
+                logger.warning(f"STRIDE classifier init failed: {e}")
         
         if ATTACK_CHAIN_AVAILABLE:
             try:
@@ -81,6 +105,19 @@ class ThreatAnalyzer:
         graph = builder.get_graph()
         
         raw_threats = []
+
+        # ========================================
+        # PHASE 0.5 (NEW): Architecture Intelligence
+        # ========================================
+        arch_insights = []
+        if ARCH_INTELLIGENCE_AVAILABLE:
+            try:
+                intel = ArchitectureIntelligence()
+                insights = intel.analyze(graph, architecture)
+                arch_insights = intel.get_insights_dict()
+                logger.info(f"Architecture intelligence found {len(arch_insights)} insights")
+            except Exception as e:
+                logger.warning(f"Architecture intelligence failed: {e}")
 
         # Analyze Components (Nodes) — Rule-based
         for node_id, data in graph.nodes(data=True):
@@ -173,9 +210,15 @@ class ThreatAnalyzer:
         if attack_chain_summary:
             result.attack_chains = attack_chain_summary
         
+        # Add architecture insights
+        if arch_insights:
+            result.architecture_insights = arch_insights
+        
         # Indicate NLP/ML enhancement status
         result.ml_enhanced = {
             'semantic_matching': self._semantic_matcher is not None,
+            'stride_classifier': self._stride_classifier is not None and self._stride_classifier.is_trained,
+            'stride_classifier_accuracy': self._stride_classifier.accuracy if self._stride_classifier and self._stride_classifier.is_trained else 0.0,
             'severity_classifier': self._severity_classifier is not None,
             'attack_chains': self._attack_chain_analyzer is not None,
             'nlp_parser': architecture.metadata.get('nlp_enhanced', False),

@@ -1,0 +1,590 @@
+[
+    {
+        "id": "DB-001",
+        "category": "Tampering",
+        "resource_type": [
+            "Database",
+            "DB"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "type",
+                        "op": "in",
+                        "value": [
+                            "Database",
+                            "DB"
+                        ]
+                    },
+                    {
+                        "field": "input_validation",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "SQL Injection via Unsanitized Queries",
+            "description": "Database queries constructed using string concatenation without parameterized queries or ORM, allowing SQL injection attacks."
+        },
+        "risk": {
+            "severity": "Critical",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 95.0,
+            "affected_assets": [
+                "All Database Data"
+            ],
+            "business_impact": [
+                "Complete Data Breach",
+                "Data Manipulation",
+                "System Compromise"
+            ]
+        },
+        "mitigation": {
+            "primary": "Use parameterized queries or ORM exclusively. Never concatenate user input into SQL statements.",
+            "defense_in_depth": [
+                "WAF with SQL injection rules",
+                "Least privilege DB accounts",
+                "Database activity monitoring"
+            ],
+            "verification": "Run SQLMap or similar tools against all database-connected endpoints."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A03:2021-Injection"
+            ],
+            "cwe": [
+                "CWE-89"
+            ],
+            "nist_800_53": [
+                "SI-10",
+                "SI-16"
+            ]
+        },
+        "tags": [
+            "database",
+            "sql-injection",
+            "injection"
+        ]
+    },
+    {
+        "id": "DB-002",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "Database",
+            "DB"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "type",
+                        "op": "in",
+                        "value": [
+                            "Database",
+                            "DB"
+                        ]
+                    },
+                    {
+                        "field": "encryption_at_rest",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Unencrypted Data at Rest",
+            "description": "Database stores sensitive data without encryption at rest, making it vulnerable to data theft if storage media is compromised."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 80.0,
+            "affected_assets": [
+                "Stored Data",
+                "PII"
+            ],
+            "business_impact": [
+                "Data Breach",
+                "Regulatory Non-Compliance"
+            ]
+        },
+        "mitigation": {
+            "primary": "Enable Transparent Data Encryption (TDE) or application-level encryption for sensitive columns.",
+            "defense_in_depth": [
+                "Key management (KMS/HSM)",
+                "Column-level encryption for PII",
+                "Encrypted backups"
+            ],
+            "verification": "Verify encryption is enabled on all production databases."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A02:2021-Cryptographic Failures"
+            ],
+            "cwe": [
+                "CWE-311"
+            ],
+            "nist_800_53": [
+                "SC-28",
+                "SC-12"
+            ]
+        },
+        "tags": [
+            "database",
+            "encryption",
+            "data-at-rest"
+        ]
+    },
+    {
+        "id": "DB-003",
+        "category": "Spoofing",
+        "resource_type": [
+            "Database",
+            "DB"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "default_credentials",
+                        "op": "==",
+                        "value": true
+                    },
+                    {
+                        "field": "auth_type",
+                        "op": "==",
+                        "value": "none"
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Database Default or Missing Credentials",
+            "description": "Database is using default credentials (admin/admin, root/root) or has no authentication, allowing unauthorized access."
+        },
+        "risk": {
+            "severity": "Critical",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 93.0,
+            "affected_assets": [
+                "All Database Data"
+            ],
+            "business_impact": [
+                "Complete Data Breach",
+                "System Compromise"
+            ]
+        },
+        "mitigation": {
+            "primary": "Change all default credentials immediately. Enforce strong password policies and use certificate-based authentication.",
+            "defense_in_depth": [
+                "IAM database authentication",
+                "Network-level access control",
+                "Secrets rotation"
+            ],
+            "verification": "Audit database credentials against default credential lists."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A07:2021-Identification and Authentication Failures"
+            ],
+            "cwe": [
+                "CWE-798"
+            ],
+            "nist_800_53": [
+                "IA-5",
+                "CM-6"
+            ]
+        },
+        "tags": [
+            "database",
+            "credentials",
+            "default-password"
+        ]
+    },
+    {
+        "id": "DB-004",
+        "category": "Repudiation",
+        "resource_type": [
+            "Database",
+            "DB"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "type",
+                        "op": "in",
+                        "value": [
+                            "Database",
+                            "DB"
+                        ]
+                    },
+                    {
+                        "field": "audit_logging",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Missing Database Audit Logging",
+            "description": "Database does not log access, queries, or modifications. Malicious or unauthorized changes cannot be detected or attributed."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 72.0,
+            "affected_assets": [
+                "Database Operations"
+            ],
+            "business_impact": [
+                "Compliance Violation",
+                "Incident Response Failure"
+            ]
+        },
+        "mitigation": {
+            "primary": "Enable database audit logging for all DDL, DML, and login events. Forward logs to SIEM.",
+            "defense_in_depth": [
+                "Database activity monitoring (DAM)",
+                "Privileged access management",
+                "Change tracking"
+            ],
+            "verification": "Verify audit logs capture read, write, and admin operations."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A09:2021-Security Logging and Monitoring Failures"
+            ],
+            "cwe": [
+                "CWE-778"
+            ],
+            "nist_800_53": [
+                "AU-3",
+                "AU-6",
+                "AU-12"
+            ]
+        },
+        "tags": [
+            "database",
+            "logging",
+            "audit",
+            "compliance"
+        ]
+    },
+    {
+        "id": "DB-005",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "Database",
+            "DB"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "type",
+                        "op": "in",
+                        "value": [
+                            "Database",
+                            "DB"
+                        ]
+                    },
+                    {
+                        "field": "backup_encryption",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Unencrypted Database Backups",
+            "description": "Database backups are stored without encryption, potentially exposing all data if backup storage is compromised."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 75.0,
+            "affected_assets": [
+                "Backup Data",
+                "Historical Records"
+            ],
+            "business_impact": [
+                "Data Breach",
+                "Regulatory Non-Compliance"
+            ]
+        },
+        "mitigation": {
+            "primary": "Encrypt all database backups using AES-256. Store encryption keys separately from backup data.",
+            "defense_in_depth": [
+                "Backup access controls",
+                "Backup integrity verification",
+                "Automated backup testing"
+            ],
+            "verification": "Verify backup encryption is enabled and test restore procedures."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A02:2021-Cryptographic Failures"
+            ],
+            "cwe": [
+                "CWE-312"
+            ],
+            "nist_800_53": [
+                "SC-28",
+                "CP-9"
+            ]
+        },
+        "tags": [
+            "database",
+            "backup",
+            "encryption"
+        ]
+    },
+    {
+        "id": "DB-006",
+        "category": "Elevation of Privilege",
+        "resource_type": [
+            "Database",
+            "DB"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "least_privilege",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "shared_accounts",
+                        "op": "==",
+                        "value": true
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Excessive Database Privileges",
+            "description": "Application uses a database account with excessive privileges (e.g., DBA/root access). SQL injection or compromised credentials grant full database control."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 78.0,
+            "affected_assets": [
+                "Database Schema",
+                "All Tables"
+            ],
+            "business_impact": [
+                "Data Manipulation",
+                "Schema Destruction"
+            ]
+        },
+        "mitigation": {
+            "primary": "Apply least privilege: create dedicated accounts with minimal permissions (SELECT only for read services).",
+            "defense_in_depth": [
+                "Row-level security",
+                "Schema-level isolation",
+                "Stored procedure restrictions"
+            ],
+            "verification": "Audit database user permissions against application requirements."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A01:2021-Broken Access Control"
+            ],
+            "cwe": [
+                "CWE-250"
+            ],
+            "nist_800_53": [
+                "AC-6",
+                "AC-3"
+            ]
+        },
+        "tags": [
+            "database",
+            "privileges",
+            "least-privilege"
+        ]
+    },
+    {
+        "id": "DB-007",
+        "category": "Tampering",
+        "resource_type": [
+            "Database",
+            "DB",
+            "Cache"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "type",
+                        "op": "in",
+                        "value": [
+                            "Cache",
+                            "Redis",
+                            "Memcached"
+                        ]
+                    },
+                    {
+                        "field": "auth_type",
+                        "op": "==",
+                        "value": "none"
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Unauthenticated Cache Access",
+            "description": "Cache layer (Redis/Memcached) has no authentication enabled, allowing any network-accessible client to read/modify cached data including session tokens."
+        },
+        "risk": {
+            "severity": "Critical",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 88.0,
+            "affected_assets": [
+                "Session Data",
+                "Cached Credentials"
+            ],
+            "business_impact": [
+                "Session Hijacking",
+                "Data Tampering"
+            ]
+        },
+        "mitigation": {
+            "primary": "Enable authentication (Redis AUTH, ACLs). Bind to private network interfaces only.",
+            "defense_in_depth": [
+                "TLS encryption for cache connections",
+                "Network segmentation",
+                "Access logging"
+            ],
+            "verification": "Verify cache requires authentication and is not exposed to public networks."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A07:2021-Identification and Authentication Failures"
+            ],
+            "cwe": [
+                "CWE-306"
+            ],
+            "nist_800_53": [
+                "IA-2",
+                "SC-7"
+            ]
+        },
+        "tags": [
+            "database",
+            "cache",
+            "redis",
+            "authentication"
+        ]
+    },
+    {
+        "id": "DB-008",
+        "category": "Denial of Service",
+        "resource_type": [
+            "Database",
+            "DB"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "type",
+                        "op": "in",
+                        "value": [
+                            "Database",
+                            "DB"
+                        ]
+                    },
+                    {
+                        "field": "connection_pooling",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Database Connection Exhaustion",
+            "description": "No connection pooling or connection limits configured. Attackers can exhaust database connections causing service-wide outages."
+        },
+        "risk": {
+            "severity": "Medium",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 62.0,
+            "affected_assets": [
+                "Database Availability"
+            ],
+            "business_impact": [
+                "Service Outage",
+                "Cascading Failures"
+            ]
+        },
+        "mitigation": {
+            "primary": "Implement connection pooling (PgBouncer, HikariCP). Set maximum connection limits.",
+            "defense_in_depth": [
+                "Connection timeout enforcement",
+                "Query timeout limits",
+                "Database health monitoring"
+            ],
+            "verification": "Load test to verify connection pool behavior under stress."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A05:2021-Security Misconfiguration"
+            ],
+            "cwe": [
+                "CWE-400"
+            ],
+            "nist_800_53": [
+                "SC-5",
+                "SC-6"
+            ]
+        },
+        "tags": [
+            "database",
+            "availability",
+            "connection-pooling"
+        ]
+    }
+]

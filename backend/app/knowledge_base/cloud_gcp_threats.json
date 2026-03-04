@@ -306,7 +306,7 @@
                     "GCP Cloud Logging"
                 ]
             }
-        },
+        ],
         "references": {
             "cwe": [
                 "CWE-306"

@@ -276,13 +276,33 @@ class SemanticThreatMatcher:
                     f"(removed {len(threats) - len(kept)} duplicates)")
         return kept
     
-    def classify_stride_zero_shot(self, text: str) -> Dict[str, float]:
+    def classify_stride(self, text: str) -> Dict[str, float]:
         """
-        Zero-shot STRIDE classification using embedding similarity.
+        STRIDE classification using trained classifier (primary) or 
+        zero-shot embedding similarity (fallback).
         
         Returns:
             Dict mapping STRIDE category to confidence score
         """
+        # Try trained classifier first
+        try:
+            from .stride_classifier import get_stride_classifier
+            classifier = get_stride_classifier()
+            if classifier.is_trained:
+                category, scores = classifier.predict(text)
+                if scores:
+                    return scores
+        except Exception as e:
+            logger.debug(f"Trained classifier not available: {e}")
+        
+        # Fallback to zero-shot embedding similarity
+        return self._classify_stride_zero_shot(text)
+    
+    # Keep old name as alias for backward compat
+    classify_stride_zero_shot = classify_stride
+    
+    def _classify_stride_zero_shot(self, text: str) -> Dict[str, float]:
+        """Zero-shot STRIDE classification using embedding similarity (fallback)."""
         stride_descriptions = {
             'Spoofing': 'Identity spoofing, authentication bypass, credential theft, impersonation, unauthorized access through fake identity',
             'Tampering': 'Data tampering, code injection, parameter manipulation, unauthorized data modification, integrity violation',

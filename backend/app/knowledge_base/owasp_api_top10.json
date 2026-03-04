@@ -1,0 +1,721 @@
+[
+    {
+        "id": "OWASP-API-001",
+        "category": "Elevation of Privilege",
+        "resource_type": [
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "authorization_model",
+                        "op": "==",
+                        "value": "none"
+                    },
+                    {
+                        "field": "object_level_auth",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Broken Object Level Authorization (BOLA)",
+            "description": "API endpoints do not validate that the requesting user is authorized to access the specific object. Attackers can manipulate object IDs to access other users' data."
+        },
+        "risk": {
+            "severity": "Critical",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 92.0,
+            "affected_assets": [
+                "User Data",
+                "Business Objects"
+            ],
+            "business_impact": [
+                "Data Breach",
+                "Privacy Violation",
+                "Regulatory Fines"
+            ]
+        },
+        "mitigation": {
+            "primary": "Implement object-level authorization checks on every API endpoint that accesses a data source using user-supplied IDs.",
+            "defense_in_depth": [
+                "ABAC policies",
+                "Resource-based access control",
+                "API gateway authorization"
+            ],
+            "verification": "Test with automated tools like AuthZ testing or manual IDOR testing."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A01:2021-Broken Access Control"
+            ],
+            "cwe": [
+                "CWE-639"
+            ],
+            "nist_800_53": [
+                "AC-3",
+                "AC-6"
+            ]
+        },
+        "tags": [
+            "api",
+            "authorization",
+            "idor",
+            "bola"
+        ]
+    },
+    {
+        "id": "OWASP-API-002",
+        "category": "Spoofing",
+        "resource_type": [
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "auth_type",
+                        "op": "==",
+                        "value": "none"
+                    },
+                    {
+                        "field": "auth_type",
+                        "op": "==",
+                        "value": "basic"
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Broken Authentication",
+            "description": "Authentication mechanisms are weak or missing, allowing attackers to compromise tokens, credentials, or exploit flaws to assume other users' identities."
+        },
+        "risk": {
+            "severity": "Critical",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 90.0,
+            "affected_assets": [
+                "User Accounts",
+                "API Keys"
+            ],
+            "business_impact": [
+                "Account Takeover",
+                "Identity Theft"
+            ]
+        },
+        "mitigation": {
+            "primary": "Use industry-standard authentication (OAuth 2.0, OpenID Connect). Implement strong password policies and MFA.",
+            "defense_in_depth": [
+                "Token expiration",
+                "Rate limiting on auth endpoints",
+                "Credential stuffing protection"
+            ],
+            "verification": "Perform authentication testing including brute force and token manipulation."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A07:2021-Identification and Authentication Failures"
+            ],
+            "cwe": [
+                "CWE-287",
+                "CWE-307"
+            ],
+            "nist_800_53": [
+                "IA-2",
+                "IA-5",
+                "IA-8"
+            ]
+        },
+        "tags": [
+            "api",
+            "authentication",
+            "brute-force"
+        ]
+    },
+    {
+        "id": "OWASP-API-003",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "response_filtering",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "field_level_auth",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Broken Object Property Level Authorization",
+            "description": "API returns excessive data properties that the user should not have access to. Lack of field-level filtering exposes sensitive attributes."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 78.0,
+            "affected_assets": [
+                "User PII",
+                "Internal Metadata"
+            ],
+            "business_impact": [
+                "Data Leakage",
+                "Privacy Violation"
+            ]
+        },
+        "mitigation": {
+            "primary": "Implement response filtering to return only necessary fields. Use DTOs/view models to control API response shape.",
+            "defense_in_depth": [
+                "Field-level encryption",
+                "Schema validation",
+                "API response auditing"
+            ],
+            "verification": "Review API responses for unnecessary data exposure."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A01:2021-Broken Access Control"
+            ],
+            "cwe": [
+                "CWE-213",
+                "CWE-200"
+            ],
+            "nist_800_53": [
+                "AC-3",
+                "AC-4"
+            ]
+        },
+        "tags": [
+            "api",
+            "data-exposure",
+            "mass-assignment"
+        ]
+    },
+    {
+        "id": "OWASP-API-004",
+        "category": "Denial of Service",
+        "resource_type": [
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "rate_limiting",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "pagination",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Unrestricted Resource Consumption",
+            "description": "API does not limit the number or size of resources a client can request. Attackers can exhaust server resources through excessive API calls or large payloads."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 82.0,
+            "affected_assets": [
+                "Server Resources",
+                "API Availability"
+            ],
+            "business_impact": [
+                "Service Outage",
+                "Revenue Loss"
+            ]
+        },
+        "mitigation": {
+            "primary": "Implement rate limiting, request size limits, and pagination. Use API throttling at the gateway level.",
+            "defense_in_depth": [
+                "Query complexity limits",
+                "Timeout enforcement",
+                "Resource quotas per user"
+            ],
+            "verification": "Load test APIs to verify rate limiting and resource consumption controls."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A05:2021-Security Misconfiguration"
+            ],
+            "cwe": [
+                "CWE-770",
+                "CWE-400"
+            ],
+            "nist_800_53": [
+                "SC-5",
+                "SC-6"
+            ]
+        },
+        "tags": [
+            "api",
+            "rate-limiting",
+            "dos",
+            "resource-exhaustion"
+        ]
+    },
+    {
+        "id": "OWASP-API-005",
+        "category": "Elevation of Privilege",
+        "resource_type": [
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "type",
+                        "op": "in",
+                        "value": [
+                            "API",
+                            "Service"
+                        ]
+                    },
+                    {
+                        "field": "function_level_auth",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Broken Function Level Authorization",
+            "description": "API does not enforce function-level access control. Regular users can access admin endpoints or perform privileged operations by guessing endpoint URLs."
+        },
+        "risk": {
+            "severity": "Critical",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 85.0,
+            "affected_assets": [
+                "Admin Functions",
+                "System Configuration"
+            ],
+            "business_impact": [
+                "Privilege Escalation",
+                "System Compromise"
+            ]
+        },
+        "mitigation": {
+            "primary": "Implement role-based access control (RBAC) with explicit authorization checks on every function/endpoint.",
+            "defense_in_depth": [
+                "API gateway policy enforcement",
+                "Admin endpoint isolation",
+                "Audit logging for sensitive operations"
+            ],
+            "verification": "Test all admin endpoints with unprivileged users."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A01:2021-Broken Access Control"
+            ],
+            "cwe": [
+                "CWE-285"
+            ],
+            "nist_800_53": [
+                "AC-3",
+                "AC-6"
+            ]
+        },
+        "tags": [
+            "api",
+            "authorization",
+            "privilege-escalation",
+            "rbac"
+        ]
+    },
+    {
+        "id": "OWASP-API-006",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "API",
+            "Service"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "api_versioning",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "deprecated_endpoints",
+                        "op": "==",
+                        "value": true
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Unrestricted Access to Sensitive Business Flows",
+            "description": "APIs expose sensitive business functionality without proper controls, potentially allowing automated abuse of business processes like ticket scalping or credential stuffing."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 75.0,
+            "affected_assets": [
+                "Business Logic",
+                "Revenue"
+            ],
+            "business_impact": [
+                "Financial Loss",
+                "Business Logic Abuse"
+            ]
+        },
+        "mitigation": {
+            "primary": "Identify and protect sensitive business flows with bot detection, CAPTCHA, and behavioral analysis.",
+            "defense_in_depth": [
+                "Device fingerprinting",
+                "Transaction velocity checks",
+                "Anomaly detection"
+            ],
+            "verification": "Test business flows for automated abuse scenarios."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A04:2021-Insecure Design"
+            ],
+            "cwe": [
+                "CWE-799"
+            ],
+            "nist_800_53": [
+                "SI-10",
+                "AC-7"
+            ]
+        },
+        "tags": [
+            "api",
+            "business-logic",
+            "abuse",
+            "bot-protection"
+        ]
+    },
+    {
+        "id": "OWASP-API-007",
+        "category": "Tampering",
+        "resource_type": [
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "input_validation",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "ssrf_protection",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Server-Side Request Forgery (SSRF)",
+            "description": "API accepts user-supplied URLs or resource identifiers without validation, allowing attackers to make the server send requests to internal resources or external systems."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 80.0,
+            "affected_assets": [
+                "Internal Services",
+                "Cloud Metadata"
+            ],
+            "business_impact": [
+                "Internal Network Access",
+                "Credential Theft"
+            ]
+        },
+        "mitigation": {
+            "primary": "Validate and whitelist all user-supplied URLs. Block access to internal networks and cloud metadata endpoints.",
+            "defense_in_depth": [
+                "URL schema enforcement",
+                "Network segmentation",
+                "Egress filtering"
+            ],
+            "verification": "Test with SSRF payloads targeting internal services and cloud metadata endpoints."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A10:2021-Server-Side Request Forgery"
+            ],
+            "cwe": [
+                "CWE-918"
+            ],
+            "nist_800_53": [
+                "SC-7",
+                "SI-10"
+            ]
+        },
+        "tags": [
+            "api",
+            "ssrf",
+            "injection",
+            "server-side"
+        ]
+    },
+    {
+        "id": "OWASP-API-008",
+        "category": "Combined",
+        "resource_type": [
+            "API",
+            "Service"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "security_headers",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "cors_misconfigured",
+                        "op": "==",
+                        "value": true
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Security Misconfiguration",
+            "description": "API has insecure default configurations, missing security headers, permissive CORS policy, or unnecessary HTTP methods enabled."
+        },
+        "risk": {
+            "severity": "Medium",
+            "likelihood": "High",
+            "impact": "Medium",
+            "risk_score": 65.0,
+            "affected_assets": [
+                "API Security Controls"
+            ],
+            "business_impact": [
+                "Cross-Origin Attacks",
+                "Information Leakage"
+            ]
+        },
+        "mitigation": {
+            "primary": "Harden API configurations: set restrictive CORS, enable security headers, disable debug mode, remove unnecessary HTTP methods.",
+            "defense_in_depth": [
+                "Automated configuration scanning",
+                "Infrastructure-as-code templates",
+                "Security baselines"
+            ],
+            "verification": "Scan API configuration with tools like OWASP ZAP or Postman security tests."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A05:2021-Security Misconfiguration"
+            ],
+            "cwe": [
+                "CWE-16"
+            ],
+            "nist_800_53": [
+                "CM-6",
+                "CM-7"
+            ]
+        },
+        "tags": [
+            "api",
+            "configuration",
+            "cors",
+            "headers"
+        ]
+    },
+    {
+        "id": "OWASP-API-009",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "API",
+            "Service"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "asset_management",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "api_inventory",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "low"
+        },
+        "threat": {
+            "title": "Improper Inventory Management",
+            "description": "Old, deprecated, or undocumented API versions remain accessible. Shadow APIs and zombie endpoints create unmonitored attack surfaces."
+        },
+        "risk": {
+            "severity": "Medium",
+            "likelihood": "Medium",
+            "impact": "Medium",
+            "risk_score": 58.0,
+            "affected_assets": [
+                "API Surface",
+                "Legacy Systems"
+            ],
+            "business_impact": [
+                "Unknown Attack Surface",
+                "Compliance Risk"
+            ]
+        },
+        "mitigation": {
+            "primary": "Maintain an API inventory. Deprecate and decommission old API versions. Use API gateway for centralized management.",
+            "defense_in_depth": [
+                "API discovery scanning",
+                "Version sunset policies",
+                "OpenAPI/Swagger documentation"
+            ],
+            "verification": "Audit all externally accessible API endpoints against the inventory."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A09:2021-Security Logging and Monitoring Failures"
+            ],
+            "cwe": [
+                "CWE-1059"
+            ],
+            "nist_800_53": [
+                "CM-8",
+                "SA-22"
+            ]
+        },
+        "tags": [
+            "api",
+            "inventory",
+            "shadow-api",
+            "deprecation"
+        ]
+    },
+    {
+        "id": "OWASP-API-010",
+        "category": "Tampering",
+        "resource_type": [
+            "API",
+            "Service"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "api_consumption_validation",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "third_party_integration",
+                        "op": "==",
+                        "value": true
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Unsafe Consumption of APIs",
+            "description": "Application blindly trusts data from third-party APIs without validation. Responses from external APIs may be tampered with, injected, or contain malicious data."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 72.0,
+            "affected_assets": [
+                "Application Data",
+                "Business Logic"
+            ],
+            "business_impact": [
+                "Data Integrity",
+                "Injection Attacks"
+            ]
+        },
+        "mitigation": {
+            "primary": "Validate, sanitize, and type-check all data received from third-party APIs. Use schemas to enforce expected response formats.",
+            "defense_in_depth": [
+                "API response caching",
+                "Circuit breaker patterns",
+                "Third-party API monitoring"
+            ],
+            "verification": "Test with malformed responses from mock third-party APIs."
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A08:2021-Software and Data Integrity Failures"
+            ],
+            "cwe": [
+                "CWE-20"
+            ],
+            "nist_800_53": [
+                "SI-10",
+                "SA-9"
+            ]
+        },
+        "tags": [
+            "api",
+            "third-party",
+            "input-validation",
+            "supply-chain"
+        ]
+    }
+]

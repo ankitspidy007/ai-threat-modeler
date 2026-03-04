@@ -60,5 +60,6 @@ class AnalysisResult(BaseModel):
     timestamp: Optional[str] = None  # For tracking when analysis was done
     # NLP/DL enhancement fields
     attack_chains: Optional[Dict[str, Any]] = None  # Attack chain analysis summary
-    ml_enhanced: Optional[Dict[str, bool]] = None  # Which ML features were active
+    ml_enhanced: Optional[Dict[str, Any]] = None  # Which ML features were active
+    architecture_insights: Optional[List[Dict[str, Any]]] = None  # Architecture intelligence insights
 

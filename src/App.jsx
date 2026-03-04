@@ -5,6 +5,7 @@ import AIAnalysis from './components/AIAnalysis';
 import AnalysisHistory from './components/AnalysisHistory';
 import Sidebar from './components/Sidebar';
 import { analyzeSystem } from './services/mockAi';
+import { useStreamingAnalysis } from './hooks/useStreamingAnalysis';
 import { saveAnalysis } from './utils/storage';
 import { RotateCcw, Zap, Sparkles, Clock } from 'lucide-react';
 import { useToast } from './components/Toast';
@@ -18,6 +19,7 @@ function App() {
     return localStorage.getItem('theme') === 'dark';
   });
   const toast = useToast();
+  const streaming = useStreamingAnalysis();
 
   useEffect(() => {
     if (darkMode) {
@@ -29,20 +31,31 @@ function App() {
   }, [darkMode]);
 
   const handleAnalyze = async (description, name) => {
-    setIsAnalyzing(true);
     setProjectName(name);
     setData(null);
+    setIsAnalyzing(true);
+
     try {
-      const result = await analyzeSystem(description, name);
+      // Try WebSocket streaming first
+      const result = await streaming.analyze(description, name);
       setData(result);
       saveAnalysis(name, result);
       toast.success(`Analysis complete! Found ${result.threats.length} potential threats.`, 'Success');
-    } catch (error) {
-      console.error("Analysis failed", error);
-      toast.error(
-        error.message || 'Failed to analyze system. Please check your connection and try again.',
-        'Analysis Failed'
-      );
+    } catch (wsError) {
+      // Fallback to REST API
+      console.warn('WebSocket failed, falling back to REST:', wsError.message);
+      try {
+        const result = await analyzeSystem(description, name);
+        setData(result);
+        saveAnalysis(name, result);
+        toast.success(`Analysis complete! Found ${result.threats.length} potential threats.`, 'Success');
+      } catch (error) {
+        console.error('Analysis failed', error);
+        toast.error(
+          error.message || 'Failed to analyze system. Please check your connection and try again.',
+          'Analysis Failed'
+        );
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -164,10 +177,30 @@ function App() {
 
               {!data && <ThreatInput onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing} />}
 
-              {isAnalyzing && (
-                <div className="flex flex-col items-center justify-center py-20 animate-pulse">
-                  <div className="w-14 h-14 border-4 border-brand-200 dark:border-brand-700 border-t-brand-primary rounded-full animate-spin mb-4" />
-                  <p className="text-brand-primary font-mono font-medium text-sm">ANALYZING ARCHITECTURE...</p>
+              {(isAnalyzing || streaming.isAnalyzing) && (
+                <div className="flex flex-col items-center justify-center py-16 space-y-6 animate-fade-in-up">
+                  {/* Live progress bar */}
+                  <div className="w-full max-w-md">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-mono font-medium text-brand-primary capitalize">
+                        {streaming.phase?.replace(/_/g, ' ') || 'Connecting...'}
+                      </span>
+                      <span className="text-xs font-mono text-brand-500 dark:text-brand-400">
+                        {Math.round(streaming.progress || 0)}%
+                      </span>
+                    </div>
+                    <div className="h-2 bg-brand-100 dark:bg-brand-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-brand-primary to-brand-accent rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${streaming.progress || 2}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-brand-500 dark:text-brand-400 mt-2 text-center">
+                      {streaming.message || 'Initializing analysis pipeline...'}
+                    </p>
+                  </div>
+                  {/* Spinner */}
+                  <div className="w-10 h-10 border-3 border-brand-200 dark:border-brand-700 border-t-brand-primary rounded-full animate-spin" />
                 </div>
               )}
 

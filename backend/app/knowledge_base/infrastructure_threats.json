@@ -1,0 +1,444 @@
+[
+    {
+        "id": "INFRA-001",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "Service",
+            "API",
+            "Web Server"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "protocol",
+                        "op": "==",
+                        "value": "http"
+                    },
+                    {
+                        "field": "data_sensitivity",
+                        "op": "in",
+                        "value": [
+                            "pii",
+                            "financial",
+                            "credentials"
+                        ]
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Unencrypted Data in Transit",
+            "description": "Sensitive data transmitted over unencrypted HTTP connections. Attackers can intercept credentials, PII, and financial data via network sniffing or MITM attacks."
+        },
+        "risk": {
+            "severity": "Critical",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 90.0
+        },
+        "mitigation": {
+            "primary": "Enforce TLS 1.2+ on all connections. Redirect HTTP to HTTPS. Enable HSTS.",
+            "defense_in_depth": [
+                "Certificate pinning",
+                "Perfect forward secrecy",
+                "Automated certificate management"
+            ]
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A02:2021-Cryptographic Failures"
+            ],
+            "cwe": [
+                "CWE-319"
+            ],
+            "nist_800_53": [
+                "SC-8",
+                "SC-23"
+            ]
+        },
+        "tags": [
+            "infrastructure",
+            "encryption",
+            "tls",
+            "transport"
+        ]
+    },
+    {
+        "id": "INFRA-002",
+        "category": "Denial of Service",
+        "resource_type": [
+            "Service",
+            "API",
+            "Web Server",
+            "Load Balancer"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "ddos_protection",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "public_access",
+                        "op": "==",
+                        "value": true
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "DDoS Vulnerability on Public Endpoints",
+            "description": "Internet-facing services without DDoS protection are vulnerable to volumetric, protocol, and application-layer DDoS attacks."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "High",
+            "impact": "High",
+            "risk_score": 82.0
+        },
+        "mitigation": {
+            "primary": "Deploy DDoS protection (AWS Shield, Cloudflare, Azure DDoS Protection). Use CDN for traffic absorption.",
+            "defense_in_depth": [
+                "Rate limiting",
+                "Geographic IP filtering",
+                "Auto-scaling",
+                "Traffic analysis"
+            ]
+        },
+        "mapped_controls": {
+            "cwe": [
+                "CWE-400"
+            ],
+            "nist_800_53": [
+                "SC-5",
+                "SC-7"
+            ]
+        },
+        "tags": [
+            "infrastructure",
+            "ddos",
+            "availability"
+        ]
+    },
+    {
+        "id": "INFRA-003",
+        "category": "Elevation of Privilege",
+        "resource_type": [
+            "Service",
+            "Web Server"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "network_segmentation",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "flat_network",
+                        "op": "==",
+                        "value": true
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Flat Network Without Segmentation",
+            "description": "All services share the same network segment without isolation. A breach in any component gives lateral movement to all other services including databases."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 78.0
+        },
+        "mitigation": {
+            "primary": "Implement network segmentation with VPCs, subnets, and security groups. Isolate databases in private subnets.",
+            "defense_in_depth": [
+                "Micro-segmentation",
+                "Zero-trust network",
+                "East-west traffic inspection"
+            ]
+        },
+        "mapped_controls": {
+            "cwe": [
+                "CWE-1008"
+            ],
+            "nist_800_53": [
+                "SC-7",
+                "AC-4"
+            ]
+        },
+        "tags": [
+            "infrastructure",
+            "network",
+            "segmentation",
+            "lateral-movement"
+        ]
+    },
+    {
+        "id": "INFRA-004",
+        "category": "Tampering",
+        "resource_type": [
+            "Service",
+            "Web Server"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "dns_security",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "dnssec",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": false,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "DNS Spoofing / Hijacking",
+            "description": "DNS resolution without DNSSEC validation. Attackers can redirect users to malicious servers through DNS cache poisoning."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 72.0
+        },
+        "mitigation": {
+            "primary": "Enable DNSSEC for domain validation. Use DNS-over-HTTPS (DoH) or DNS-over-TLS (DoT).",
+            "defense_in_depth": [
+                "DNS monitoring",
+                "Certificate transparency",
+                "DNS firewall"
+            ]
+        },
+        "mapped_controls": {
+            "cwe": [
+                "CWE-350"
+            ],
+            "nist_800_53": [
+                "SC-20",
+                "SC-21"
+            ]
+        },
+        "tags": [
+            "infrastructure",
+            "dns",
+            "spoofing"
+        ]
+    },
+    {
+        "id": "INFRA-005",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "Service",
+            "API",
+            "Web Server"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "error_handling",
+                        "op": "==",
+                        "value": "verbose"
+                    },
+                    {
+                        "field": "debug_mode",
+                        "op": "==",
+                        "value": true
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Verbose Error Messages and Debug Mode",
+            "description": "Application returns detailed stack traces, SQL errors, or is running in debug mode, revealing internal architecture and technology details."
+        },
+        "risk": {
+            "severity": "Medium",
+            "likelihood": "High",
+            "impact": "Medium",
+            "risk_score": 55.0
+        },
+        "mitigation": {
+            "primary": "Disable debug mode in production. Return generic error messages. Log details server-side only.",
+            "defense_in_depth": [
+                "Custom error pages",
+                "Error monitoring (Sentry)",
+                "Log sanitization"
+            ]
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A05:2021-Security Misconfiguration"
+            ],
+            "cwe": [
+                "CWE-209"
+            ],
+            "nist_800_53": [
+                "SI-11"
+            ]
+        },
+        "tags": [
+            "infrastructure",
+            "error-handling",
+            "debug",
+            "information-leak"
+        ]
+    },
+    {
+        "id": "INFRA-006",
+        "category": "Spoofing",
+        "resource_type": [
+            "Service",
+            "API"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "tls_version",
+                        "op": "in",
+                        "value": [
+                            "1.0",
+                            "1.1"
+                        ]
+                    },
+                    {
+                        "field": "protocol",
+                        "op": "==",
+                        "value": "https"
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
+        "threat": {
+            "title": "Outdated TLS Version",
+            "description": "Services using TLS 1.0 or 1.1 which have known vulnerabilities (POODLE, BEAST). These versions are deprecated by major browsers and standards."
+        },
+        "risk": {
+            "severity": "High",
+            "likelihood": "Medium",
+            "impact": "High",
+            "risk_score": 70.0
+        },
+        "mitigation": {
+            "primary": "Enforce TLS 1.2 minimum, prefer TLS 1.3. Disable SSLv3, TLS 1.0, and TLS 1.1.",
+            "defense_in_depth": [
+                "Strong cipher suites only",
+                "Forward secrecy",
+                "Certificate management"
+            ]
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A02:2021-Cryptographic Failures"
+            ],
+            "cwe": [
+                "CWE-326"
+            ],
+            "nist_800_53": [
+                "SC-8",
+                "SC-13"
+            ]
+        },
+        "tags": [
+            "infrastructure",
+            "tls",
+            "cryptography",
+            "deprecated"
+        ]
+    },
+    {
+        "id": "INFRA-007",
+        "category": "Information Disclosure",
+        "resource_type": [
+            "Service",
+            "API",
+            "Web Server"
+        ],
+        "detection": {
+            "logic": {
+                "operator": "OR",
+                "conditions": [
+                    {
+                        "field": "security_headers",
+                        "op": "==",
+                        "value": false
+                    },
+                    {
+                        "field": "csp_header",
+                        "op": "==",
+                        "value": false
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "medium"
+        },
+        "threat": {
+            "title": "Missing Security Headers",
+            "description": "Web application missing security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) enabling XSS, clickjacking, and MIME sniffing attacks."
+        },
+        "risk": {
+            "severity": "Medium",
+            "likelihood": "Medium",
+            "impact": "Medium",
+            "risk_score": 52.0
+        },
+        "mitigation": {
+            "primary": "Implement all recommended security headers: CSP, X-Frame-Options, X-Content-Type-Options, HSTS, Referrer-Policy.",
+            "defense_in_depth": [
+                "WAF header injection",
+                "Response middleware",
+                "Automated header scanning"
+            ]
+        },
+        "mapped_controls": {
+            "owasp_top_10": [
+                "A05:2021-Security Misconfiguration"
+            ],
+            "cwe": [
+                "CWE-693"
+            ],
+            "nist_800_53": [
+                "SC-8",
+                "CM-6"
+            ]
+        },
+        "tags": [
+            "infrastructure",
+            "headers",
+            "csp",
+            "xss-protection"
+        ]
+    }
+]
