@@ -1,8 +1,18 @@
-# AI Threat Modeler (AITM)
+# AI Threat Modeler (AITM) v2.0
 
-An advanced, AI-powered threat modeling tool that automatically identifies security vulnerabilities from system architecture descriptions. Built with React + Vite frontend and FastAPI backend, featuring STRIDE-based analysis, multi-LLM integration, and comprehensive compliance mapping.
+An advanced, AI-powered threat modeling tool that automatically identifies security vulnerabilities from system architecture descriptions. Built with React + Vite frontend and FastAPI backend, featuring **NLP-powered parsing (spaCy)**, **semantic threat matching (sentence-transformers + FAISS)**, **attack chain analysis (NetworkX)**, **ML-based severity classification**, STRIDE-based analysis, multi-LLM integration with RAG, and comprehensive compliance mapping.
 
 ## 🎯 Key Features
+
+### 🧠 NLP & Deep Learning (NEW in v2.0)
+- **spaCy NER**: Named Entity Recognition extracts technologies, services, and protocols from architecture text
+- **Dependency Parsing**: Linguistic analysis identifies data flows from natural language descriptions
+- **Semantic Threat Matching**: Sentence-transformer embeddings + FAISS vector search find threats that keyword rules miss
+- **Zero-Shot STRIDE Classification**: Classifies novel threats into STRIDE categories using embedding similarity
+- **Attack Chain Analysis**: NetworkX-based threat graph modeling discovers multi-step attack paths and critical chokepoints
+- **ML Severity Classification**: Embedding-based classifier refines threat severity with architectural context
+- **Semantic Deduplication**: Cosine similarity replaces naive keyword overlap for smarter threat merging
+- **RAG for LLM**: Retrieval-Augmented Generation injects relevant KB threats into LLM prompts
 
 ### Intelligent Threat Detection
 - **Comprehensive Knowledge Base**: 10+ modular threat databases covering cloud (AWS, Azure, GCP), OWASP Top 10, authentication/authorization, containers/Kubernetes, supply chain, infrastructure, and emerging threats
@@ -54,18 +64,22 @@ Frontend (React + Vite)            Backend (FastAPI + Python)
 ├── components/                    ├── app/
 │   ├── ThreatDashboard.jsx        │   ├── main.py (API endpoints)
 │   ├── ThreatInput.jsx            │   ├── models.py (Pydantic models)
-│   ├── RiskMatrix.jsx             │   ├── engine/
-│   ├── StrideChart.jsx            │   │   ├── parser.py (NLP architecture parser)
-│   ├── AIAnalysis.jsx             │   │   ├── rules.py (threat rule engine)
-│   ├── AnalysisHistory.jsx        │   │   ├── analyzer.py (orchestrator)
-│   ├── Toast.jsx                  │   │   ├── reporter.py (markdown reports)
-│   └── ErrorBoundary.jsx         │   │   ├── mermaid_generator.py
-├── utils/                         │   │   └── graph_builder.py
-│   ├── pdfGenerator.js            │   ├── services/
-│   └── storage.js                 │   │   ├── llm_analyzer.py (multi-LLM)
-├── services/                      │   │   ├── openai_service.py
-│   └── mockAi.js                  │   │   ├── claude_service.py
-└── config.js                      │   │   └── gemini_service.py
+│   ├── Sidebar.jsx                │   ├── engine/
+│   ├── RiskMatrix.jsx             │   │   ├── parser.py (NLP-enhanced parser)
+│   ├── StrideChart.jsx            │   │   ├── nlp_processor.py ★ spaCy NER
+│   ├── AIAnalysis.jsx             │   │   ├── embedding_service.py ★ Embeddings
+│   ├── AnalysisHistory.jsx        │   │   ├── semantic_matcher.py ★ Vector search
+│   ├── Toast.jsx                  │   │   ├── attack_chain.py ★ Attack paths
+│   └── ErrorBoundary.jsx         │   │   ├── rules.py (threat rule engine)
+├── utils/                         │   │   ├── analyzer.py (ML-enhanced)
+│   ├── pdfGenerator.js            │   │   ├── reporter.py (markdown reports)
+│   └── storage.js                 │   │   ├── mermaid_generator.py
+├── services/                      │   │   └── graph_builder.py
+│   └── mockAi.js                  │   ├── services/
+└── config.js                      │   │   ├── llm_analyzer.py (RAG + dedup)
+                                   │   │   ├── openai_service.py
+                                   │   │   ├── claude_service.py
+                                   │   │   └── gemini_service.py
                                    │   ├── knowledge_base/
                                    │   │   ├── threats.json (legacy rules)
                                    │   │   ├── cloud_aws_threats.json
@@ -80,6 +94,8 @@ Frontend (React + Vite)            Backend (FastAPI + Python)
                                    │       ├── framework_mappings.json
                                    │       ├── compliance_mappings.json
                                    │       └── stride_colors.json
+                                   ├── tests/
+                                   │   └── test_nlp_dl.py (20 golden tests)
                                    └── requirements.txt
 ```
 
@@ -123,6 +139,8 @@ cd ai-threat-modeler
 # Install dependencies
 npm install
 cd backend && pip install -r requirements.txt && cd ..
+# Optional: Download spaCy model for full NLP features
+# python -m spacy download en_core_web_sm
 
 # Start the application (single command)
 npm start
@@ -161,6 +179,9 @@ npm install
 ```bash
 cd backend
 pip install -r requirements.txt
+
+# Optional: Download spaCy NLP model (enables NER-based entity extraction)
+python -m spacy download en_core_web_sm
 ```
 
 ## ▶️ Running the Application
@@ -354,10 +375,10 @@ KNOWN ISSUES:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/analyze` | `POST` | Analyze architecture description using rule-based engine |
-| `/analyze-with-llm` | `POST` | Analyze with LLM enhancement (OpenAI, Claude, or Gemini) |
+| `/analyze` | `POST` | Analyze architecture (rule-based + semantic + attack chains) |
+| `/analyze-with-llm` | `POST` | Analyze with LLM enhancement + RAG context + semantic dedup |
 | `/validate-api-key` | `POST` | Validate an LLM provider API key |
-| `/health` | `GET` | Health check and version info |
+| `/health` | `GET` | Health check, version, and ML feature status |
 | `/cache` | `DELETE` | Clear the analysis cache |
 | `/docs` | `GET` | Interactive Swagger UI documentation |
 
@@ -425,8 +446,10 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 Built with:
 - React + Vite (Frontend)
 - FastAPI + Pydantic (Backend)
-- NetworkX (Graph analysis)
-- spaCy (NLP-based parsing)
+- spaCy (NLP — NER + dependency parsing)
+- sentence-transformers (Semantic embeddings)
+- FAISS (Vector similarity search)
+- NetworkX (Graph analysis + attack chain modeling)
 - Mermaid.js (Architecture diagrams)
 - jsPDF + html2canvas (PDF report generation)
 - Tailwind CSS (Styling)

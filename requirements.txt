@@ -25,28 +25,29 @@ All dependencies use `^` notation for automatic minor and patch updates:
 - **autoprefixer** (^10.4.23) - CSS vendor prefixes
 - **postcss** (^8.5.6) - CSS processing
 
+## Backend Dependencies (Python)
+See `backend/requirements.txt` for full list. Key NLP/DL libraries:
+
+- **spacy** (>=3.7.0) - NER and dependency parsing
+- **sentence-transformers** (>=2.6.0) - Semantic embeddings
+- **faiss-cpu** (>=1.8.0) - Vector similarity search
+- **numpy** (>=1.26.0) - Numerical operations
+- **networkx** (>=3.4.0) - Attack chain graph analysis
+- **fastapi** (>=0.115.0) - REST API framework
+- **pydantic** (>=2.6.0) - Data validation
+
 ## Installation
 
 ```bash
-# Install all dependencies
+# Install all frontend dependencies
 npm install
 
-# Update to latest compatible versions
-npm update
+# Install backend dependencies
+cd backend
+pip install -r requirements.txt
 
-# Check for outdated packages
-npm outdated
-
-# Security audit
-npm audit
-npm audit fix
+# Optional: spaCy NLP model
+python -m spacy download en_core_web_sm
 ```
-
-## Notes
-
-- All dependencies are managed in `package.json`
-- Lock file (`package-lock.json`) ensures consistent installs
-- Use `^` notation to allow minor and patch updates while preventing breaking changes
-- Run `npm update` regularly to get security patches and bug fixes
 
 For more information, see [DEPENDENCY_MANAGEMENT.md](docs/DEPENDENCY_MANAGEMENT.md)

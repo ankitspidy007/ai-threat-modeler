@@ -52,7 +52,7 @@ goto parse_args
 
 echo =====================================================
 echo   AITM - AI Threat Modeler v2.0
-echo   STRIDE Analysis ^| Multi-LLM ^| Compliance Mapping
+echo   NLP ^| Semantic Search ^| Attack Chains ^| Multi-LLM
 echo =====================================================
 echo.
 
@@ -139,9 +139,12 @@ echo Frontend: http://localhost:%FRONTEND_PORT%
 echo API Docs: http://127.0.0.1:%BACKEND_PORT%/docs
 echo.
 echo Features:
+echo   - NLP-powered architecture parsing (spaCy)
+echo   - Semantic threat matching (sentence-transformers + FAISS)
+echo   - Attack chain analysis (NetworkX)
 echo   - STRIDE-based threat analysis
 echo   - CWE, MITRE ATT^&CK, OWASP, NIST compliance mapping
-echo   - Multi-LLM integration (OpenAI, Claude, Gemini)
+echo   - Multi-LLM integration with RAG (OpenAI, Claude, Gemini)
 echo   - PDF reports with architecture diagrams
 echo.
 echo Press any key to open the application in your browser...

@@ -8,7 +8,7 @@ param(
 
 Write-Host "=====================================================" -ForegroundColor Cyan
 Write-Host "  AITM - AI Threat Modeler v2.0" -ForegroundColor Cyan
-Write-Host "  STRIDE Analysis | Multi-LLM | Compliance Mapping" -ForegroundColor Cyan
+Write-Host "  NLP | Semantic Search | Attack Chains | Multi-LLM" -ForegroundColor Cyan
 Write-Host "=====================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -97,9 +97,12 @@ Write-Host "API Docs: " -NoNewline
 Write-Host "http://127.0.0.1:$BackendPort/docs" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Features:" -ForegroundColor Cyan
+Write-Host "  - NLP-powered architecture parsing (spaCy)" -ForegroundColor Gray
+Write-Host "  - Semantic threat matching (FAISS vector search)" -ForegroundColor Gray
+Write-Host "  - Attack chain analysis (NetworkX)" -ForegroundColor Gray
 Write-Host "  - STRIDE-based threat analysis" -ForegroundColor Gray
 Write-Host "  - CWE, MITRE ATT&CK, OWASP, NIST compliance mapping" -ForegroundColor Gray
-Write-Host "  - Multi-LLM integration (OpenAI, Claude, Gemini)" -ForegroundColor Gray
+Write-Host "  - Multi-LLM with RAG (OpenAI, Claude, Gemini)" -ForegroundColor Gray
 Write-Host "  - PDF reports with architecture diagrams" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Opening application in browser..." -ForegroundColor Yellow

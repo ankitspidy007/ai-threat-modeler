@@ -1,3 +1,4 @@
+import logging
 from typing import List, Dict
 from .graph_builder import GraphBuilder
 from .rules import RuleEngine
@@ -5,6 +6,24 @@ from .parser import ArchitectureParser
 from .mermaid_generator import generate_mermaid
 from .reporter import ReportGenerator
 from ..models import AnalysisResult, Threat, SystemArchitecture
+
+logger = logging.getLogger(__name__)
+
+# Import NLP/DL modules (graceful fallback)
+try:
+    from .semantic_matcher import get_semantic_matcher
+    SEMANTIC_AVAILABLE = True
+except ImportError:
+    SEMANTIC_AVAILABLE = False
+    logger.warning("Semantic matcher not available")
+
+try:
+    from .attack_chain import AttackChainAnalyzer, SeverityClassifier
+    ATTACK_CHAIN_AVAILABLE = True
+except ImportError:
+    ATTACK_CHAIN_AVAILABLE = False
+    logger.warning("Attack chain analyzer not available")
+
 
 # STRIDE Category Mapping
 STRIDE_MAPPING = {
@@ -26,6 +45,31 @@ STRIDE_MAPPING = {
 class ThreatAnalyzer:
     def __init__(self):
         self.rule_engine = RuleEngine()
+        self._semantic_matcher = None
+        self._attack_chain_analyzer = None
+        self._severity_classifier = None
+        self._init_ml_components()
+    
+    def _init_ml_components(self):
+        """Initialize ML/NLP components (graceful fallback)."""
+        if SEMANTIC_AVAILABLE:
+            try:
+                self._semantic_matcher = get_semantic_matcher()
+                # Vectorize the knowledge base for semantic search
+                all_threats = self.rule_engine.get_all_threats()
+                if all_threats:
+                    self._semantic_matcher.vectorize_knowledge_base(all_threats)
+                    logger.info(f"Vectorized {len(all_threats)} threats for semantic search")
+            except Exception as e:
+                logger.warning(f"Semantic matcher init failed: {e}")
+        
+        if ATTACK_CHAIN_AVAILABLE:
+            try:
+                self._attack_chain_analyzer = AttackChainAnalyzer()
+                self._severity_classifier = SeverityClassifier()
+                logger.info("Attack chain analyzer and severity classifier initialized")
+            except Exception as e:
+                logger.warning(f"Attack chain init failed: {e}")
 
     def analyze_from_text(self, description: str, project_name: str = "Untitled Project") -> AnalysisResult:
         parser = ArchitectureParser()
@@ -38,12 +82,12 @@ class ThreatAnalyzer:
         
         raw_threats = []
 
-        # Analyze Components (Nodes)
+        # Analyze Components (Nodes) — Rule-based
         for node_id, data in graph.nodes(data=True):
             threats = self.rule_engine.evaluate_component(node_id, data)
             raw_threats.extend(threats)
 
-        # Analyze Flows (Edges)
+        # Analyze Flows (Edges) — Rule-based
         for u, v, data in graph.edges(data=True):
             threats = self.rule_engine.evaluate_flow(u, v, data)
             raw_threats.extend(threats)
@@ -55,9 +99,22 @@ class ThreatAnalyzer:
         raw_threats.extend(known_issues_threats)
         
         # ========================================
+        # PHASE 1.5 (NEW): Semantic Threat Discovery
+        # ========================================
+        if self._semantic_matcher:
+            semantic_threats = self._discover_semantic_threats(architecture, graph)
+            raw_threats.extend(semantic_threats)
+        
+        # ========================================
         # PHASE 2: Aggregate by threat_id
         # ========================================
         aggregated_threats = self._aggregate_threats_by_id(raw_threats)
+        
+        # ========================================
+        # PHASE 2.5 (NEW): ML Severity Refinement  
+        # ========================================
+        if self._severity_classifier:
+            aggregated_threats = self._refine_severity(aggregated_threats, architecture)
         
         # ========================================
         # PHASE 3: Apply Confidence-Gated Severity
@@ -73,6 +130,19 @@ class ThreatAnalyzer:
         # PHASE 5: Normalize STRIDE Categories
         # ========================================
         normalized_threats = self._normalize_stride(classified_threats)
+        
+        # ========================================
+        # PHASE 5.5 (NEW): Attack Chain Analysis
+        # ========================================
+        attack_chain_summary = None
+        if self._attack_chain_analyzer:
+            try:
+                kb_threats = self.rule_engine.get_all_threats()
+                self._attack_chain_analyzer.build_threat_graph(kb_threats)
+                attack_chain_summary = self._attack_chain_analyzer.get_summary()
+                logger.info(f"Attack chain analysis: {attack_chain_summary.get('chains', 0)} chains found")
+            except Exception as e:
+                logger.warning(f"Attack chain analysis failed: {e}")
         
         # ========================================
         # PHASE 6: Calculate Risk Score (post-aggregation)
@@ -99,10 +169,115 @@ class ThreatAnalyzer:
             timestamp=datetime.now().isoformat()
         )
         
+        # Add attack chain data to metadata if available
+        if attack_chain_summary:
+            result.attack_chains = attack_chain_summary
+        
+        # Indicate NLP/ML enhancement status
+        result.ml_enhanced = {
+            'semantic_matching': self._semantic_matcher is not None,
+            'severity_classifier': self._severity_classifier is not None,
+            'attack_chains': self._attack_chain_analyzer is not None,
+            'nlp_parser': architecture.metadata.get('nlp_enhanced', False),
+        }
+        
         # Generate comprehensive markdown report
         result.report_markdown = ReportGenerator.generate_markdown(result)
         
         return result
+    
+    def _discover_semantic_threats(self, architecture: SystemArchitecture, graph) -> List[Threat]:
+        """
+        Use semantic similarity to discover threats that keyword-based rules might miss.
+        Only adds threats with high confidence semantic match (score > 0.6).
+        """
+        semantic_threats = []
+        existing_ids = set()
+        
+        for node_id, data in graph.nodes(data=True):
+            comp_type = data.get('type', 'Service')
+            comp_name = data.get('name', node_id)
+            
+            # Build a description from all component properties
+            desc_parts = [f"{comp_name} ({comp_type})"]
+            props = data.get('properties', {})
+            for k, v in props.items():
+                if v and v is not True:
+                    desc_parts.append(f"{k}: {v}")
+                elif v is True:
+                    desc_parts.append(k)
+            description = ' '.join(desc_parts)
+            
+            # Semantic search for relevant threats
+            results = self._semantic_matcher.find_relevant_threats(
+                description, comp_type, top_k=5
+            )
+            
+            for meta, score in results:
+                if score < 0.6:  # Only high-confidence matches
+                    continue
+                
+                threat_id = meta.get('threat_id', '')
+                if threat_id in existing_ids:
+                    continue
+                existing_ids.add(threat_id)
+                
+                # Get original threat data
+                original = meta.get('original', {})
+                threat_detail = original.get('threat', {})
+                risk_info = original.get('risk', {})
+                
+                confidence = 'Medium' if score > 0.7 else 'Low'
+                
+                threat = Threat(
+                    id=f"SEM-{threat_id}" if not threat_id.startswith('SEM-') else threat_id,
+                    category=meta.get('category', 'Unknown'),
+                    title=f"[Semantic] {meta.get('threat_name', threat_detail.get('title', 'Unknown'))}",
+                    description=threat_detail.get('description', meta.get('threat_name', '')),
+                    severity=meta.get('severity', 'Medium'),
+                    likelihood=risk_info.get('likelihood', 'Medium'),
+                    impact=risk_info.get('impact', 'Medium'),
+                    risk_score=int(score * 100),
+                    mitigation='See threat knowledge base for details',
+                    confidence=confidence,
+                    evidence=[f"Semantic match (score: {score:.2f}) for component: {comp_name}"],
+                    status='Identified',
+                    component_id=node_id,
+                )
+                semantic_threats.append(threat)
+        
+        logger.info(f"Semantic matching found {len(semantic_threats)} additional threats")
+        return semantic_threats
+    
+    def _refine_severity(self, threats: List[Threat], architecture: SystemArchitecture) -> List[Threat]:
+        """
+        Refine threat severity using the ML severity classifier.
+        Only adjusts severity when the classifier has high confidence.
+        """
+        for threat in threats:
+            context = {}
+            # Find the component this threat relates to
+            for comp in architecture.components:
+                if comp.id in (threat.affected_components or []) or comp.id == threat.component_id:
+                    context = comp.properties
+                    break
+            
+            threat_text = f"{threat.title} {threat.description}"
+            ml_severity = self._severity_classifier.classify(threat_text, context)
+            
+            # Only adjust if ML and rule-based disagree by more than 1 level
+            severity_levels = {'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1}
+            rule_level = severity_levels.get(threat.severity, 2)
+            ml_level = severity_levels.get(ml_severity, 2)
+            
+            if abs(rule_level - ml_level) >= 2:
+                # Split the difference (don't fully override rules)
+                avg_level = (rule_level + ml_level) // 2
+                level_to_severity = {v: k for k, v in severity_levels.items()}
+                threat.severity = level_to_severity.get(avg_level, threat.severity)
+                threat.evidence.append(f"ML severity refinement: {ml_severity} (rule-based: {threat.severity})")
+        
+        return threats
 
     def _process_known_issues(self, architecture: SystemArchitecture) -> List[Threat]:
         """

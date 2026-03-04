@@ -58,3 +58,7 @@ class AnalysisResult(BaseModel):
     diagram: Optional[str] = None  # Alias for frontend compatibility
     report_markdown: Optional[str] = None
     timestamp: Optional[str] = None  # For tracking when analysis was done
+    # NLP/DL enhancement fields
+    attack_chains: Optional[Dict[str, Any]] = None  # Attack chain analysis summary
+    ml_enhanced: Optional[Dict[str, bool]] = None  # Which ML features were active
+

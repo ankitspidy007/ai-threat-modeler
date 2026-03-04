@@ -2,7 +2,7 @@
 # Python 3.8+ required
 
 # Web Framework
-# Using ~= allows patch updates but not minor/major version changes
+# Using >= allows patch updates but not minor/major version changes
 fastapi>=0.115.0,<1.0.0
 uvicorn[standard]>=0.34.0,<1.0.0
 python-multipart>=0.0.9,<1.0.0
@@ -10,13 +10,17 @@ python-multipart>=0.0.9,<1.0.0
 # Data Processing & Analysis
 networkx>=3.4.0,<4.0.0
 pydantic>=2.6.0,<3.0.0
+numpy>=1.26.0,<3.0.0
 
-# NLP Libraries (for enhanced parsing)
+# NLP Libraries
 spacy>=3.7.0,<4.0.0
-# Note: spaCy language model will be downloaded on first run
+# Note: After install, download the model with: python -m spacy download en_core_web_sm
 
-# AI/LLM Integration (Optional - for future enhancements)
-# Using >= for flexibility with latest AI model updates
+# Embedding & Semantic Search
+sentence-transformers>=2.6.0,<4.0.0
+faiss-cpu>=1.8.0,<2.0.0
+
+# AI/LLM Integration (Optional - for LLM-enhanced analysis)
 openai>=1.0.0
 anthropic>=0.18.0
 
@@ -26,5 +30,6 @@ pytest-asyncio>=0.23.0,<1.0.0
 pytest-cov>=4.1.0,<5.0.0
 httpx>=0.26.0,<1.0.0
 
-# To upgrade all packages to latest compatible versions, run:
-# pip install --upgrade -r requirements.txt
+# To install all dependencies:
+# pip install -r requirements.txt
+# python -m spacy download en_core_web_sm

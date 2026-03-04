@@ -1,9 +1,22 @@
 import re
 import uuid
+import logging
 from typing import List, Dict, Any
 from ..models import Component, DataFlow, SystemArchitecture
 import networkx as nx
 from collections import defaultdict
+
+logger = logging.getLogger(__name__)
+
+# Import NLP processor (graceful fallback if unavailable)
+try:
+    from .nlp_processor import get_nlp_processor, TECH_COMPONENT_MAP
+    NLP_AVAILABLE = True
+except Exception:
+    NLP_AVAILABLE = False
+    TECH_COMPONENT_MAP = {}
+    logger.warning("NLP processor not available. Using regex-only parsing.")
+
 
 # Component type synonyms for better detection
 COMPONENT_SYNONYMS = {
@@ -273,13 +286,30 @@ class ArchitectureParser:
     
     def parse(self, text: str) -> SystemArchitecture:
         """
-        Enhanced parser that extracts individual microservices, databases, and third-party integrations.
+        Enhanced parser with NLP integration.
+        Uses spaCy NER and dependency parsing when available,
+        falls back to regex-based extraction.
         """
         text_lower = text.lower()
         components: Dict[str, Component] = {}
         flows: List[DataFlow] = []
 
-        # 1. Extract individual microservices
+        # ========================================
+        # NLP-ENHANCED: Extract entities with NLP
+        # ========================================
+        nlp_entities = None
+        nlp_security_props = {}
+        if NLP_AVAILABLE:
+            try:
+                nlp = get_nlp_processor()
+                nlp_entities = nlp.extract_entities(text)
+                nlp_security_props = nlp.extract_security_properties(text)
+                logger.info(f"NLP extracted {len(nlp_entities.get('technologies', []))} technologies, "
+                           f"{len(nlp_entities.get('services', []))} services")
+            except Exception as e:
+                logger.warning(f"NLP entity extraction failed: {e}")
+
+        # 1. Extract individual microservices (regex)
         microservices = self._extract_microservices(text)
         for service in microservices:
             components[service['id']] = Component(
@@ -289,7 +319,7 @@ class ArchitectureParser:
                 properties=service['properties']
             )
         
-        # 2. Extract individual databases
+        # 2. Extract individual databases (regex)
         databases = self._extract_databases(text)
         for db in databases:
             components[db['id']] = Component(
@@ -299,7 +329,7 @@ class ArchitectureParser:
                 properties=db['properties']
             )
         
-        # 3. Extract third-party services
+        # 3. Extract third-party services (regex)
         third_party = self._extract_third_party_services(text)
         for service in third_party:
             components[service['id']] = Component(
@@ -309,10 +339,54 @@ class ArchitectureParser:
                 properties=service['properties']
             )
         
-        # 4. Detect other standard components using synonym detection
+        # 4. NLP-ENHANCED: Add components discovered by NLP that regex missed
+        if nlp_entities:
+            for tech_entity in nlp_entities.get('technologies', []):
+                comp_type = tech_entity.get('component_type')
+                if not comp_type:
+                    continue
+                tech_name = tech_entity['text']
+                tech_id = tech_name.lower().replace(' ', '_').replace('.', '_')
+                
+                # Skip if already exists
+                if tech_id in components:
+                    continue
+                # Also skip if a similar component already exists
+                already_found = False
+                for cid in components:
+                    if tech_id in cid or cid in tech_id:
+                        already_found = True
+                        break
+                if already_found:
+                    continue
+                
+                props = self._infer_properties(text_lower, comp_type)
+                components[tech_id] = Component(
+                    id=tech_id,
+                    name=tech_name.title(),
+                    type=comp_type,
+                    properties=props
+                )
+                logger.debug(f"NLP discovered component: {tech_name} ({comp_type})")
+            
+            # Add NLP-discovered named services
+            for svc_entity in nlp_entities.get('services', []):
+                svc_name = svc_entity['text']
+                svc_id = svc_name.lower().replace(' ', '_').replace('-', '_')
+                if svc_id not in components:
+                    props = self._infer_properties(text_lower, 'Service')
+                    if svc_entity.get('tech_stack'):
+                        props['tech_stack'] = svc_entity['tech_stack']
+                    components[svc_id] = Component(
+                        id=svc_id,
+                        name=svc_name,
+                        type='Service',
+                        properties=props
+                    )
+        
+        # 5. Detect other standard components using synonym detection (original regex)
         found_types = set()
         for component_type, synonyms in COMPONENT_SYNONYMS.items():
-            # Skip types we've already extracted individually
             if component_type in ['Database', 'Service']:
                 continue
             for synonym in synonyms:
@@ -320,40 +394,73 @@ class ArchitectureParser:
                     found_types.add(component_type)
                     break
         
-        # Create standard components
         for c_type in found_types:
             c_id = c_type.lower().replace(" ", "_")
-            
-            # Skip if already exists (from microservice/database extraction)
             if c_id in components:
                 continue
-            
             props = self._infer_properties(text_lower, c_type)
-            
-            comp = Component(
-                id=c_id,
-                name=c_type,
-                type=c_type,
-                properties=props
-            )
+            comp = Component(id=c_id, name=c_type, type=c_type, properties=props)
             components[comp.id] = comp
 
-        # 5. Infer data flows
+        # 6. Infer data flows (regex-based)
         flows = self._infer_flows(text, components)
         
-        # 6. Detect negations and apply to components
+        # 7. NLP-ENHANCED: Extract additional flows using dependency parsing
+        if NLP_AVAILABLE and nlp_entities:
+            try:
+                nlp = get_nlp_processor()
+                nlp_flows = nlp.extract_data_flows(text, components)
+                existing_pairs = {(f.source_id, f.target_id) for f in flows}
+                for nf in nlp_flows:
+                    pair = (nf['source'], nf['target'])
+                    if pair not in existing_pairs and nf['source'] in components and nf['target'] in components:
+                        flows.append(DataFlow(
+                            source_id=nf['source'],
+                            target_id=nf['target'],
+                            protocol=nf.get('protocol', 'HTTPS'),
+                            properties={
+                                'trust_boundary': 'inferred',
+                                'evidence': nf.get('evidence', ''),
+                                'extraction_method': nf.get('method', 'nlp')
+                            }
+                        ))
+                        existing_pairs.add(pair)
+                        logger.debug(f"NLP flow: {nf['source']} → {nf['target']}")
+            except Exception as e:
+                logger.warning(f"NLP flow extraction failed: {e}")
+        
+        # 8. Detect negations and apply to components
         negations = self._detect_negations(text)
         for comp in components.values():
             for control, value in negations.items():
                 comp.properties[control] = value
         
-        # 7. Parse known issues
+        # 9. NLP-ENHANCED: Apply NLP-extracted security properties
+        if nlp_security_props:
+            for comp in components.values():
+                for key, value in nlp_security_props.items():
+                    # Only override if NLP found something definitive
+                    if value is not None and key not in ('compliance_frameworks',):
+                        if key not in comp.properties or comp.properties[key] in (None, False, 'none'):
+                            comp.properties[key] = value
+                # Merge compliance frameworks
+                if 'compliance_frameworks' in nlp_security_props:
+                    existing = comp.properties.get('compliance_frameworks', [])
+                    for fw in nlp_security_props['compliance_frameworks']:
+                        if fw not in existing:
+                            existing.append(fw)
+                    comp.properties['compliance_frameworks'] = existing
+        
+        # 10. Parse known issues
         known_issues = self.parse_known_issues(text)
         
         return SystemArchitecture(
             components=list(components.values()),
             flows=flows,
-            metadata={'known_issues': known_issues}
+            metadata={
+                'known_issues': known_issues,
+                'nlp_enhanced': NLP_AVAILABLE and nlp_entities is not None
+            }
         )
     
     def _extract_microservices(self, text: str) -> List[Dict]:

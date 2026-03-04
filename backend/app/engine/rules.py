@@ -46,6 +46,10 @@ class RuleEngine:
         # Sort rules by priority (if defined) for consistent evaluation order
         self.rules.sort(key=lambda r: r.get('priority', 50))
     
+    def get_all_threats(self) -> List[Dict]:
+        """Return all loaded threat rules for external use (e.g., vectorization, attack chain analysis)."""
+        return self.rules
+    
     def _convert_to_legacy_format(self, comprehensive_threats: List[Dict]) -> List[Dict]:
         """
         Convert comprehensive threat format to legacy format for compatibility.

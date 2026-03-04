@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
@@ -62,7 +63,7 @@ class LLMAnalyzeRequest(BaseModel):
     description: str = Field(..., min_length=10, max_length=10000)
     llm_provider: str = Field(..., description="LLM provider: 'openai' or 'claude'")
     api_key: str = Field(..., min_length=10, description="API key for the LLM provider")
-    model: str = Field(None, description="Optional specific model to use")
+    model: Optional[str] = Field(default=None, description="Optional specific model to use")
     
     @field_validator('llm_provider')
     @classmethod
@@ -120,7 +121,35 @@ async def analyze(request: Request, payload: AnalyzeRequest):
 @app.get("/health")
 def health_check():
     """Health check endpoint for monitoring."""
-    return {"status": "ok", "version": "0.2.0", "environment": ENVIRONMENT}
+    # Report NLP/DL capabilities
+    ml_features = {
+        'nlp_parser': False,
+        'semantic_matching': False,
+        'attack_chains': False,
+    }
+    try:
+        from .engine.nlp_processor import SPACY_AVAILABLE
+        ml_features['nlp_parser'] = SPACY_AVAILABLE
+    except ImportError:
+        pass
+    try:
+        from .engine.embedding_service import EMBEDDINGS_AVAILABLE, FAISS_AVAILABLE
+        ml_features['semantic_matching'] = EMBEDDINGS_AVAILABLE
+        ml_features['vector_search'] = FAISS_AVAILABLE
+    except ImportError:
+        pass
+    try:
+        from .engine.attack_chain import NX_AVAILABLE
+        ml_features['attack_chains'] = NX_AVAILABLE
+    except ImportError:
+        pass
+    
+    return {
+        "status": "ok",
+        "version": "2.0.0",
+        "environment": ENVIRONMENT,
+        "ml_features": ml_features
+    }
 
 
 @app.delete("/cache")
@@ -135,32 +164,57 @@ async def clear_cache():
 @app.post("/analyze-with-llm", response_model=AnalysisResult)
 async def analyze_with_llm(request: Request, payload: LLMAnalyzeRequest):
     """
-    Analyze architecture with LLM enhancement (OpenAI or Claude).
+    Analyze architecture with LLM enhancement (OpenAI, Claude, or Gemini).
     
     - Runs both rule-based and LLM analysis
-    - Merges and deduplicates threats
+    - Uses RAG: retrieves relevant KB threats to include in LLM prompt
+    - Semantic deduplication when merging threats
     - LLM threats marked with [AI] prefix
     """
     try:
-        # Run rule-based analysis
+        # Run rule-based analysis (includes NLP + semantic matching)
         analyzer = ThreatAnalyzer()
         rule_based_result = analyzer.analyze_from_text(payload.description, payload.project_name)
         
-        # Run LLM analysis
+        # RAG: Retrieve relevant KB threats for LLM context
+        kb_context = None
+        try:
+            from .engine.semantic_matcher import get_semantic_matcher
+            matcher = get_semantic_matcher()
+            results = matcher.find_threats_for_architecture(payload.description, top_k=10)
+            kb_context = [
+                {
+                    'threat_name': meta.get('threat_name', ''),
+                    'category': meta.get('category', ''),
+                    'severity': meta.get('severity', ''),
+                    'score': score
+                }
+                for meta, score in results
+                if score > 0.4
+            ]
+        except Exception:
+            pass  # RAG is optional
+        
+        # Run LLM analysis with RAG context
         llm_threats = LLMAnalyzer.analyze_with_llm(
             architecture_description=payload.description,
             project_name=payload.project_name,
             provider=payload.llm_provider,
             api_key=payload.api_key,
-            model=payload.model
+            model=payload.model,
+            kb_context=kb_context
         )
         
-        # Merge threats
+        # Merge threats with semantic deduplication
         merged_threats = LLMAnalyzer.merge_threats(rule_based_result.threats, llm_threats)
         
         # Update result with merged threats
         rule_based_result.threats = merged_threats
-        rule_based_result.summary = f"Analysis complete with {payload.llm_provider.upper()} enhancement. {len(merged_threats)} threats identified."
+        rule_based_result.summary = (
+            f"Analysis complete with {payload.llm_provider.upper()} enhancement. "
+            f"{len(merged_threats)} threats identified "
+            f"(RAG context: {len(kb_context) if kb_context else 0} KB threats)."
+        )
         
         return rule_based_result
         
