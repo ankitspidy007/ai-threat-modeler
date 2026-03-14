@@ -448,7 +448,7 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## 📄 License
 
-[Add your license here]
+NA
 
 ## 🙏 Acknowledgments
 
