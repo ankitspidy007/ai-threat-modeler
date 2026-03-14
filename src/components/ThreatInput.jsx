@@ -84,11 +84,12 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
     const [description, setDescription] = useState('');
     const [projectName, setProjectName] = useState('My Security Audit');
     const [showTemplates, setShowTemplates] = useState(false);
+    const [useLocalSlm, setUseLocalSlm] = useState(true);
 
     const handleSubmit = (e) => {
         e.preventDefault();
         if (description.trim()) {
-            onAnalyze(description, projectName);
+            onAnalyze(description, projectName, useLocalSlm);
         }
     };
 
@@ -96,7 +97,7 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
             e.preventDefault();
             if (description.trim() && !isAnalyzing) {
-                onAnalyze(description, projectName);
+                onAnalyze(description, projectName, useLocalSlm);
             }
         }
     };
@@ -162,6 +163,26 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                         onKeyDown={handleKeyDown}
                         disabled={isAnalyzing}
                     />
+
+                    {/* Local AI Engine Toggle */}
+                    <div className="flex items-center gap-2 mt-4 p-3 bg-brand-50 dark:bg-brand-900/30 border border-brand-200 dark:border-brand-700/50 rounded-lg">
+                        <input
+                            type="checkbox"
+                            id="useLocalSlm"
+                            checked={useLocalSlm}
+                            onChange={(e) => setUseLocalSlm(e.target.checked)}
+                            className="w-4 h-4 text-brand-primary bg-white border-brand-300 rounded focus:ring-brand-primary dark:focus:ring-brand-primary dark:ring-offset-brand-800 dark:bg-brand-700 dark:border-brand-600"
+                        />
+                        <div className="flex flex-col">
+                            <label htmlFor="useLocalSlm" className="text-sm font-bold text-brand-800 dark:text-brand-200 cursor-pointer">
+                                Enable Local Semantic AI Engine (Small LLM)
+                            </label>
+                            <span className="text-xs text-brand-500 dark:text-brand-400">
+                                Uses on-device sentence embeddings to detect hidden architectural threats trained on the KB.
+                            </span>
+                        </div>
+                    </div>
+
                     <div className="flex items-center justify-between mt-4">
                         <span className="text-xs text-brand-400 font-mono">Ctrl+Enter to submit</span>
                         <button

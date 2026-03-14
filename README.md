@@ -1,6 +1,6 @@
 # AI Threat Modeler (AITM) v2.0
 
-An advanced, AI-powered threat modeling tool that automatically identifies security vulnerabilities from system architecture descriptions. Built with React + Vite frontend and FastAPI backend, featuring **NLP-powered parsing (spaCy)**, **semantic threat matching (sentence-transformers + FAISS)**, **attack chain analysis (NetworkX)**, **ML-based severity classification**, STRIDE-based analysis, multi-LLM integration with RAG, and comprehensive compliance mapping.
+An advanced, AI-powered threat modeling tool that automatically identifies security vulnerabilities from system architecture descriptions. Built with React + Vite frontend and FastAPI backend, featuring **NLP-powered parsing (spaCy)**, **Local Semantic AI Engine (sentence-transformers + FAISS)**, **attack chain analysis (NetworkX)**, **Architecture Intelligence**, **WebSocket Streaming Analysis**, STRIDE-based analysis, multi-LLM integration with RAG, and comprehensive compliance mapping.
 
 ## 🎯 Key Features
 
@@ -15,7 +15,7 @@ An advanced, AI-powered threat modeling tool that automatically identifies secur
 - **RAG for LLM**: Retrieval-Augmented Generation injects relevant KB threats into LLM prompts
 
 ### Intelligent Threat Detection
-- **Comprehensive Knowledge Base**: 10+ modular threat databases covering cloud (AWS, Azure, GCP), OWASP Top 10, authentication/authorization, containers/Kubernetes, supply chain, infrastructure, and emerging threats
+- **Comprehensive Knowledge Base**: 15+ modular threat databases covering cloud (AWS, Azure, GCP), OWASP Top 10, OWASP API Top 10, databases, authentication/authorization, containers/Kubernetes, supply chain, infrastructure, and emerging AI/zero-day threats (116 total threats).
 - **Known Issues Processing**: Automatically converts explicitly stated vulnerabilities into high-confidence threats
 - **STRIDE Framework**: Maps all threats to STRIDE categories (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege)
 - **Two-Tier Classification**: Separates findings into Confirmed Risks (verified evidence) and Potential Risks (assumption-based)
@@ -43,6 +43,8 @@ An advanced, AI-powered threat modeling tool that automatically identifies secur
 - **Trust Boundaries**: Highlights flows crossing security boundaries with dotted lines
 
 ### Interactive Dashboard
+- **Real-time Streaming Analysis**: WebSocket integration provides live progress updates across 10 distinct analysis phases.
+- **Local Semantic AI Engine Toggle**: Explicitly control whether to use the trained Small LLM vector engine for hidden threat discovery.
 - **Risk Matrix**: 3×3 heat map showing threat severity vs. likelihood
 - **STRIDE Distribution Chart**: Visual bar chart of threats by STRIDE category
 - **Remediation Progress**: Circular progress tracker for fixed vs. total risks
@@ -65,15 +67,17 @@ Frontend (React + Vite)            Backend (FastAPI + Python)
 │   ├── ThreatDashboard.jsx        │   ├── main.py (API endpoints)
 │   ├── ThreatInput.jsx            │   ├── models.py (Pydantic models)
 │   ├── Sidebar.jsx                │   ├── engine/
-│   ├── RiskMatrix.jsx             │   │   ├── parser.py (NLP-enhanced parser)
-│   ├── StrideChart.jsx            │   │   ├── nlp_processor.py ★ spaCy NER
-│   ├── AIAnalysis.jsx             │   │   ├── embedding_service.py ★ Embeddings
-│   ├── AnalysisHistory.jsx        │   │   ├── semantic_matcher.py ★ Vector search
-│   ├── Toast.jsx                  │   │   ├── attack_chain.py ★ Attack paths
-│   └── ErrorBoundary.jsx         │   │   ├── rules.py (threat rule engine)
-├── utils/                         │   │   ├── analyzer.py (ML-enhanced)
-│   ├── pdfGenerator.js            │   │   ├── reporter.py (markdown reports)
-│   └── storage.js                 │   │   ├── mermaid_generator.py
+│   ├── RiskMatrix.jsx             │   │   ├── nlp_processor.py ★ spaCy NER
+│   ├── StrideChart.jsx            │   │   ├── embedding_service.py ★ Embeddings
+│   ├── AIAnalysis.jsx             │   │   ├── semantic_matcher.py ★ Vector search
+│   ├── AnalysisHistory.jsx        │   │   ├── attack_chain.py ★ Attack paths
+│   ├── Toast.jsx                  │   │   ├── architecture_intelligence.py 
+│   └── ErrorBoundary.jsx         │   │   ├── stride_classifier.py
+├── utils/                         │   │   ├── rules.py (threat rule engine)
+│   ├── pdfGenerator.js            │   │   ├── analyzer.py (ML-enhanced)
+│   └── storage.js                 │   │   ├── streaming_analyzer.py (WebSocket)
+├── hooks/                         │   │   ├── reporter.py (markdown reports)
+│   └── useStreamingAnalysis.js    │   │   ├── mermaid_generator.py
 ├── services/                      │   │   └── graph_builder.py
 │   └── mockAi.js                  │   ├── services/
 └── config.js                      │   │   ├── llm_analyzer.py (RAG + dedup)
@@ -85,7 +89,12 @@ Frontend (React + Vite)            Backend (FastAPI + Python)
                                    │   │   ├── cloud_aws_threats.json
                                    │   │   ├── cloud_azure_threats.json
                                    │   │   ├── cloud_gcp_threats.json
+                                   │   │   ├── database_threats.json
+                                   │   │   ├── infrastructure_threats.json
+                                   │   │   ├── supply_chain_threats.json
+                                   │   │   ├── emerging_threats.json
                                    │   │   ├── owasp_web_top10.json
+                                   │   │   ├── owasp_api_top10.json
                                    │   │   ├── auth_authz_threats.json
                                    │   │   ├── container_k8s_threats.json
                                    │   │   ├── domain_threats.json

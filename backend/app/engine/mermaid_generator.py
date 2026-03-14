@@ -81,7 +81,7 @@ def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = T
             continue
         
         # Create subgraph with trust boundary annotation
-        mermaid_lines.append(f"    subgraph {layer_key}[\"{layer_name}\"]")
+        mermaid_lines.append(f"    subgraph zone_{layer_key}[\"{layer_name}\"]")
         
         for node, data in nodes:
             node_id = _sanitize_id(node)
@@ -98,7 +98,7 @@ def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = T
             mermaid_lines.append(f"        {node_id}{shape[0]}{full_label}{shape[1]}")
         
         mermaid_lines.append(f"    end")
-        mermaid_lines.append(f"    style {layer_key} {style}")
+        mermaid_lines.append(f"    style zone_{layer_key} {style}")
     
     
     # Add edges with enhanced labels including protocol, auth, and data type
@@ -213,7 +213,7 @@ def _generate_basic_mermaid(graph: nx.DiGraph) -> str:
         if not nodes:
             continue
         
-        mermaid_lines.append(f"    subgraph {layer_key}[\"{layer_name}\"]")
+        mermaid_lines.append(f"    subgraph zone_{layer_key}[\"{layer_name}\"]")
         
         for node, data in nodes:
             node_id = _sanitize_id(node)
@@ -224,7 +224,7 @@ def _generate_basic_mermaid(graph: nx.DiGraph) -> str:
             mermaid_lines.append(f"        {node_id}{shape[0]}{label}{shape[1]}")
         
         mermaid_lines.append(f"    end")
-        mermaid_lines.append(f"    style {layer_key} {style}")
+        mermaid_lines.append(f"    style zone_{layer_key} {style}")
     
     for u, v, data in graph.edges(data=True):
         u_id = _sanitize_id(u)

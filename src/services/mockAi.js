@@ -1,7 +1,7 @@
 // Backend API Service
 import { API_BASE_URL } from '../config';
 
-export const analyzeSystem = async (systemDescription, projectName = "Untitled Project") => {
+export const analyzeSystem = async (systemDescription, projectName = "Untitled Project", useLocalSlm = true) => {
     try {
         const response = await fetch(`${API_BASE_URL}/analyze`, {
             method: 'POST',
@@ -10,7 +10,8 @@ export const analyzeSystem = async (systemDescription, projectName = "Untitled P
             },
             body: JSON.stringify({
                 description: systemDescription,
-                project_name: projectName
+                project_name: projectName,
+                use_local_slm: useLocalSlm
             }),
         });
 

@@ -78,7 +78,8 @@ class StreamingAnalyzer:
         return (completed_weight / self._total_weight) * 100
     
     async def analyze_streaming(self, description: str, 
-                                 project_name: str = "Untitled Project") -> AnalysisResult:
+                                 project_name: str = "Untitled Project",
+                                 use_local_slm: bool = True) -> AnalysisResult:
         """
         Run the full analysis pipeline with streaming progress updates.
         """
@@ -134,7 +135,7 @@ class StreamingAnalyzer:
         
         # ---- Phase 3: Semantic Discovery ----
         semantic_count = 0
-        if analyzer._semantic_matcher:
+        if analyzer._semantic_matcher and use_local_slm:
             await self._emit("semantic", 
                              "Running semantic threat matching (FAISS vector search)...",
                              self._phase_progress(3))
@@ -146,7 +147,7 @@ class StreamingAnalyzer:
                              self._phase_progress(4),
                              {"semantic_threats": semantic_count})
         else:
-            await self._emit("semantic", "Semantic matching not available (skipped)",
+            await self._emit("semantic", "Semantic matching not enabled or not available (skipped)",
                              self._phase_progress(4))
         
         # ---- Phase 4: STRIDE Classification ----
@@ -235,7 +236,7 @@ class StreamingAnalyzer:
             result.attack_chains = attack_chain_summary
         
         result.ml_enhanced = {
-            'semantic_matching': analyzer._semantic_matcher is not None,
+            'semantic_matching': analyzer._semantic_matcher is not None and use_local_slm,
             'stride_classifier': analyzer._stride_classifier is not None and analyzer._stride_classifier.is_trained,
             'severity_classifier': analyzer._severity_classifier is not None,
             'attack_chains': analyzer._attack_chain_analyzer is not None,

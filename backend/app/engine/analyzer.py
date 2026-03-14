@@ -95,12 +95,13 @@ class ThreatAnalyzer:
             except Exception as e:
                 logger.warning(f"Attack chain init failed: {e}")
 
-    def analyze_from_text(self, description: str, project_name: str = "Untitled Project") -> AnalysisResult:
+    def analyze_from_text(self, description: str, project_name: str = "Untitled Project", use_local_slm: bool = True) -> AnalysisResult:
+        """Parse text and analyze the resulting architecture."""
         parser = ArchitectureParser()
         system_architecture = parser.parse(description)
-        return self.analyze(system_architecture, project_name)
+        return self.analyze(system_architecture, project_name, use_local_slm=use_local_slm)
 
-    def analyze(self, architecture: SystemArchitecture, project_name: str = "Untitled Project") -> AnalysisResult:
+    def analyze(self, architecture: SystemArchitecture, project_name: str = "Untitled Project", use_local_slm: bool = True) -> AnalysisResult:
         builder = GraphBuilder(architecture)
         graph = builder.get_graph()
         
@@ -138,7 +139,7 @@ class ThreatAnalyzer:
         # ========================================
         # PHASE 1.5 (NEW): Semantic Threat Discovery
         # ========================================
-        if self._semantic_matcher:
+        if self._semantic_matcher and use_local_slm:
             semantic_threats = self._discover_semantic_threats(architecture, graph)
             raw_threats.extend(semantic_threats)
         
@@ -216,7 +217,7 @@ class ThreatAnalyzer:
         
         # Indicate NLP/ML enhancement status
         result.ml_enhanced = {
-            'semantic_matching': self._semantic_matcher is not None,
+            'semantic_matching': self._semantic_matcher is not None and use_local_slm,
             'stride_classifier': self._stride_classifier is not None and self._stride_classifier.is_trained,
             'stride_classifier_accuracy': self._stride_classifier.accuracy if self._stride_classifier and self._stride_classifier.is_trained else 0.0,
             'severity_classifier': self._severity_classifier is not None,

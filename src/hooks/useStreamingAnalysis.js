@@ -35,7 +35,7 @@ export function useStreamingAnalysis() {
         setMessage('Cancelled');
     }, []);
 
-    const analyze = useCallback((description, projectName = 'Untitled Project') => {
+    const analyze = useCallback((description, projectName = 'Untitled Project', useLocalSlm = true) => {
         return new Promise((resolve, reject) => {
             // Reset state
             setProgress(0);
@@ -54,6 +54,7 @@ export function useStreamingAnalysis() {
                 ws.send(JSON.stringify({
                     description,
                     project_name: projectName,
+                    use_local_slm: useLocalSlm
                 }));
             };
 
