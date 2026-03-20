@@ -11,6 +11,7 @@ python-multipart>=0.0.9,<1.0.0
 networkx>=3.4.0,<4.0.0
 pydantic>=2.6.0,<3.0.0
 numpy>=1.26.0,<3.0.0
+pyyaml>=6.0.1
 
 # NLP Libraries
 spacy>=3.7.0,<4.0.0
@@ -24,6 +25,7 @@ scikit-learn>=1.4.0,<2.0.0
 # AI/LLM Integration (Optional - for LLM-enhanced analysis)
 openai>=1.0.0
 anthropic>=0.18.0
+requests>=2.31.0,<3.0.0
 
 # Testing
 pytest>=8.0.0,<9.0.0

@@ -2,7 +2,14 @@
     {
         "threat_id": "K8S-001",
         "threat_name": "Container Running as Root",
-        "component": "Container",
+        "component": [
+            "API",
+            "Database",
+            "Queue",
+            "WebClient",
+            "Service",
+            "Container"
+        ],
         "cloud_platform": [
             "AWS",
             "Azure",
@@ -23,6 +30,20 @@
             "Integrity",
             "Availability"
         ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "privileged_container",
+                        "op": "==",
+                        "value": true
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
         "prerequisites": [
             "Container configured to run as root (UID 0)",
             "No security context constraints",
@@ -101,7 +122,14 @@
     {
         "threat_id": "K8S-002",
         "threat_name": "Exposed Kubernetes Dashboard",
-        "component": "Container",
+        "component": [
+            "API",
+            "Database",
+            "Queue",
+            "WebClient",
+            "Service",
+            "Container"
+        ],
         "cloud_platform": [
             "AWS",
             "Azure",
@@ -202,7 +230,14 @@
     {
         "threat_id": "K8S-003",
         "threat_name": "Secrets Stored as Environment Variables",
-        "component": "Container",
+        "component": [
+            "API",
+            "Database",
+            "Queue",
+            "WebClient",
+            "Service",
+            "Container"
+        ],
         "cloud_platform": [
             "AWS",
             "Azure",
@@ -221,6 +256,20 @@
         "affected_cia": [
             "Confidentiality"
         ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "secrets_in_env",
+                        "op": "==",
+                        "value": true
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "high"
+        },
         "prerequisites": [
             "Secrets mounted as environment variables",
             "Container access or compromise",
@@ -296,7 +345,14 @@
     {
         "threat_id": "K8S-004",
         "threat_name": "Unrestricted Network Policies",
-        "component": "Container",
+        "component": [
+            "API",
+            "Database",
+            "Queue",
+            "WebClient",
+            "Service",
+            "Container"
+        ],
         "cloud_platform": [
             "AWS",
             "Azure",
@@ -399,7 +455,14 @@
     {
         "threat_id": "K8S-005",
         "threat_name": "Vulnerable Container Images",
-        "component": "Container",
+        "component": [
+            "API",
+            "Database",
+            "Queue",
+            "WebClient",
+            "Service",
+            "Container"
+        ],
         "cloud_platform": [
             "AWS",
             "Azure",
@@ -420,6 +483,20 @@
             "Integrity",
             "Availability"
         ],
+        "detection": {
+            "logic": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "field": "containerized",
+                        "op": "==",
+                        "value": true
+                    }
+                ]
+            },
+            "auto_detectable": true,
+            "confidence": "low"
+        },
         "prerequisites": [
             "Outdated base images",
             "Vulnerable dependencies",

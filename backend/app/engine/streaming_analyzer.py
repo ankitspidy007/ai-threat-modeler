@@ -13,10 +13,7 @@ from typing import Callable, Optional, Any
 from datetime import datetime
 
 from .parser import ArchitectureParser
-from .graph_builder import GraphBuilder
-from .rules import RuleEngine
 from .mermaid_generator import generate_mermaid
-from .reporter import ReportGenerator
 from ..models import AnalysisResult, Threat, SystemArchitecture
 
 logger = logging.getLogger(__name__)
@@ -45,8 +42,9 @@ class StreamingAnalyzer:
         result = await analyzer.analyze_streaming(description, project_name)
     """
     
-    def __init__(self, progress_callback: Callable = None):
+    def __init__(self, progress_callback: Callable = None, analyzer = None):
         self._callback = progress_callback
+        self._analyzer = analyzer
         self._current_phase = 0
         self._total_weight = sum(p["weight"] for p in PHASES)
     
@@ -79,19 +77,25 @@ class StreamingAnalyzer:
     
     async def analyze_streaming(self, description: str, 
                                  project_name: str = "Untitled Project",
-                                 use_local_slm: bool = True) -> AnalysisResult:
+                                 use_local_slm: bool = True,
+                                 analysis_mode: str = "standard") -> AnalysisResult:
         """
         Run the full analysis pipeline with streaming progress updates.
         """
         from .analyzer import ThreatAnalyzer, STRIDE_MAPPING
         
         # We reuse ThreatAnalyzer's ML components but control the flow
-        analyzer = ThreatAnalyzer()
+        analyzer = self._analyzer or ThreatAnalyzer()
+        analysis_flags = analyzer._analysis_flags(analysis_mode, use_local_slm)
         
         # ---- Phase 0: Parsing ----
         await self._emit("parsing", "Parsing architecture description...", 0)
-        parser = ArchitectureParser()
-        architecture = parser.parse(description)
+        cache_key = analyzer._stable_hash({'description': description})
+        architecture = analyzer._cache_get(analyzer._parsed_arch_cache, cache_key)
+        if architecture is None:
+            parser = ArchitectureParser()
+            architecture = parser.parse(description)
+            analyzer._cache_set(analyzer._parsed_arch_cache, cache_key, architecture, max_size=32)
         
         component_count = len(architecture.components)
         flow_count = len(architecture.flows)
@@ -104,17 +108,18 @@ class StreamingAnalyzer:
         await self._emit("rule_eval", "Running rule-based threat evaluation...",
                          self._phase_progress(1))
         
-        builder = GraphBuilder(architecture)
-        graph = builder.get_graph()
+        graph = analyzer._get_cached_graph(architecture)
         raw_threats = []
+        prioritized_nodes = analyzer._prioritize_component_nodes(graph)
+        prioritized_edges = analyzer._prioritize_flow_edges(graph)
         
         # Evaluate components
-        for node_id, data in graph.nodes(data=True):
+        for node_id, data in prioritized_nodes:
             threats = analyzer.rule_engine.evaluate_component(node_id, data)
             raw_threats.extend(threats)
         
         # Evaluate flows
-        for u, v, data in graph.edges(data=True):
+        for u, v, data in prioritized_edges:
             threats = analyzer.rule_engine.evaluate_flow(u, v, data)
             raw_threats.extend(threats)
         
@@ -135,11 +140,15 @@ class StreamingAnalyzer:
         
         # ---- Phase 3: Semantic Discovery ----
         semantic_count = 0
-        if analyzer._semantic_matcher and use_local_slm:
+        if analyzer._semantic_matcher and analysis_flags["semantic_matching"]:
             await self._emit("semantic", 
                              "Running semantic threat matching (FAISS vector search)...",
                              self._phase_progress(3))
-            semantic_threats = analyzer._discover_semantic_threats(architecture, graph)
+            semantic_threats = analyzer._discover_semantic_threats(
+                architecture,
+                graph,
+                top_k=analysis_flags["semantic_top_k"]
+            )
             semantic_count = len(semantic_threats)
             raw_threats.extend(semantic_threats)
             await self._emit("semantic",
@@ -170,7 +179,7 @@ class StreamingAnalyzer:
         aggregated = analyzer._aggregate_threats_by_id(raw_threats)
         
         # ---- Phase 6: ML Severity ----
-        if analyzer._severity_classifier:
+        if analyzer._severity_classifier and analysis_flags["severity_refinement"]:
             await self._emit("severity",
                              f"ML severity refinement on {len(aggregated)} threats...",
                              self._phase_progress(5))
@@ -188,13 +197,11 @@ class StreamingAnalyzer:
         
         # ---- Phase 8: Attack Chains ----
         attack_chain_summary = None
-        if analyzer._attack_chain_analyzer:
+        if analyzer._attack_chain_analyzer and analysis_flags["attack_chains"]:
             await self._emit("attack_chains", "Building attack chain graph...",
                              self._phase_progress(7))
             try:
-                kb_threats = analyzer.rule_engine.get_all_threats()
-                analyzer._attack_chain_analyzer.build_threat_graph(kb_threats)
-                attack_chain_summary = analyzer._attack_chain_analyzer.get_summary()
+                attack_chain_summary = analyzer._get_attack_chain_summary()
                 chains_found = attack_chain_summary.get('chains', 0)
                 await self._emit("attack_chains",
                                 f"Found {chains_found} attack chains",
@@ -236,14 +243,16 @@ class StreamingAnalyzer:
             result.attack_chains = attack_chain_summary
         
         result.ml_enhanced = {
-            'semantic_matching': analyzer._semantic_matcher is not None and use_local_slm,
+            'semantic_matching': analyzer._semantic_matcher is not None and analysis_flags["semantic_matching"],
             'stride_classifier': analyzer._stride_classifier is not None and analyzer._stride_classifier.is_trained,
-            'severity_classifier': analyzer._severity_classifier is not None,
-            'attack_chains': analyzer._attack_chain_analyzer is not None,
+            'severity_classifier': analyzer._severity_classifier is not None and analysis_flags["severity_refinement"],
+            'attack_chains': analyzer._attack_chain_analyzer is not None and analysis_flags["attack_chains"],
+            'analysis_mode': analysis_flags["mode"],
             'nlp_parser': architecture.metadata.get('nlp_enhanced', False),
         }
+        result.coverage = analyzer._build_coverage(architecture, normalized, analysis_flags)
         
-        result.report_markdown = ReportGenerator.generate_markdown(result)
+        result.report_markdown = analyzer._generate_report_markdown(result)
         
         # ---- Complete ----
         await self._emit("complete", 

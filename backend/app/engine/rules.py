@@ -45,10 +45,55 @@ class RuleEngine:
         
         # Sort rules by priority (if defined) for consistent evaluation order
         self.rules.sort(key=lambda r: r.get('priority', 50))
+        self._build_rule_indexes()
     
     def get_all_threats(self) -> List[Dict]:
         """Return all loaded threat rules for external use (e.g., vectorization, attack chain analysis)."""
         return self.rules
+
+    def _build_rule_indexes(self):
+        """Pre-index rules so analysis doesn't scan the entire ruleset for every node and edge."""
+        self._component_rules_by_type: Dict[str, List[Dict]] = {}
+        self._component_any_rules: List[Dict] = []
+        self._flow_rules: List[Dict] = []
+
+        for rule in self.rules:
+            resource_types = rule.get('resource_type') or []
+            if isinstance(resource_types, str):
+                resource_types = [resource_types]
+
+            if 'DataFlow' in resource_types:
+                self._flow_rules.append(rule)
+
+            component_types = [rt for rt in resource_types if rt != 'DataFlow']
+            if not component_types:
+                continue
+
+            if 'Any' in component_types:
+                self._component_any_rules.append(rule)
+
+            for component_type in component_types:
+                self._component_rules_by_type.setdefault(component_type, []).append(rule)
+
+    def _get_component_candidate_rules(self, component_type: str) -> List[Dict]:
+        """Return the minimal set of rules relevant to a component type."""
+        candidates = []
+        seen = set()
+
+        def add_rules(rules: List[Dict]):
+            for rule in rules:
+                rule_key = id(rule)
+                if rule_key not in seen:
+                    seen.add(rule_key)
+                    candidates.append(rule)
+
+        add_rules(self._component_any_rules)
+        add_rules(self._component_rules_by_type.get(component_type, []))
+
+        if component_type in ['API', 'Worker', 'Service', 'Microservice']:
+            add_rules(self._component_rules_by_type.get('Service', []))
+
+        return candidates
     
     def _convert_to_legacy_format(self, comprehensive_threats: List[Dict]) -> List[Dict]:
         """
@@ -59,7 +104,7 @@ class RuleEngine:
         
         for threat in comprehensive_threats:
             # If the threat already has legacy format fields (from threats.json), keep it as-is
-            if 'detection' in threat and 'resource_type' in threat:
+            if 'risk' in threat and 'threat' in threat and ('detection' in threat or 'resource_type' in threat):
                 legacy_rules.append(threat)
                 continue
 
@@ -71,7 +116,7 @@ class RuleEngine:
                 'description': threat.get('attack_vector', ''),
                 'severity': threat.get('impact', 'Medium'),
                 'priority': self._map_severity_to_priority(threat.get('impact', 'Medium')),
-                'resource_type': [threat.get('component', 'Any')],
+                'resource_type': threat.get('component', 'Any') if isinstance(threat.get('component'), list) else [threat.get('component', 'Any')],
                 'threat': {
                     'title': threat.get('threat_name', 'Unknown Threat'),
                     'description': threat.get('attack_vector', '')
@@ -88,7 +133,7 @@ class RuleEngine:
                 'mitigation': {
                     'primary': self._extract_primary_mitigation(threat.get('mitigations', []))
                 },
-                'detection': self._create_detection_logic(threat),
+                'detection': threat.get('detection') or self._create_detection_logic(threat),
                 'negating_controls': self._extract_negating_controls(threat.get('mitigations', []))
             }
 
@@ -153,11 +198,19 @@ class RuleEngine:
         conditions = []
         
         # Base condition: Component type match
-        conditions.append({
-            'field': 'type',
-            'op': '==',
-            'value': component
-        })
+        if component != 'Any':
+            if isinstance(component, list):
+                conditions.append({
+                    'field': 'type',
+                    'op': 'in',
+                    'value': component
+                })
+            else:
+                conditions.append({
+                    'field': 'type',
+                    'op': '==',
+                    'value': component
+                })
         
         # Cloud platform specific threats
         if cloud_platforms and cloud_platforms != ['On-Premise']:
@@ -288,7 +341,8 @@ class RuleEngine:
 
     def evaluate_component(self, component_id: str, component_data: Dict[str, Any]) -> List[Threat]:
         threats = []
-        for rule in self.rules:
+        component_type = component_data.get('type')
+        for rule in self._get_component_candidate_rules(component_type):
             r_types = rule.get('resource_type')
             if isinstance(r_types, str):
                 r_types = [r_types]
@@ -325,7 +379,7 @@ class RuleEngine:
 
     def evaluate_flow(self, source: str, target: str, flow_data: Dict[str, Any]) -> List[Threat]:
         threats = []
-        for rule in self.rules:
+        for rule in self._flow_rules:
             r_types = rule.get('resource_type')
             if isinstance(r_types, str):
                 r_types = [r_types]

@@ -18,7 +18,7 @@ class DataFlow(BaseModel):
 class SystemArchitecture(BaseModel):
     components: List[Component]
     flows: List[DataFlow]
-    metadata: Optional[Dict[str, Any]] = {}  # NEW: For known issues and other metadata
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)  # NEW: For known issues and other metadata
 
 class Threat(BaseModel):
     id: str
@@ -62,4 +62,6 @@ class AnalysisResult(BaseModel):
     attack_chains: Optional[Dict[str, Any]] = None  # Attack chain analysis summary
     ml_enhanced: Optional[Dict[str, Any]] = None  # Which ML features were active
     architecture_insights: Optional[List[Dict[str, Any]]] = None  # Architecture intelligence insights
+    coverage: Optional[Dict[str, Any]] = None  # Analysis coverage and assumption summary
+    diff_summary: Optional[Dict[str, Any]] = None  # Delta vs prior analysis, when available
 

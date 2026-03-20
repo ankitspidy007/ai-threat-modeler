@@ -1,53 +1,43 @@
-# AI Threat Modeler - Frontend Requirements
+# AI Threat Modeler - Workspace Requirements
 
-## System Requirements
-- **Node.js**: >= 18.0.0
-- **npm**: >= 9.0.0
+## Frontend Runtime
+- Node.js >= 18
+- npm >= 9
 
-## Key Dependencies
+## Frontend Dependencies
 
-### Production Dependencies
-All dependencies use `^` notation for automatic minor and patch updates:
+### Production
+- react (^19.2.0)
+- react-dom (^19.2.0)
+- lucide-react (^0.563.0)
+- mermaid (^11.12.2)
+- jspdf (^4.0.0)
+- html2canvas (^1.4.1)
+- clsx (^2.1.1)
+- framer-motion (^12.29.0)
+- tailwind-merge (^3.4.0)
 
-- **react** (^19.2.0) - UI framework
-- **react-dom** (^19.2.0) - React DOM rendering
-- **vite** (^7.2.4) - Build tool and dev server
-- **tailwindcss** (^3.4.19) - Utility-first CSS framework
-- **mermaid** (^11.12.2) - Diagram generation
-- **jspdf** (^4.0.0) - PDF export
-- **html2canvas** (^1.4.1) - Screenshot capture
-- **lucide-react** (^0.563.0) - Icon library
-- **framer-motion** (^12.29.0) - Animation library
-- **concurrently** (^9.2.1) - Run multiple commands
+### Development
+- vite (^7.2.4)
+- @vitejs/plugin-react (^5.1.1)
+- tailwindcss (^3.4.19)
+- postcss (^8.5.6)
+- autoprefixer (^10.4.23)
+- concurrently (^9.2.1)
+- eslint (^9.39.1)
+- @eslint/js (^9.39.1)
+- eslint-plugin-react-hooks (^7.0.1)
+- eslint-plugin-react-refresh (^0.4.24)
+- globals (^16.5.0)
 
-### Development Dependencies
-- **eslint** (^9.39.1) - Code linting
-- **autoprefixer** (^10.4.23) - CSS vendor prefixes
-- **postcss** (^8.5.6) - CSS processing
+## Backend
 
-## Backend Dependencies (Python)
-See `backend/requirements.txt` for full list. Key NLP/DL libraries:
+See [backend/requirements.txt](C:/Users/Ankit/Documents/codex/ai-threat-modeler/backend/requirements.txt) for installable Python packages.
 
-- **spacy** (>=3.7.0) - NER and dependency parsing
-- **sentence-transformers** (>=2.6.0) - Semantic embeddings
-- **faiss-cpu** (>=1.8.0) - Vector similarity search
-- **numpy** (>=1.26.0) - Numerical operations
-- **networkx** (>=3.4.0) - Attack chain graph analysis
-- **fastapi** (>=0.115.0) - REST API framework
-- **pydantic** (>=2.6.0) - Data validation
-
-## Installation
+## Install
 
 ```bash
-# Install all frontend dependencies
 npm install
-
-# Install backend dependencies
-cd backend
-pip install -r requirements.txt
-
-# Optional: spaCy NLP model
+cd backend && pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
-
-For more information, see [DEPENDENCY_MANAGEMENT.md](docs/DEPENDENCY_MANAGEMENT.md)

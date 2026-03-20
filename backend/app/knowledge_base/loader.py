@@ -13,6 +13,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+EXCLUDED_KB_FILES = {
+    'enhanced_schema.json',
+    'schema.json',
+}
+
 
 class ThreatKnowledgeBase:
     """Loads and manages comprehensive threat knowledge base"""
@@ -27,31 +32,12 @@ class ThreatKnowledgeBase:
     
     def load_all(self):
         """Load all threat modules"""
-        modules = [
-            # Cloud platforms
-            'cloud_aws_threats.json',
-            'cloud_azure_threats.json',
-            'cloud_gcp_threats.json',
-            
-            # OWASP frameworks
-            'owasp_web_top10.json',
-            'owasp_api_top10.json',
-            'owasp_serverless_top10.json',
-            
-            # Architecture and components
-            'container_k8s_threats.json',
-            'auth_authz_threats.json',
-            'infrastructure_threats.json',
-            'database_threats.json',
-            
-            # Advanced threats
-            'supply_chain_threats.json',
-            'emerging_threats.json',
-            
-            # Legacy support
-            'threats.json',  # Original threat database
-            'domain_threats.json'  # Domain-specific threats
-        ]
+        self.threats = []
+        self.threats_by_id = {}
+        self.threats_by_component = {}
+        self.threats_by_cloud = {}
+
+        modules = self._discover_modules()
         
         for module in modules:
             self.load_module(module)
@@ -60,6 +46,45 @@ class ThreatKnowledgeBase:
         self._build_indexes()
         
         logger.info(f"Loaded {len(self.threats)} threats from {len(modules)} modules")
+
+    def _discover_modules(self) -> List[str]:
+        """Auto-discover knowledge base modules so new packs load without code changes."""
+        priority_order = [
+            'cloud_aws_threats.json',
+            'cloud_azure_threats.json',
+            'cloud_gcp_threats.json',
+            'owasp_web_top10.json',
+            'owasp_api_top10.json',
+            'container_k8s_threats.json',
+            'auth_authz_threats.json',
+            'infrastructure_threats.json',
+            'database_threats.json',
+            'supply_chain_threats.json',
+            'emerging_threats.json',
+            'custom_ai_llm_threats.json',
+            'domain_threats.json',
+            'threats.json',
+        ]
+
+        discovered = []
+        for path in self.kb_dir.glob('*.json'):
+            if path.name in EXCLUDED_KB_FILES:
+                continue
+            discovered.append(path.name)
+
+        seen = set()
+        ordered = []
+        for module in priority_order:
+            if module in discovered and module not in seen:
+                ordered.append(module)
+                seen.add(module)
+
+        for module in sorted(discovered):
+            if module not in seen:
+                ordered.append(module)
+                seen.add(module)
+
+        return ordered
     
     def load_module(self, filename: str):
         """Load a single threat module"""
@@ -100,10 +125,13 @@ class ThreatKnowledgeBase:
             
             # Index by component
             component = threat.get('component')
-            if component:
-                if component not in self.threats_by_component:
-                    self.threats_by_component[component] = []
-                self.threats_by_component[component].append(threat)
+            components = component if isinstance(component, list) else [component]
+            for component_name in components:
+                if not component_name:
+                    continue
+                if component_name not in self.threats_by_component:
+                    self.threats_by_component[component_name] = []
+                self.threats_by_component[component_name].append(threat)
             
             # Index by cloud platform
             cloud_platforms = threat.get('cloud_platform', [])
@@ -187,4 +215,11 @@ def get_knowledge_base() -> ThreatKnowledgeBase:
     global _kb_instance
     if _kb_instance is None:
         _kb_instance = ThreatKnowledgeBase()
+    return _kb_instance
+
+
+def reload_knowledge_base() -> ThreatKnowledgeBase:
+    """Reload the knowledge base from disk."""
+    global _kb_instance
+    _kb_instance = ThreatKnowledgeBase()
     return _kb_instance

@@ -1,7 +1,7 @@
 import re
 import uuid
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from ..models import Component, DataFlow, SystemArchitecture
 import networkx as nx
 from collections import defaultdict
@@ -52,6 +52,93 @@ COMPONENT_SYNONYMS = {
 }
 
 class ArchitectureParser:
+    def _extract_component_context(self, text: str, component_name: str, radius: int = 220) -> str:
+        """Extract a component-local text window so properties are inferred from nearby context."""
+        if not component_name:
+            return text.lower()
+
+        pattern = re.escape(component_name)
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            normalized_name = component_name.replace("_", " ").replace("-", " ")
+            match = re.search(re.escape(normalized_name), text, re.IGNORECASE)
+        if not match:
+            return text.lower()
+
+        start = max(0, match.start() - radius)
+        end = min(len(text), match.end() + radius)
+        return text[start:end].lower()
+
+    def _apply_security_properties(self, props: Dict[str, Any], security_props: Dict[str, Any]) -> Dict[str, Any]:
+        """Merge extracted security properties into component properties conservatively."""
+        if not security_props:
+            return props
+
+        for key, value in security_props.items():
+            if value is None or key == 'compliance_frameworks':
+                continue
+            if key not in props or props[key] in (None, False, 'none', '', []):
+                props[key] = value
+
+        if 'compliance_frameworks' in security_props:
+            existing = props.get('compliance_frameworks', [])
+            for framework in security_props['compliance_frameworks']:
+                if framework not in existing:
+                    existing.append(framework)
+            props['compliance_frameworks'] = existing
+
+        return props
+
+    def _collect_assumptions(self, components: Dict[str, Component], flows: List[DataFlow]) -> List[Dict[str, str]]:
+        """Capture unknown or inferred areas so users can validate them explicitly."""
+        assumptions = []
+
+        for component in components.values():
+            props = component.properties
+            if props.get('auth_type') == 'none' and component.type in ['API', 'Service', 'API Gateway', 'Identity Provider']:
+                assumptions.append({
+                    'scope': component.id,
+                    'type': 'authentication',
+                    'message': f"Authentication was not clearly identified for {component.name}."
+                })
+            if props.get('encryption_at_rest') is False and component.type in ['Database', 'Object Storage', 'Secrets Manager']:
+                assumptions.append({
+                    'scope': component.id,
+                    'type': 'encryption',
+                    'message': f"Encryption at rest was not explicitly confirmed for {component.name}."
+                })
+            if not props.get('logging_enabled') and component.type in ['API', 'Service', 'Database']:
+                assumptions.append({
+                    'scope': component.id,
+                    'type': 'logging',
+                    'message': f"Audit or application logging was not clearly identified for {component.name}."
+                })
+
+        for flow in flows:
+            if flow.properties.get('trust_boundary') == 'inferred':
+                assumptions.append({
+                    'scope': f"{flow.source_id}->{flow.target_id}",
+                    'type': 'trust_boundary',
+                    'message': f"Trust boundary for flow {flow.source_id} -> {flow.target_id} was inferred."
+                })
+
+        return assumptions
+
+    def _build_trust_boundaries(self, components: Dict[str, Component], flows: List[DataFlow]) -> List[Dict[str, Any]]:
+        """Summarize trust boundaries crossed by the modeled architecture."""
+        boundaries = []
+        for flow in flows:
+            boundary = flow.properties.get('trust_boundary')
+            if not boundary:
+                continue
+            boundaries.append({
+                'name': boundary,
+                'source': flow.source_id,
+                'target': flow.target_id,
+                'crosses_boundary': flow.properties.get('crosses_trust_boundary', False),
+            })
+        return boundaries
+
     def parse_known_issues(self, text: str) -> List[Dict]:
         """
         Extract and classify known security issues from description.
@@ -299,6 +386,7 @@ class ArchitectureParser:
         # ========================================
         nlp_entities = None
         nlp_security_props = {}
+        nlp = None
         if NLP_AVAILABLE:
             try:
                 nlp = get_nlp_processor()
@@ -359,8 +447,11 @@ class ArchitectureParser:
                         break
                 if already_found:
                     continue
-                
-                props = self._infer_properties(text_lower, comp_type)
+
+                component_context = self._extract_component_context(text, tech_name)
+                props = self._infer_properties(component_context, comp_type)
+                if nlp:
+                    props = self._apply_security_properties(props, nlp.extract_security_properties(component_context))
                 components[tech_id] = Component(
                     id=tech_id,
                     name=tech_name.title(),
@@ -374,7 +465,10 @@ class ArchitectureParser:
                 svc_name = svc_entity['text']
                 svc_id = svc_name.lower().replace(' ', '_').replace('-', '_')
                 if svc_id not in components:
-                    props = self._infer_properties(text_lower, 'Service')
+                    component_context = self._extract_component_context(text, svc_name)
+                    props = self._infer_properties(component_context, 'Service')
+                    if nlp:
+                        props = self._apply_security_properties(props, nlp.extract_security_properties(component_context))
                     if svc_entity.get('tech_stack'):
                         props['tech_stack'] = svc_entity['tech_stack']
                     components[svc_id] = Component(
@@ -398,7 +492,10 @@ class ArchitectureParser:
             c_id = c_type.lower().replace(" ", "_")
             if c_id in components:
                 continue
-            props = self._infer_properties(text_lower, c_type)
+            component_context = self._extract_component_context(text, c_type)
+            props = self._infer_properties(component_context, c_type)
+            if nlp:
+                props = self._apply_security_properties(props, nlp.extract_security_properties(component_context))
             comp = Component(id=c_id, name=c_type, type=c_type, properties=props)
             components[comp.id] = comp
 
@@ -438,28 +535,24 @@ class ArchitectureParser:
         # 9. NLP-ENHANCED: Apply NLP-extracted security properties
         if nlp_security_props:
             for comp in components.values():
-                for key, value in nlp_security_props.items():
-                    # Only override if NLP found something definitive
-                    if value is not None and key not in ('compliance_frameworks',):
-                        if key not in comp.properties or comp.properties[key] in (None, False, 'none'):
-                            comp.properties[key] = value
-                # Merge compliance frameworks
-                if 'compliance_frameworks' in nlp_security_props:
-                    existing = comp.properties.get('compliance_frameworks', [])
-                    for fw in nlp_security_props['compliance_frameworks']:
-                        if fw not in existing:
-                            existing.append(fw)
-                    comp.properties['compliance_frameworks'] = existing
+                component_context = self._extract_component_context(text, comp.name)
+                scoped_security_props = nlp.extract_security_properties(component_context) if nlp else nlp_security_props
+                comp.properties = self._apply_security_properties(comp.properties, scoped_security_props)
         
         # 10. Parse known issues
         known_issues = self.parse_known_issues(text)
+        assumptions = self._collect_assumptions(components, flows)
+        trust_boundaries = self._build_trust_boundaries(components, flows)
         
         return SystemArchitecture(
             components=list(components.values()),
             flows=flows,
             metadata={
                 'known_issues': known_issues,
-                'nlp_enhanced': NLP_AVAILABLE and nlp_entities is not None
+                'nlp_enhanced': NLP_AVAILABLE and nlp_entities is not None,
+                'global_security_signals': nlp_security_props,
+                'assumptions': assumptions,
+                'trust_boundaries': trust_boundaries,
             }
         )
     
@@ -487,7 +580,8 @@ class ArchitectureParser:
             service_id = service_name.lower().replace(' ', '_').replace('-', '_')
             
             # Infer properties from tech stack and description
-            props = self._infer_service_properties(tech_stack, description, text_lower)
+            local_context = f"{service_name} {tech_stack} {description}"
+            props = self._infer_service_properties(tech_stack, description, local_context)
             props['tech_stack'] = tech_stack
             props['description'] = description
             
@@ -513,7 +607,8 @@ class ArchitectureParser:
             if any(s['id'] == service_id for s in services):
                 continue
             
-            props = self._infer_service_properties(tech_stack, description, text_lower)
+            local_context = f"{service_name} {tech_stack} {description}"
+            props = self._infer_service_properties(tech_stack, description, local_context)
             props['tech_stack'] = tech_stack
             props['description'] = description
             
@@ -575,6 +670,7 @@ class ArchitectureParser:
                         props['clustered'] = True
                     if 'encrypted' in context or 'encryption' in context:
                         props['encryption_at_rest'] = True
+                    props = self._apply_security_properties(props, self._infer_properties(context, 'Database'))
                     
                     databases.append({
                         'id': db_id,
@@ -619,6 +715,7 @@ class ArchitectureParser:
                     'category': info['category'],
                     'trust_boundary': 'external'
                 }
+                props = self._apply_security_properties(props, self._infer_properties(self._extract_context(text_lower, service_name, 120), info['type']))
                 
                 services.append({
                     'id': service_id,
@@ -631,7 +728,8 @@ class ArchitectureParser:
     
     def _infer_service_properties(self, tech_stack: str, description: str, full_text: str) -> Dict:
         """Infer service properties from tech stack and description."""
-        props = self._infer_properties(full_text, 'Service')
+        local_context = f"{tech_stack} {description} {full_text}".lower()
+        props = self._infer_properties(local_context, 'Service')
         
         # Parse tech stack
         tech_lower = tech_stack.lower()
@@ -815,6 +913,7 @@ class ArchitectureParser:
 
     def _infer_properties(self, text_lower: str, component_type: str) -> Dict:
         """Enhanced property inference based on text analysis."""
+        text_lower = (text_lower or "").lower()
         # Set appropriate defaults for security properties
         # Use 'none' and False instead of None so threat rules can match
         props = {
@@ -951,8 +1050,8 @@ class ArchitectureParser:
             props['deployment'] = 'k8s'
         if 'docker' in text_lower or 'container' in text_lower:
             props['containerized'] = True
-        if 'aws' in text_lower or 'azure' in text_lower or 'gcp' in text_lower or 'cloud' in text_lower:
-            props['cloud_provider'] = True
+        if ('aws' in text_lower or 'azure' in text_lower or 'gcp' in text_lower or 'cloud' in text_lower) and 'cloud_provider' not in props:
+            props['deployment_model'] = 'cloud'
         
         # IoT specific
         if component_type == 'IoT Device' or 'iot' in text_lower or 'sensor' in text_lower:

@@ -98,6 +98,57 @@ class TestNLPProcessor:
         assert nlp.classify_component_type("RabbitMQ message broker") == 'Queue'
         assert nlp.classify_component_type("Kong API Gateway") == 'API Gateway'
 
+    def test_ml_component_classification(self):
+        """Should classify LLM and RAG infrastructure as ML services."""
+        from app.engine.nlp_processor import NLPProcessor
+
+        nlp = NLPProcessor()
+
+        assert nlp.classify_component_type("OpenAI powered RAG pipeline with embeddings") == 'ML Service'
+
+    def test_service_extraction_name_style(self):
+        """Should extract service names declared with a colon."""
+        from app.engine.nlp_processor import NLPProcessor
+
+        nlp = NLPProcessor()
+        text = """
+        Retrieval Pipeline: Uses OpenAI embeddings and a vector database
+        Policy Engine: Applies access control decisions
+        """
+        entities = nlp.extract_entities(text)
+
+        services = {e['text'] for e in entities.get('services', [])}
+        assert 'Retrieval Pipeline' in services
+        assert 'Policy Engine' in services
+
+    def test_security_properties_trust_boundary_and_credentials(self):
+        """Should detect trust-boundary and credential sensitivity signals."""
+        from app.engine.nlp_processor import NLPProcessor
+
+        nlp = NLPProcessor()
+        text = (
+            "The public-facing API stores API keys in a secrets manager and validates webhook signatures. "
+            "It also processes customer tokens."
+        )
+        props = nlp.extract_security_properties(text)
+
+        assert props.get('trust_boundary') == 'internet'
+        assert props.get('public_access') == True
+        assert props.get('credential_sensitivity') == True
+        assert props.get('secrets_management') == True
+        assert props.get('webhook_signature_validation') == True
+
+    def test_security_properties_ml_pipeline(self):
+        """Should detect ML pipeline security-relevant context."""
+        from app.engine.nlp_processor import NLPProcessor
+
+        nlp = NLPProcessor()
+        text = "An internal RAG service uses an embedding model, vector database, and service mesh."
+        props = nlp.extract_security_properties(text)
+
+        assert props.get('ml_pipeline') == True
+        assert props.get('service_mesh') == True
+
 
 # === 2. EMBEDDING SERVICE TESTS ===
 

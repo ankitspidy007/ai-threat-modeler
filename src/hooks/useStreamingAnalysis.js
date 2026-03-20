@@ -1,6 +1,9 @@
 import { useState, useCallback, useRef } from 'react';
+import { WS_BASE_URL } from '../config';
+import { mapAnalysisResult } from '../utils/analysisMapper';
 
-const WS_URL = `ws://${window.location.hostname}:8000/ws/analyze`;
+const WS_URL = `${WS_BASE_URL}/ws/analyze`;
+const getAnalysisMode = (useLocalSlm = true) => (useLocalSlm ? 'standard' : 'fast');
 
 /**
  * React hook for streaming threat analysis via WebSocket.
@@ -54,7 +57,8 @@ export function useStreamingAnalysis() {
                 ws.send(JSON.stringify({
                     description,
                     project_name: projectName,
-                    use_local_slm: useLocalSlm
+                    use_local_slm: useLocalSlm,
+                    analysis_mode: getAnalysisMode(useLocalSlm)
                 }));
             };
 
@@ -72,40 +76,7 @@ export function useStreamingAnalysis() {
                         setMessage('Analysis complete!');
                         setIsAnalyzing(false);
 
-                        // Map backend response to frontend format
-                        const r = data.data;
-                        const mapped = {
-                            summary: r.summary,
-                            projectName: r.project_name,
-                            score: r.score,
-                            architecture: r.architecture,
-                            timestamp: new Date().toLocaleString(),
-                            threats: (r.threats || []).map(t => ({
-                                id: t.id,
-                                category: t.category,
-                                stride_category: t.stride_category || t.category,
-                                title: t.title,
-                                severity: t.severity,
-                                likelihood: t.likelihood || 'Medium',
-                                confidence: t.confidence || 'Medium',
-                                tier: t.tier || 'Potential',
-                                status: t.status || 'Identified',
-                                evidence: t.evidence || [],
-                                description: t.description,
-                                impact: t.impact || 'Unknown',
-                                mitigation: t.mitigation,
-                                cwe: t.cwe || [],
-                                mitre_attack: t.mitre_attack || [],
-                                owasp_top_10: t.owasp_top_10 || [],
-                                nist_800_53: t.nist_800_53 || [],
-                                affected_components: t.affected_components || [],
-                                affected_data_flows: t.affected_data_flows || [],
-                                component_id: t.component_id,
-                                mapped_controls: t.mapped_controls || null,
-                            })),
-                            diagram: r.mermaid_diagram || "graph LR; Error[No Diagram Generated];",
-                            report_markdown: r.report_markdown,
-                        };
+                        const mapped = mapAnalysisResult(data.data);
 
                         setResult(mapped);
                         resolve(mapped);

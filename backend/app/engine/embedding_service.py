@@ -278,3 +278,9 @@ def get_or_create_vector_store(dimension: int = 384) -> VectorStore:
     if _vector_store is None:
         _vector_store = VectorStore(dimension)
     return _vector_store
+
+
+def reset_vector_store():
+    """Reset the global vector store so it can be rebuilt from fresh KB data."""
+    global _vector_store
+    _vector_store = None

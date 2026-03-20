@@ -96,11 +96,44 @@ class SemanticThreatMatcher:
                 'original': threat  # Keep reference to original
             })
         
+        # Check if we can load from disk cache
+        import hashlib
+        import json
+        import pickle
+        from pathlib import Path
+        
+        try:
+            # Create a simple hash of the threats to detect changes
+            kb_summary = [{"id": t.get("id"), "title": t.get("title")} for t in threats]
+            kb_hash = hashlib.md5(json.dumps(kb_summary, sort_keys=True).encode()).hexdigest()
+            cache_dir = Path(__file__).parent.parent / "knowledge_base" / "cache"
+            cache_dir.mkdir(exist_ok=True, parents=True)
+            cache_file = cache_dir / f"kb_{kb_hash}.pkl"
+            
+            if cache_file.exists():
+                with open(cache_file, 'rb') as f:
+                    embeddings, cached_metadata = pickle.load(f)
+                self._vector_store.add(embeddings, cached_metadata)
+                self._kb_vectorized = True
+                logger.info(f"Loaded {len(threats)} vectors from cache. Vector store size: {self._vector_store.size}")
+                return
+        except Exception as e:
+            logger.warning(f"Cache check failed: {e}")
+        
         # Batch embed
         try:
             embeddings = self._embedding_service.embed_batch(texts)
             self._vector_store.add(embeddings, metadata)
             self._kb_vectorized = True
+            
+            # Save to cache
+            try:
+                if 'cache_file' in locals():
+                    with open(cache_file, 'wb') as f:
+                        pickle.dump((embeddings, metadata), f)
+            except Exception as e:
+                logger.warning(f"Failed to save embeddings cache: {e}")
+                
             logger.info(f"Vectorized {len(threats)} threats. Vector store size: {self._vector_store.size}")
         except Exception as e:
             logger.error(f"Failed to vectorize knowledge base: {e}")
@@ -315,12 +348,17 @@ class SemanticThreatMatcher:
         if not self._embedding_service:
             return {cat: 0.0 for cat in stride_descriptions}
         
+        # Cache STRIDE embeddings on the instance to avoid re-computing per function call
+        if not hasattr(self, '_stride_embeddings'):
+            self._stride_embeddings = {}
+            for category, desc in stride_descriptions.items():
+                self._stride_embeddings[category] = self._embedding_service.embed(desc)
+        
         try:
             text_emb = self._embedding_service.embed(text)
             
             scores = {}
-            for category, desc in stride_descriptions.items():
-                cat_emb = self._embedding_service.embed(desc)
+            for category, cat_emb in self._stride_embeddings.items():
                 if NUMPY_AVAILABLE:
                     import numpy as np
                     scores[category] = float(np.dot(text_emb, cat_emb))
@@ -375,3 +413,9 @@ def get_semantic_matcher() -> SemanticThreatMatcher:
     if _matcher_instance is None:
         _matcher_instance = SemanticThreatMatcher()
     return _matcher_instance
+
+
+def reset_semantic_matcher():
+    """Reset the semantic matcher so embeddings/indexes can be rebuilt."""
+    global _matcher_instance
+    _matcher_instance = None

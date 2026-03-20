@@ -24,7 +24,7 @@ const SeverityBadge = ({ severity }) => {
 };
 
 const ThreatCard = ({ threat }) => (
-    <div className="bg-white dark:bg-brand-800 border border-brand-200 dark:border-brand-700 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+    <div className="panel-soft p-5 hover:shadow-[0_24px_60px_-34px_rgba(15,23,42,0.32)] transition-shadow">
         <div className="flex justify-between items-start mb-2">
             <div>
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -66,7 +66,7 @@ const ThreatCard = ({ threat }) => (
 
         {/* Evidence */}
         {threat.evidence && threat.evidence.length > 0 && (
-            <div className="bg-brand-50 dark:bg-brand-700/50 p-2 rounded text-xs mb-3">
+            <div className="bg-brand-50/80 dark:bg-brand-700/45 p-3 rounded-2xl text-xs mb-3">
                 <span className="font-bold text-brand-600 dark:text-brand-400">Evidence:</span>
                 <ul className="list-disc list-inside mt-1">
                     {threat.evidence.map((ev, i) => <li key={i} className="text-brand-700 dark:text-brand-300">{ev}</li>)}
@@ -74,7 +74,7 @@ const ThreatCard = ({ threat }) => (
             </div>
         )}
 
-        <div className="flex items-start gap-2 bg-green-50 dark:bg-green-900/20 p-2 rounded">
+        <div className="flex items-start gap-2 bg-green-50 dark:bg-green-900/20 p-3 rounded-2xl">
             <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
             <p className="text-sm text-green-800 dark:text-green-300">{threat.mitigation}</p>
         </div>
@@ -178,6 +178,8 @@ const ThreatDashboard = ({ data, projectName }) => {
     // Separate threats by tier
     const confirmed = filteredThreats.filter(t => t.tier === 'Confirmed');
     const potential = filteredThreats.filter(t => t.tier === 'Potential');
+    const assumptions = data.coverage?.assumptions || [];
+    const diffSummary = data.diff_summary;
 
     const handleRiskMatrixClick = (impact, likelihood) => {
         // Map matrix click to severity filter — 'High' impact includes 'Critical'
@@ -269,6 +271,39 @@ const ThreatDashboard = ({ data, projectName }) => {
         }
     };
 
+    const renderCoverageCard = () => (
+        <div className="bg-white dark:bg-brand-800 border border-brand-200 dark:border-brand-700 rounded-xl p-5 shadow-sm">
+            <h3 className="text-lg font-bold text-brand-900 dark:text-white mb-3">Coverage & Assumptions</h3>
+            <div className="grid md:grid-cols-4 gap-3 mb-4">
+                <div className="rounded-lg bg-brand-50 dark:bg-brand-700/40 p-3">
+                    <div className="text-xs text-brand-500 dark:text-brand-400">Components</div>
+                    <div className="text-xl font-bold text-brand-900 dark:text-white">{data.coverage?.components_analyzed ?? 0}</div>
+                </div>
+                <div className="rounded-lg bg-brand-50 dark:bg-brand-700/40 p-3">
+                    <div className="text-xs text-brand-500 dark:text-brand-400">Flows</div>
+                    <div className="text-xl font-bold text-brand-900 dark:text-white">{data.coverage?.flows_analyzed ?? 0}</div>
+                </div>
+                <div className="rounded-lg bg-brand-50 dark:bg-brand-700/40 p-3">
+                    <div className="text-xs text-brand-500 dark:text-brand-400">Trust Boundaries</div>
+                    <div className="text-xl font-bold text-brand-900 dark:text-white">{data.coverage?.trust_boundary_count ?? 0}</div>
+                </div>
+                <div className="rounded-lg bg-brand-50 dark:bg-brand-700/40 p-3">
+                    <div className="text-xs text-brand-500 dark:text-brand-400">Assumptions</div>
+                    <div className="text-xl font-bold text-brand-900 dark:text-white">{data.coverage?.assumption_count ?? 0}</div>
+                </div>
+            </div>
+            {assumptions.length > 0 && (
+                <div className="space-y-2">
+                    {assumptions.slice(0, 6).map((assumption, index) => (
+                        <div key={`${assumption.scope}-${index}`} className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 px-3 py-2 text-sm text-yellow-800 dark:text-yellow-300">
+                            {assumption.message}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+
     const handlePDFExport = () => {
         try {
             generateReport(data, projectName);
@@ -331,7 +366,7 @@ const ThreatDashboard = ({ data, projectName }) => {
 
             {/* Filter Panel */}
             {showFilters && (
-                <div className="bg-white dark:bg-brand-800 border border-brand-200 dark:border-brand-700 rounded-lg p-4 mb-6 shadow-sm">
+                <div className="panel-soft p-4 mb-6">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="font-bold text-brand-900 dark:text-white">Filter Threats</h3>
                         {hasActiveFilters && (
@@ -397,7 +432,7 @@ const ThreatDashboard = ({ data, projectName }) => {
                 </div>
             )}
 
-            <div id="report-content" className="space-y-6 p-8 bg-white dark:bg-brand-800 text-brand-900 dark:text-brand-100 rounded-xl shadow-lg border border-brand-100 dark:border-brand-700">
+            <div id="report-content" className="space-y-6 p-8 panel-soft text-brand-900 dark:text-brand-100">
                 {/* Header Info */}
                 <div className="border-b-2 border-brand-100 dark:border-brand-700 pb-4 mb-6 flex justify-between items-end">
                     <div>
@@ -425,7 +460,7 @@ const ThreatDashboard = ({ data, projectName }) => {
 
                 {/* Remediation Progress */}
                 {totalThreats > 0 && (
-                    <div className="bg-brand-50 dark:bg-brand-700/50 rounded-lg p-4 mb-2">
+                    <div className="bg-brand-50/80 dark:bg-brand-700/50 rounded-2xl p-4 mb-2">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-sm font-bold text-brand-700 dark:text-brand-300">Remediation Progress</span>
                             <span className="text-sm font-mono text-brand-600 dark:text-brand-400">{mitigatedThreats}/{totalThreats} addressed</span>
@@ -439,6 +474,22 @@ const ThreatDashboard = ({ data, projectName }) => {
                     </div>
                 )}
 
+                {diffSummary && (
+                    <div className="bg-blue-50/85 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-4">
+                        <h3 className="font-bold text-brand-900 dark:text-white mb-2">Change Summary</h3>
+                        {diffSummary.changed ? (
+                            <div className="space-y-1 text-sm text-blue-900 dark:text-blue-200">
+                                <p>New threats: {diffSummary.new_threats?.length || 0}</p>
+                                <p>Resolved threats: {diffSummary.resolved_threats?.length || 0}</p>
+                            </div>
+                        ) : (
+                            <p className="text-sm text-blue-900 dark:text-blue-200">No threat delta detected compared with the previous analysis for this project.</p>
+                        )}
+                    </div>
+                )}
+
+                {data.coverage && renderCoverageCard()}
+
                 {/* Charts Row: Risk Matrix + STRIDE Chart */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                     <RiskMatrix threats={data.threats} onCellClick={handleRiskMatrixClick} />
@@ -446,7 +497,7 @@ const ThreatDashboard = ({ data, projectName }) => {
                 </div>
 
                 {/* Architecture Diagram */}
-                <div className="bg-brand-50 dark:bg-brand-700/30 border border-brand-200 dark:border-brand-600 rounded-lg p-4 mb-8">
+                <div className="bg-brand-50/85 dark:bg-brand-700/30 border border-brand-200 dark:border-brand-600 rounded-2xl p-5 mb-8">
                     <div className="flex items-center justify-between mb-2">
                         <h3 className="font-bold text-lg text-brand-800 dark:text-white flex-1">
                             Inferred Architecture

@@ -95,7 +95,8 @@ const AIAnalysis = ({ onAnalysisComplete }) => {
                     description: description,
                     llm_provider: provider,
                     api_key: apiKey,
-                    model: model
+                    model: model,
+                    analysis_mode: 'standard'
                 })
             });
 

@@ -1,5 +1,8 @@
+import hashlib
+import json
 import logging
-from typing import List, Dict
+from collections import OrderedDict
+from typing import List, Dict, Tuple
 from .graph_builder import GraphBuilder
 from .rules import RuleEngine
 from .parser import ArchitectureParser
@@ -61,7 +64,111 @@ class ThreatAnalyzer:
         self._attack_chain_analyzer = None
         self._severity_classifier = None
         self._stride_classifier = None
+        self._parsed_arch_cache: OrderedDict[str, SystemArchitecture] = OrderedDict()
+        self._graph_cache: OrderedDict[str, object] = OrderedDict()
+        self._report_cache: OrderedDict[str, str] = OrderedDict()
+        self._semantic_query_cache: OrderedDict[str, List[Tuple[Dict, float]]] = OrderedDict()
+        self._attack_chain_summary_cache = None
         self._init_ml_components()
+
+    @staticmethod
+    def _cache_get(cache: OrderedDict, key: str):
+        if key in cache:
+            cache.move_to_end(key)
+            return cache[key]
+        return None
+
+    @staticmethod
+    def _cache_set(cache: OrderedDict, key: str, value, max_size: int):
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > max_size:
+            cache.popitem(last=False)
+
+    @staticmethod
+    def _stable_hash(payload) -> str:
+        encoded = json.dumps(payload, sort_keys=True, default=str).encode('utf-8')
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _architecture_signature(self, architecture: SystemArchitecture) -> str:
+        payload = architecture.model_dump() if hasattr(architecture, 'model_dump') else architecture.dict()
+        return self._stable_hash(payload)
+
+    def _get_cached_graph(self, architecture: SystemArchitecture):
+        signature = self._architecture_signature(architecture)
+        cached_graph = self._cache_get(self._graph_cache, signature)
+        if cached_graph is not None:
+            return cached_graph
+
+        graph = GraphBuilder(architecture).get_graph()
+        self._cache_set(self._graph_cache, signature, graph, max_size=32)
+        return graph
+
+    def _get_attack_chain_summary(self):
+        if not self._attack_chain_analyzer:
+            return None
+        if self._attack_chain_summary_cache is not None:
+            return self._attack_chain_summary_cache
+
+        kb_threats = self.rule_engine.get_all_threats()
+        self._attack_chain_analyzer.build_threat_graph(kb_threats)
+        self._attack_chain_summary_cache = self._attack_chain_analyzer.get_summary()
+        return self._attack_chain_summary_cache
+
+    def _generate_report_markdown(self, result: AnalysisResult) -> str:
+        cache_key = self._stable_hash({
+            'project_name': result.project_name,
+            'architecture': self._architecture_signature(result.architecture),
+            'score': result.score,
+            'threats': [
+                {
+                    'id': threat.id,
+                    'severity': threat.severity,
+                    'confidence': threat.confidence,
+                    'tier': threat.tier,
+                    'risk_score': threat.risk_score,
+                }
+                for threat in result.threats
+            ],
+        })
+        cached_report = self._cache_get(self._report_cache, cache_key)
+        if cached_report is not None:
+            return cached_report
+
+        report = ReportGenerator.generate_markdown(result)
+        self._cache_set(self._report_cache, cache_key, report, max_size=32)
+        return report
+
+    def _build_coverage(self, architecture: SystemArchitecture, threats: List[Threat], analysis_flags: Dict[str, bool]) -> Dict[str, object]:
+        """Summarize how complete the current analysis is and what assumptions remain."""
+        assumptions = architecture.metadata.get('assumptions', [])
+        threat_boundaries = architecture.metadata.get('trust_boundaries', [])
+        component_total = len(architecture.components)
+        flow_total = len(architecture.flows)
+        components_with_auth = sum(1 for comp in architecture.components if comp.properties.get('auth_type') not in (None, 'none', False))
+        components_with_logging = sum(1 for comp in architecture.components if comp.properties.get('logging_enabled'))
+        components_with_encryption = sum(1 for comp in architecture.components if comp.properties.get('encryption_at_rest'))
+
+        return {
+            'analysis_mode': analysis_flags["mode"],
+            'components_analyzed': component_total,
+            'flows_analyzed': flow_total,
+            'threats_identified': len(threats),
+            'assumption_count': len(assumptions),
+            'trust_boundary_count': len(threat_boundaries),
+            'component_control_coverage': {
+                'authentication': components_with_auth,
+                'logging': components_with_logging,
+                'encryption_at_rest': components_with_encryption,
+            },
+            'optional_stages': {
+                'semantic_matching': analysis_flags["semantic_matching"],
+                'severity_refinement': analysis_flags["severity_refinement"],
+                'attack_chains': analysis_flags["attack_chains"],
+                'architecture_intelligence': analysis_flags["architecture_intelligence"],
+            },
+            'assumptions': assumptions,
+        }
     
     def _init_ml_components(self):
         """Initialize ML/NLP components (graceful fallback)."""
@@ -95,15 +202,97 @@ class ThreatAnalyzer:
             except Exception as e:
                 logger.warning(f"Attack chain init failed: {e}")
 
-    def analyze_from_text(self, description: str, project_name: str = "Untitled Project", use_local_slm: bool = True) -> AnalysisResult:
-        """Parse text and analyze the resulting architecture."""
-        parser = ArchitectureParser()
-        system_architecture = parser.parse(description)
-        return self.analyze(system_architecture, project_name, use_local_slm=use_local_slm)
+    def reload_local_intelligence(self) -> Dict[str, object]:
+        """Reload the KB and rebuild local semantic/classifier artifacts."""
+        from ..knowledge_base.loader import reload_knowledge_base
+        from .embedding_service import reset_vector_store
+        from .semantic_matcher import reset_semantic_matcher
+        from .stride_classifier import reset_stride_classifier
 
-    def analyze(self, architecture: SystemArchitecture, project_name: str = "Untitled Project", use_local_slm: bool = True) -> AnalysisResult:
-        builder = GraphBuilder(architecture)
-        graph = builder.get_graph()
+        reload_knowledge_base()
+        reset_vector_store()
+        reset_semantic_matcher()
+        reset_stride_classifier()
+
+        self.rule_engine = RuleEngine()
+        self._semantic_matcher = None
+        self._attack_chain_analyzer = None
+        self._severity_classifier = None
+        self._stride_classifier = None
+        self._parsed_arch_cache.clear()
+        self._graph_cache.clear()
+        self._report_cache.clear()
+        self._semantic_query_cache.clear()
+        self._attack_chain_summary_cache = None
+        self._init_ml_components()
+
+        kb_stats = {
+            'total_threats': len(self.rule_engine.get_all_threats()),
+            'semantic_ready': self._semantic_matcher is not None,
+            'stride_classifier_ready': self._stride_classifier is not None and self._stride_classifier.is_trained,
+            'stride_classifier_accuracy': (
+                self._stride_classifier.accuracy
+                if self._stride_classifier and self._stride_classifier.is_trained
+                else 0.0
+            ),
+            'attack_chain_ready': self._attack_chain_analyzer is not None,
+        }
+        logger.info(f"Reloaded local intelligence: {kb_stats}")
+        return kb_stats
+
+    def _normalize_analysis_mode(self, analysis_mode: str = "standard", use_local_slm: bool = True) -> str:
+        """Normalize analysis mode while preserving legacy use_local_slm behavior."""
+        mode = (analysis_mode or "standard").lower()
+        if mode not in {"fast", "standard", "deep"}:
+            mode = "standard"
+        if not use_local_slm and mode != "deep":
+            return "fast"
+        return mode
+
+    def _analysis_flags(self, analysis_mode: str = "standard", use_local_slm: bool = True) -> Dict[str, bool]:
+        """Resolve which optional analysis stages should run."""
+        mode = self._normalize_analysis_mode(analysis_mode, use_local_slm)
+        is_fast = mode == "fast"
+        is_deep = mode == "deep"
+        return {
+            "mode": mode,
+            "architecture_intelligence": is_deep,
+            "semantic_matching": not is_fast and use_local_slm,
+            "severity_refinement": not is_fast,
+            "attack_chains": is_deep,
+            "semantic_top_k": 8 if is_deep else 5,
+        }
+
+    def analyze_from_text(
+        self,
+        description: str,
+        project_name: str = "Untitled Project",
+        use_local_slm: bool = True,
+        analysis_mode: str = "standard"
+    ) -> AnalysisResult:
+        """Parse text and analyze the resulting architecture."""
+        cache_key = self._stable_hash({'description': description})
+        system_architecture = self._cache_get(self._parsed_arch_cache, cache_key)
+        if system_architecture is None:
+            parser = ArchitectureParser()
+            system_architecture = parser.parse(description)
+            self._cache_set(self._parsed_arch_cache, cache_key, system_architecture, max_size=32)
+        return self.analyze(
+            system_architecture,
+            project_name,
+            use_local_slm=use_local_slm,
+            analysis_mode=analysis_mode
+        )
+
+    def analyze(
+        self,
+        architecture: SystemArchitecture,
+        project_name: str = "Untitled Project",
+        use_local_slm: bool = True,
+        analysis_mode: str = "standard"
+    ) -> AnalysisResult:
+        analysis_flags = self._analysis_flags(analysis_mode, use_local_slm)
+        graph = self._get_cached_graph(architecture)
         
         raw_threats = []
 
@@ -111,7 +300,7 @@ class ThreatAnalyzer:
         # PHASE 0.5 (NEW): Architecture Intelligence
         # ========================================
         arch_insights = []
-        if ARCH_INTELLIGENCE_AVAILABLE:
+        if ARCH_INTELLIGENCE_AVAILABLE and analysis_flags["architecture_intelligence"]:
             try:
                 intel = ArchitectureIntelligence()
                 insights = intel.analyze(graph, architecture)
@@ -121,12 +310,15 @@ class ThreatAnalyzer:
                 logger.warning(f"Architecture intelligence failed: {e}")
 
         # Analyze Components (Nodes) — Rule-based
-        for node_id, data in graph.nodes(data=True):
+        prioritized_nodes = self._prioritize_component_nodes(graph)
+        prioritized_edges = self._prioritize_flow_edges(graph)
+
+        for node_id, data in prioritized_nodes:
             threats = self.rule_engine.evaluate_component(node_id, data)
             raw_threats.extend(threats)
 
         # Analyze Flows (Edges) — Rule-based
-        for u, v, data in graph.edges(data=True):
+        for u, v, data in prioritized_edges:
             threats = self.rule_engine.evaluate_flow(u, v, data)
             raw_threats.extend(threats)
 
@@ -139,8 +331,12 @@ class ThreatAnalyzer:
         # ========================================
         # PHASE 1.5 (NEW): Semantic Threat Discovery
         # ========================================
-        if self._semantic_matcher and use_local_slm:
-            semantic_threats = self._discover_semantic_threats(architecture, graph)
+        if self._semantic_matcher and analysis_flags["semantic_matching"]:
+            semantic_threats = self._discover_semantic_threats(
+                architecture,
+                graph,
+                top_k=analysis_flags["semantic_top_k"]
+            )
             raw_threats.extend(semantic_threats)
         
         # ========================================
@@ -151,7 +347,7 @@ class ThreatAnalyzer:
         # ========================================
         # PHASE 2.5 (NEW): ML Severity Refinement  
         # ========================================
-        if self._severity_classifier:
+        if self._severity_classifier and analysis_flags["severity_refinement"]:
             aggregated_threats = self._refine_severity(aggregated_threats, architecture)
         
         # ========================================
@@ -173,11 +369,9 @@ class ThreatAnalyzer:
         # PHASE 5.5 (NEW): Attack Chain Analysis
         # ========================================
         attack_chain_summary = None
-        if self._attack_chain_analyzer:
+        if self._attack_chain_analyzer and analysis_flags["attack_chains"]:
             try:
-                kb_threats = self.rule_engine.get_all_threats()
-                self._attack_chain_analyzer.build_threat_graph(kb_threats)
-                attack_chain_summary = self._attack_chain_analyzer.get_summary()
+                attack_chain_summary = self._get_attack_chain_summary()
                 logger.info(f"Attack chain analysis: {attack_chain_summary.get('chains', 0)} chains found")
             except Exception as e:
                 logger.warning(f"Attack chain analysis failed: {e}")
@@ -217,20 +411,69 @@ class ThreatAnalyzer:
         
         # Indicate NLP/ML enhancement status
         result.ml_enhanced = {
-            'semantic_matching': self._semantic_matcher is not None and use_local_slm,
+            'semantic_matching': self._semantic_matcher is not None and analysis_flags["semantic_matching"],
             'stride_classifier': self._stride_classifier is not None and self._stride_classifier.is_trained,
             'stride_classifier_accuracy': self._stride_classifier.accuracy if self._stride_classifier and self._stride_classifier.is_trained else 0.0,
-            'severity_classifier': self._severity_classifier is not None,
-            'attack_chains': self._attack_chain_analyzer is not None,
+            'severity_classifier': self._severity_classifier is not None and analysis_flags["severity_refinement"],
+            'attack_chains': self._attack_chain_analyzer is not None and analysis_flags["attack_chains"],
+            'analysis_mode': analysis_flags["mode"],
             'nlp_parser': architecture.metadata.get('nlp_enhanced', False),
         }
+        result.coverage = self._build_coverage(architecture, normalized_threats, analysis_flags)
         
         # Generate comprehensive markdown report
-        result.report_markdown = ReportGenerator.generate_markdown(result)
+        result.report_markdown = self._generate_report_markdown(result)
         
         return result
     
-    def _discover_semantic_threats(self, architecture: SystemArchitecture, graph) -> List[Threat]:
+    def _priority_score_for_component(self, data: Dict) -> int:
+        score = 0
+        if data.get('public_access') or data.get('internet_facing'):
+            score += 6
+        if data.get('trust_boundary') in ('internet', 'public', 'external', 'dmz'):
+            score += 5
+        if data.get('data_sensitivity') in ('credentials', 'financial', 'pii', 'phi'):
+            score += 4
+        if data.get('auth_type') not in (None, 'none', False):
+            score += 2
+        if data.get('type') in ('API', 'API Gateway', 'Database', 'Identity Provider', 'Secrets Manager', 'Object Storage'):
+            score += 2
+        if data.get('waf_enabled') is False or data.get('encryption_at_rest') is False:
+            score += 1
+        return score
+
+    def _priority_score_for_flow(self, source_data: Dict, flow_data: Dict, target_data: Dict) -> int:
+        score = 0
+        if flow_data.get('crosses_trust_boundary'):
+            score += 5
+        if flow_data.get('trust_boundary') in ('internet', 'public', 'external'):
+            score += 4
+        if source_data.get('public_access') or target_data.get('public_access'):
+            score += 3
+        if source_data.get('data_sensitivity') or target_data.get('data_sensitivity'):
+            score += 2
+        if flow_data.get('protocol') in ('http', 'https', 'websocket'):
+            score += 1
+        return score
+
+    def _prioritize_component_nodes(self, graph) -> List[Tuple[str, Dict]]:
+        prioritized = list(graph.nodes(data=True))
+        prioritized.sort(key=lambda item: self._priority_score_for_component(item[1]), reverse=True)
+        return prioritized
+
+    def _prioritize_flow_edges(self, graph) -> List[Tuple[str, str, Dict]]:
+        prioritized = list(graph.edges(data=True))
+        prioritized.sort(
+            key=lambda item: self._priority_score_for_flow(
+                graph.nodes[item[0]],
+                item[2],
+                graph.nodes[item[1]]
+            ),
+            reverse=True
+        )
+        return prioritized
+
+    def _discover_semantic_threats(self, architecture: SystemArchitecture, graph, top_k: int = 5) -> List[Threat]:
         """
         Use semantic similarity to discover threats that keyword-based rules might miss.
         Only adds threats with high confidence semantic match (score > 0.6).
@@ -238,7 +481,7 @@ class ThreatAnalyzer:
         semantic_threats = []
         existing_ids = set()
         
-        for node_id, data in graph.nodes(data=True):
+        for node_id, data in self._prioritize_component_nodes(graph):
             comp_type = data.get('type', 'Service')
             comp_name = data.get('name', node_id)
             
@@ -253,9 +496,17 @@ class ThreatAnalyzer:
             description = ' '.join(desc_parts)
             
             # Semantic search for relevant threats
-            results = self._semantic_matcher.find_relevant_threats(
-                description, comp_type, top_k=5
-            )
+            semantic_cache_key = self._stable_hash({
+                'description': description,
+                'component_type': comp_type,
+                'top_k': top_k,
+            })
+            results = self._cache_get(self._semantic_query_cache, semantic_cache_key)
+            if results is None:
+                results = self._semantic_matcher.find_relevant_threats(
+                    description, comp_type, top_k=top_k
+                )
+                self._cache_set(self._semantic_query_cache, semantic_cache_key, results, max_size=128)
             
             for meta, score in results:
                 if score < 0.6:  # Only high-confidence matches
@@ -298,11 +549,16 @@ class ThreatAnalyzer:
         Refine threat severity using the ML severity classifier.
         Only adjusts severity when the classifier has high confidence.
         """
+        component_map = {comp.id: comp for comp in architecture.components}
         for threat in threats:
             context = {}
-            # Find the component this threat relates to
-            for comp in architecture.components:
-                if comp.id in (threat.affected_components or []) or comp.id == threat.component_id:
+            candidate_ids = []
+            if threat.component_id:
+                candidate_ids.append(threat.component_id)
+            candidate_ids.extend(threat.affected_components or [])
+            for component_id in candidate_ids:
+                comp = component_map.get(component_id)
+                if comp:
                     context = comp.properties
                     break
             

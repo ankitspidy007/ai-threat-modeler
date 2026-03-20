@@ -4,12 +4,17 @@ from ..models import AnalysisResult, Threat, SystemArchitecture
 import json
 import os
 from collections import Counter
+from functools import lru_cache
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ReportGenerator:
     """Enhanced report generator with comprehensive threat modeling sections."""
     
     # Load framework and compliance mappings
     @staticmethod
+    @lru_cache(maxsize=8)
     def _load_json_data(filename: str) -> Dict:
         """Load JSON data file from app/data directory."""
         try:
@@ -18,7 +23,7 @@ class ReportGenerator:
             with open(file_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Warning: Could not load {filename}: {e}")
+            logger.warning("Could not load %s: %s", filename, e)
             return {}
     
     @staticmethod
@@ -90,7 +95,12 @@ class ReportGenerator:
             md.append(f"The following **{len(potential)} potential risks** are based on missing or unclear information:\n")
             for t in potential:
                 md.append(ReportGenerator._format_enhanced_threat(t, framework_data))
-        
+
+        # ========================================
+        # SECTION 7: RECOMMENDATIONS & MITIGATIONS
+        # ========================================
+        md.extend(ReportGenerator._generate_recommendations(result.threats))
+
         # ========================================
         
         # ========================================
@@ -230,6 +240,13 @@ class ReportGenerator:
         md.append("- Security controls assumed absent unless explicitly mentioned")
         md.append("- Network boundaries and trust zones inferred from component types")
         md.append("- Compliance requirements based on common industry standards\n")
+
+        assumptions = result.architecture.metadata.get('assumptions', [])
+        if assumptions:
+            md.append("### Observed Unknowns and Assumptions\n")
+            for assumption in assumptions[:10]:
+                md.append(f"- {assumption.get('message', 'Unspecified assumption')}")
+            md.append("")
         
         return md
     

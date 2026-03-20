@@ -1,6 +1,10 @@
 import os
 import json
-from typing import Optional
+import time
+import hashlib
+from contextlib import asynccontextmanager
+from collections import OrderedDict
+from typing import Dict, Optional, Tuple
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
@@ -12,11 +16,21 @@ from .services.llm_analyzer import LLMAnalyzer
 # Environment-based configuration
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Warm expensive analyzer dependencies once at startup."""
+    app.state.threat_analyzer = ThreatAnalyzer()
+    yield
+
 
 app = FastAPI(
     title="AI Threat Modeler API", 
     version="0.2.0",
-    description="AI-powered threat modeling API using STRIDE methodology"
+    description="AI-powered threat modeling API using STRIDE methodology",
+    lifespan=lifespan
 )
 
 # Environment-based CORS configuration
@@ -42,6 +56,8 @@ else:
 class AnalyzeRequest(BaseModel):
     project_name: str = Field(..., min_length=1, max_length=200, description="Name of the project")
     description: str = Field(..., min_length=10, max_length=10000, description="System architecture description")
+    use_local_slm: bool = Field(default=True, description="Enable local semantic analysis")
+    analysis_mode: str = Field(default="standard", description="Analysis mode: fast, standard, or deep")
     
     @field_validator('project_name')
     @classmethod
@@ -58,6 +74,41 @@ class AnalyzeRequest(BaseModel):
             raise ValueError('Description must be at least 10 characters')
         return v.strip()
 
+    @field_validator('analysis_mode')
+    @classmethod
+    def validate_analysis_mode(cls, v):
+        if v not in ['fast', 'standard', 'deep']:
+            return 'standard'
+        return v
+
+
+class IaCAnalyzeRequest(BaseModel):
+    project_name: str = Field(..., min_length=1, max_length=200, description="Name of the project")
+    iac_content: str = Field(..., min_length=10, description="Raw Content of Docker Compose or Kubernetes YAML")
+    format_hint: str = Field(default='auto', description="Hint for parser: 'auto', 'docker-compose', 'kubernetes'")
+    analysis_mode: str = Field(default="standard", description="Analysis mode: fast, standard, or deep")
+    
+    @field_validator('project_name')
+    @classmethod
+    def sanitize_project_name(cls, v):
+        import re
+        sanitized = re.sub(r'[<>"\'\\/;]', '', v)
+        return sanitized.strip()
+
+    @field_validator('format_hint')
+    @classmethod
+    def validate_format_hint(cls, v):
+        if v not in ['auto', 'docker-compose', 'kubernetes']:
+            return 'auto'
+        return v
+
+    @field_validator('analysis_mode')
+    @classmethod
+    def validate_analysis_mode(cls, v):
+        if v not in ['fast', 'standard', 'deep']:
+            return 'standard'
+        return v
+
 
 class LLMAnalyzeRequest(BaseModel):
     project_name: str = Field(..., min_length=1, max_length=200)
@@ -65,12 +116,20 @@ class LLMAnalyzeRequest(BaseModel):
     llm_provider: str = Field(..., description="LLM provider: 'openai' or 'claude'")
     api_key: str = Field(..., min_length=10, description="API key for the LLM provider")
     model: Optional[str] = Field(default=None, description="Optional specific model to use")
+    analysis_mode: str = Field(default="standard", description="Analysis mode: fast, standard, or deep")
     
     @field_validator('llm_provider')
     @classmethod
     def validate_provider(cls, v):
         if v.lower() not in ['openai', 'claude', 'gemini']:
             raise ValueError('Provider must be "openai", "claude", or "gemini"')
+        return v.lower()
+
+    @field_validator('analysis_mode')
+    @classmethod
+    def validate_analysis_mode(cls, v):
+        if v not in ['fast', 'standard', 'deep']:
+            return 'standard'
         return v.lower()
 
 
@@ -86,8 +145,91 @@ class APIKeyValidationRequest(BaseModel):
         return v.lower()
 
 
-# In-memory cache for analysis results
-_analysis_cache = {}
+class RetrainLocalModelsResponse(BaseModel):
+    message: str
+    stats: dict
+
+
+class TTLAnalysisCache:
+    def __init__(self, max_entries: int = 100, ttl_seconds: int = 900):
+        self.max_entries = max_entries
+        self.ttl_seconds = ttl_seconds
+        self._store: "OrderedDict[str, Tuple[float, AnalysisResult]]" = OrderedDict()
+
+    def _purge_expired(self):
+        now = time.time()
+        expired = [key for key, (expires_at, _) in self._store.items() if expires_at <= now]
+        for key in expired:
+            self._store.pop(key, None)
+
+    def get(self, key: str):
+        self._purge_expired()
+        item = self._store.get(key)
+        if item is None:
+            return None
+        expires_at, value = item
+        if expires_at <= time.time():
+            self._store.pop(key, None)
+            return None
+        self._store.move_to_end(key)
+        return value
+
+    def set(self, key: str, value: AnalysisResult):
+        self._purge_expired()
+        self._store[key] = (time.time() + self.ttl_seconds, value)
+        self._store.move_to_end(key)
+        while len(self._store) > self.max_entries:
+            self._store.popitem(last=False)
+
+    def clear(self) -> int:
+        count = len(self._store)
+        self._store.clear()
+        return count
+
+
+_analysis_cache = TTLAnalysisCache()
+_latest_analysis_by_project: Dict[str, AnalysisResult] = {}
+
+
+def _stable_cache_key(*parts) -> str:
+    payload = json.dumps(parts, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _build_diff_summary(previous: Optional[AnalysisResult], current: AnalysisResult) -> Optional[dict]:
+    if previous is None:
+        return None
+    previous_ids = {threat.id for threat in previous.threats}
+    current_ids = {threat.id for threat in current.threats}
+    new_ids = sorted(current_ids - previous_ids)
+    resolved_ids = sorted(previous_ids - current_ids)
+    if not new_ids and not resolved_ids:
+        return {
+            "compared_to_project": previous.project_name,
+            "new_threats": [],
+            "resolved_threats": [],
+            "changed": False,
+        }
+    return {
+        "compared_to_project": previous.project_name,
+        "new_threats": new_ids,
+        "resolved_threats": resolved_ids,
+        "changed": True,
+    }
+
+
+def _require_admin(request: Request):
+    if ENVIRONMENT != "production" and not ADMIN_API_TOKEN:
+        return
+    provided = request.headers.get("x-admin-token")
+    if not ADMIN_API_TOKEN or provided != ADMIN_API_TOKEN:
+        raise HTTPException(status_code=403, detail="Admin token required")
+
+
+def get_shared_analyzer(request_or_socket) -> ThreatAnalyzer:
+    """Return the warmed shared analyzer, or fall back to constructing one."""
+    analyzer = getattr(request_or_socket.app.state, "threat_analyzer", None)
+    return analyzer or ThreatAnalyzer()
 
 
 @app.post("/analyze", response_model=AnalysisResult)
@@ -99,24 +241,70 @@ async def analyze(request: Request, payload: AnalyzeRequest):
     - Returns threats with confidence levels and remediation advice
     """
     try:
-        # Simple cache key based on description hash
-        cache_key = hash(payload.description + payload.project_name)
+        # Cache key includes the effective analysis settings.
+        cache_key = _stable_cache_key(
+            payload.description,
+            payload.project_name,
+            payload.use_local_slm,
+            payload.analysis_mode
+        )
         
-        if cache_key in _analysis_cache:
-            return _analysis_cache[cache_key]
+        cached = _analysis_cache.get(cache_key)
+        if cached is not None:
+            return cached
         
-        analyzer = ThreatAnalyzer()
-        result = analyzer.analyze_from_text(payload.description, payload.project_name)
+        analyzer = get_shared_analyzer(request)
+        previous_result = _latest_analysis_by_project.get(payload.project_name)
+        result = analyzer.analyze_from_text(
+            payload.description,
+            payload.project_name,
+            use_local_slm=payload.use_local_slm,
+            analysis_mode=payload.analysis_mode
+        )
+        result.diff_summary = _build_diff_summary(previous_result, result)
         
-        # Cache the result (limit cache size to 100 entries)
-        if len(_analysis_cache) < 100:
-            _analysis_cache[cache_key] = result
+        _analysis_cache.set(cache_key, result)
+        _latest_analysis_by_project[payload.project_name] = result
         
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@app.post("/analyze-iac", response_model=AnalysisResult)
+async def analyze_iac(request: Request, payload: IaCAnalyzeRequest):
+    """
+    Analyze Infrastructure-as-Code (Docker Compose or Kubernetes).
+    """
+    try:
+        from .engine.iac_parser import IaCParser
+        
+        # 1. Parse IaC into SystemArchitecture
+        parser = IaCParser()
+        system_architecture = parser.parse(payload.iac_content, payload.format_hint)
+        
+        if not system_architecture.components:
+            raise ValueError("No valid components or services found in the provided IaC file.")
+            
+        # 2. Run analysis
+        analyzer = get_shared_analyzer(request)
+        previous_result = _latest_analysis_by_project.get(payload.project_name)
+        result = analyzer.analyze(
+            system_architecture,
+            payload.project_name,
+            analysis_mode=payload.analysis_mode
+        )
+        result.diff_summary = _build_diff_summary(previous_result, result)
+        _latest_analysis_by_project[payload.project_name] = result
+        
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"IaC Analysis failed: {str(e)}")
 
 
 @app.get("/health")
@@ -154,12 +342,27 @@ def health_check():
 
 
 @app.delete("/cache")
-async def clear_cache():
+async def clear_cache(request: Request):
     """Clear the analysis cache (admin endpoint)."""
-    global _analysis_cache
-    count = len(_analysis_cache)
-    _analysis_cache = {}
+    _require_admin(request)
+    count = _analysis_cache.clear()
+    _latest_analysis_by_project.clear()
     return {"message": f"Cleared {count} cached entries"}
+
+
+@app.post("/admin/retrain-local-models", response_model=RetrainLocalModelsResponse)
+async def retrain_local_models(request: Request):
+    """Reload KB data and rebuild local semantic/classifier artifacts."""
+    try:
+        _require_admin(request)
+        analyzer = get_shared_analyzer(request)
+        stats = analyzer.reload_local_intelligence()
+        return {
+            "message": "Local knowledge base and models rebuilt successfully",
+            "stats": stats,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Local retraining failed: {str(e)}")
 
 
 @app.websocket("/ws/analyze")
@@ -180,6 +383,8 @@ async def websocket_analyze(websocket: WebSocket):
         
         description = payload.get('description', '')
         project_name = payload.get('project_name', 'Untitled Project')
+        use_local_slm = payload.get('use_local_slm', True)
+        analysis_mode = payload.get('analysis_mode', 'standard')
         
         if not description or len(description) < 10:
             await websocket.send_json({
@@ -198,8 +403,17 @@ async def websocket_analyze(websocket: WebSocket):
             except Exception:
                 pass  # Client may have disconnected
         
-        streaming_analyzer = StreamingAnalyzer(progress_callback=send_progress)
-        result = await streaming_analyzer.analyze_streaming(description, project_name)
+        shared_analyzer = get_shared_analyzer(websocket)
+        streaming_analyzer = StreamingAnalyzer(
+            progress_callback=send_progress,
+            analyzer=shared_analyzer
+        )
+        result = await streaming_analyzer.analyze_streaming(
+            description,
+            project_name,
+            use_local_slm=use_local_slm,
+            analysis_mode=analysis_mode
+        )
         
         # Send final result
         result_dict = result.model_dump() if hasattr(result, 'model_dump') else result.dict()
@@ -242,8 +456,13 @@ async def analyze_with_llm(request: Request, payload: LLMAnalyzeRequest):
     """
     try:
         # Run rule-based analysis (includes NLP + semantic matching)
-        analyzer = ThreatAnalyzer()
-        rule_based_result = analyzer.analyze_from_text(payload.description, payload.project_name)
+        analyzer = get_shared_analyzer(request)
+        previous_result = _latest_analysis_by_project.get(payload.project_name)
+        rule_based_result = analyzer.analyze_from_text(
+            payload.description,
+            payload.project_name,
+            analysis_mode=payload.analysis_mode
+        )
         
         # RAG: Retrieve relevant KB threats for LLM context
         kb_context = None
@@ -284,6 +503,8 @@ async def analyze_with_llm(request: Request, payload: LLMAnalyzeRequest):
             f"{len(merged_threats)} threats identified "
             f"(RAG context: {len(kb_context) if kb_context else 0} KB threats)."
         )
+        rule_based_result.diff_summary = _build_diff_summary(previous_result, rule_based_result)
+        _latest_analysis_by_project[payload.project_name] = rule_based_result
         
         return rule_based_result
         
