@@ -1,71 +1,60 @@
-# AI Threat Modeler (AITM) v2.0
+# AI Threat Modeler
 
-AI Threat Modeler is a React + FastAPI application for turning architecture descriptions into practical threat models. It combines rule-based analysis, NLP-assisted parsing, local semantic retrieval, optional LLM augmentation, attack-chain reasoning, compliance mappings, and exportable reports.
+AI Threat Modeler is a React + FastAPI application that turns architecture descriptions into practical threat models. It combines rule-based analysis, NLP-assisted parsing, local semantic retrieval, optional LLM augmentation, attack-chain reasoning, compliance mappings, and exportable reports.
 
-## What It Does
+## Highlights
 
-- Parses architecture descriptions, IaC manifests, and known-issue sections
-- Builds component and data-flow models automatically
-- Detects threats using STRIDE-oriented rules plus semantic matching
-- Produces confirmed risks, potential risks, assumptions, trust-boundary summaries, and coverage metadata
-- Supports optional OpenAI, Claude, and Gemini augmentation with RAG context
-- Exports Mermaid diagrams, Markdown reports, JSON, CSV, and PDF
-
-## Key Capabilities
-
-### Core Analysis
-- Rule-based threat detection using a modular knowledge base
+- Left-side dashboard navigation with a cleaner analysis workspace
 - `fast`, `standard`, and `deep` analysis modes
-- Known-issue promotion into high-confidence findings
-- Confidence-gated severity, tiering, and STRIDE normalization
-- Delta summaries between consecutive analyses of the same project
+- Automatic component, flow, trust-boundary, and assumption extraction
+- Local semantic matching and retrainable STRIDE-oriented intelligence
+- Optional OpenAI, Claude, and Gemini augmentation
+- Coverage summaries, diff summaries, and export-ready reports
+- Mermaid architecture diagrams with hardened label and ID sanitization
 
-### NLP and Local Intelligence
-- spaCy-based entity extraction and security-signal parsing
-- Component and flow extraction from natural-language descriptions
-- Local semantic threat discovery using sentence embeddings
-- Local STRIDE and severity refinement support
-- Retrainable local semantic/classifier artifacts from the knowledge base
+## What The App Produces
 
-### Reporting and Dashboard
-- Left-side persistent dashboard menu
-- Clean glass-style UI with dark mode
-- Risk matrix and STRIDE chart
-- Coverage and assumption cards
-- Architecture diagram rendering with Mermaid
-- Markdown, PDF, JSON, and CSV export
+- Threat findings with STRIDE categories and mitigation guidance
+- Parsed architecture model with components and data flows
+- Architecture diagram output in Mermaid
+- Attack chain summaries
+- Coverage and assumption metadata
+- Markdown, JSON, CSV, and PDF exports
 
 ## Project Structure
 
 ```text
 src/
   components/
+  config.js
   hooks/
   services/
   utils/
 backend/
   app/
+    data/
     engine/
     knowledge_base/
     services/
-    data/
     main.py
     models.py
-  tests/
   scripts/
+  tests/
 ```
 
 ## Requirements
 
 ### Frontend
+
 - Node.js 18+
 - npm 9+
 
 ### Backend
+
 - Python 3.8+
 - pip
 
-## Installation
+## Install
 
 ### Frontend
 
@@ -81,9 +70,11 @@ pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
 
-## Running Locally
+`en_core_web_sm` is optional but recommended. If it is unavailable, the backend falls back to regex/rule-based parsing for some NLP features.
 
-### One command
+## Run Locally
+
+### Combined start
 
 ```bash
 npm start
@@ -114,37 +105,39 @@ Frontend:
 npm run dev
 ```
 
-Frontend default URL: [http://localhost:5173](http://localhost:5173)  
-Backend default URL: [http://127.0.0.1:8000](http://127.0.0.1:8000)
+Default URLs:
 
-## Environment and Config
+- Frontend: [http://localhost:5173](http://localhost:5173)
+- Backend: [http://127.0.0.1:8000](http://127.0.0.1:8000)
+- API docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
-### Frontend
+## Configuration
 
-- `VITE_API_URL` - override API base URL
-- `VITE_WS_URL` - override WebSocket base URL
+### Frontend env
 
-### Backend
+- `VITE_API_URL`: override REST API base URL
+- `VITE_WS_URL`: override WebSocket base URL
 
-- `ENVIRONMENT` - `development` or `production`
-- `ALLOWED_ORIGINS` - comma-separated origin list for production CORS
-- `ADMIN_API_TOKEN` - required to use admin endpoints in production, and also in development if set
+### Backend env
 
-## API Endpoints
+- `ENVIRONMENT`: `development` or `production`
+- `ALLOWED_ORIGINS`: comma-separated CORS allowlist
+- `ADMIN_API_TOKEN`: protects admin endpoints when set
+
+## API Surface
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/analyze` | `POST` | Text architecture analysis |
-| `/analyze-iac` | `POST` | Docker Compose / Kubernetes analysis |
-| `/analyze-with-llm` | `POST` | LLM-enhanced analysis with RAG |
-| `/validate-api-key` | `POST` | Validate provider API key |
-| `/health` | `GET` | Health and ML capability status |
-| `/cache` | `DELETE` | Clear cached results, admin protected |
-| `/admin/retrain-local-models` | `POST` | Reload KB and retrain local intelligence, admin protected |
-| `/ws/analyze` | `WS` | Streaming analysis progress |
-| `/docs` | `GET` | Swagger UI |
+| `/analyze` | `POST` | Analyze a text-based architecture description |
+| `/analyze-iac` | `POST` | Analyze Docker Compose or Kubernetes-style IaC input |
+| `/analyze-with-llm` | `POST` | Run LLM-augmented analysis with retrieval context |
+| `/validate-api-key` | `POST` | Validate provider API keys |
+| `/health` | `GET` | Health status and local NLP/ML readiness |
+| `/cache` | `DELETE` | Clear cached analysis results, admin protected |
+| `/admin/retrain-local-models` | `POST` | Reload the KB and retrain local semantic/classifier artifacts |
+| `/ws/analyze` | `WS` | Streaming analysis endpoint |
 
-### Analyze request example
+### Example request
 
 ```json
 {
@@ -155,43 +148,52 @@ Backend default URL: [http://127.0.0.1:8000](http://127.0.0.1:8000)
 }
 ```
 
-### Result highlights
+### Result fields
 
-Results may include:
+Common response fields include:
 
 - `threats`
 - `score`
 - `architecture`
+- `architecture_diagram`
 - `report_markdown`
 - `attack_chains`
-- `ml_enhanced`
 - `architecture_insights`
 - `coverage`
 - `diff_summary`
 
-## Knowledge Base
+## Knowledge Base And Local Intelligence
 
-The backend loads modular JSON threat packs automatically from `backend/app/knowledge_base/`, including:
+The backend auto-loads modular JSON threat packs from [backend/app/knowledge_base](C:/Users/Ankit/Documents/codex/ai-threat-modeler/backend/app/knowledge_base). Current packs include:
 
-- cloud-specific threat packs
-- OWASP web and API packs
-- auth/authz threats
+- cloud and infrastructure threats
+- web and API threats
+- auth and identity threats
 - container and Kubernetes threats
-- supply-chain and infrastructure threats
-- AI/LLM threats
-- domain-specific threats
+- supply-chain threats
+- AI and LLM threats
+- domain-specific packs
+
+The local intelligence layer can be rebuilt after KB changes with:
+
+```bash
+cd backend
+python scripts/retrain_local_models.py
+```
+
+Or through:
+
+```text
+POST /admin/retrain-local-models
+```
 
 ## Notes
 
-- The local semantic engine and classifier can be rebuilt with `/admin/retrain-local-models`.
-- The dashboard now surfaces assumptions and analysis coverage so missing architectural detail is easier to spot.
-- In `fast` mode, the app skips the heaviest optional analysis stages for lower latency.
-
-## Development Notes
-
-- Frontend result mapping is centralized in [analysisMapper.js](C:/Users/Ankit/Documents/codex/ai-threat-modeler/src/utils/analysisMapper.js)
-- WebSocket config is environment-aware through [config.js](C:/Users/Ankit/Documents/codex/ai-threat-modeler/src/config.js)
-- Admin cache clear and retraining are protected by `ADMIN_API_TOKEN` when configured
+- `fast` mode skips the heaviest optional analysis stages for lower latency.
+- Admin cache clearing and local retraining use `ADMIN_API_TOKEN` when configured.
+- Mermaid diagram generation now sanitizes node IDs, labels, and edge labels to reduce render failures from unusual component names or metadata.
+- Frontend result mapping is centralized in [analysisMapper.js](C:/Users/Ankit/Documents/codex/ai-threat-modeler/src/utils/analysisMapper.js).
+- WebSocket and API URLs are environment-aware through [config.js](C:/Users/Ankit/Documents/codex/ai-threat-modeler/src/config.js).
 
 ## License
 

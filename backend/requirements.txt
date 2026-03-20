@@ -1,30 +1,30 @@
-# AI Threat Modeler - Backend Requirements
+# AI Threat Modeler Backend Requirements
 # Python 3.8+ required
 
-# Web Framework
-# Using >= allows patch updates but not minor/major version changes
+# Web framework
 fastapi>=0.115.0,<1.0.0
 uvicorn[standard]>=0.34.0,<1.0.0
 python-multipart>=0.0.9,<1.0.0
 
-# Data Processing & Analysis
+# Core analysis and modeling
 networkx>=3.4.0,<4.0.0
 pydantic>=2.6.0,<3.0.0
 numpy>=1.26.0,<3.0.0
-pyyaml>=6.0.1
+pyyaml>=6.0.1,<7.0.0
 
-# NLP Libraries
+# NLP
 spacy>=3.7.0,<4.0.0
-# Note: After install, download the model with: python -m spacy download en_core_web_sm
+# Optional model:
+# python -m spacy download en_core_web_sm
 
-# Embedding & Semantic Search
+# Semantic retrieval and local ML
 sentence-transformers>=2.6.0,<4.0.0
 faiss-cpu>=1.8.0,<2.0.0
 scikit-learn>=1.4.0,<2.0.0
 
-# AI/LLM Integration (Optional - for LLM-enhanced analysis)
-openai>=1.0.0
-anthropic>=0.18.0
+# Optional LLM integrations
+openai>=1.0.0,<2.0.0
+anthropic>=0.18.0,<1.0.0
 requests>=2.31.0,<3.0.0
 
 # Testing
@@ -33,6 +33,5 @@ pytest-asyncio>=0.23.0,<1.0.0
 pytest-cov>=4.1.0,<5.0.0
 httpx>=0.26.0,<1.0.0
 
-# To install all dependencies:
+# Install:
 # pip install -r requirements.txt
-# python -m spacy download en_core_web_sm

@@ -1,12 +1,16 @@
-# AI Threat Modeler - Workspace Requirements
+# AI Threat Modeler Workspace Requirements
+
+This repository has a React frontend and a FastAPI backend.
 
 ## Frontend Runtime
+
 - Node.js >= 18
 - npm >= 9
 
-## Frontend Dependencies
+## Frontend Packages
 
 ### Production
+
 - react (^19.2.0)
 - react-dom (^19.2.0)
 - lucide-react (^0.563.0)
@@ -18,8 +22,11 @@
 - tailwind-merge (^3.4.0)
 
 ### Development
+
 - vite (^7.2.4)
 - @vitejs/plugin-react (^5.1.1)
+- @types/react (^19.2.5)
+- @types/react-dom (^19.2.3)
 - tailwindcss (^3.4.19)
 - postcss (^8.5.6)
 - autoprefixer (^10.4.23)
@@ -30,14 +37,17 @@
 - eslint-plugin-react-refresh (^0.4.24)
 - globals (^16.5.0)
 
-## Backend
+## Backend Packages
 
-See [backend/requirements.txt](C:/Users/Ankit/Documents/codex/ai-threat-modeler/backend/requirements.txt) for installable Python packages.
+Install Python dependencies from [backend/requirements.txt](C:/Users/Ankit/Documents/codex/ai-threat-modeler/backend/requirements.txt).
 
 ## Install
 
 ```bash
 npm install
-cd backend && pip install -r requirements.txt
+cd backend
+pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
+
+The spaCy model is optional but recommended for stronger NLP extraction.

@@ -500,7 +500,7 @@ const ThreatDashboard = ({ data, projectName }) => {
                 <div className="bg-brand-50/85 dark:bg-brand-700/30 border border-brand-200 dark:border-brand-600 rounded-2xl p-5 mb-8">
                     <div className="flex items-center justify-between mb-2">
                         <h3 className="font-bold text-lg text-brand-800 dark:text-white flex-1">
-                            Inferred Architecture
+                            Architecture Diagram
                         </h3>
                         <div className="flex items-center gap-2">
                             <button

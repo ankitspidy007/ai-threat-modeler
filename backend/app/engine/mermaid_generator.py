@@ -1,3 +1,4 @@
+import re
 import networkx as nx
 from typing import List, Dict, Set
 import json
@@ -95,7 +96,7 @@ def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = T
             
             # Choose shape based on DFD standards
             shape = _get_dfd_shape(node_type, data)
-            mermaid_lines.append(f"        {node_id}{shape[0]}{full_label}{shape[1]}")
+            mermaid_lines.append(f"        {_format_node(node_id, full_label, shape)}")
         
         mermaid_lines.append(f"    end")
         mermaid_lines.append(f"    style zone_{layer_key} {style}")
@@ -123,16 +124,15 @@ def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = T
         if data_type:
             label_parts.append(data_type)
         
-        flow_label = " | ".join(label_parts) if len(label_parts) > 1 else protocol
+        flow_label = " / ".join(label_parts) if len(label_parts) > 1 else protocol
+        flow_label = _sanitize_edge_label(flow_label)
         
         # Style edges differently for trust boundary crossings
         if crosses_boundary:
-            # Thick double line for boundary crossing with label
-            arrow = f"==\"{flow_label}\"==>" if flow_label else "==>"
+            arrow = f"==>|{flow_label}|" if flow_label else "==>"
         else:
-            # Regular arrow with label
-            arrow = f"--\"{flow_label}\"-->" if flow_label else "-->"
-            
+            arrow = f"-->|{flow_label}|" if flow_label else "-->"
+
         mermaid_lines.append(f"    {u_id} {arrow} {v_id}")
     
     
@@ -221,7 +221,7 @@ def _generate_basic_mermaid(graph: nx.DiGraph) -> str:
             node_type = data.get('type', 'Service')
             
             shape = _get_node_shape(node_type, data)
-            mermaid_lines.append(f"        {node_id}{shape[0]}{label}{shape[1]}")
+            mermaid_lines.append(f"        {_format_node(node_id, label, shape)}")
         
         mermaid_lines.append(f"    end")
         mermaid_lines.append(f"    style zone_{layer_key} {style}")
@@ -233,10 +233,12 @@ def _generate_basic_mermaid(graph: nx.DiGraph) -> str:
         protocol = data.get('protocol', '')
         crosses_boundary = data.get('crosses_trust_boundary', False)
         
+        safe_protocol = _sanitize_edge_label(protocol)
+
         if crosses_boundary:
-            arrow = f"-.{protocol}.->" if protocol else "-..->"
-        elif protocol:
-            arrow = f"--{protocol}-->"
+            arrow = f"-.->|{safe_protocol}|" if safe_protocol else "-..->"
+        elif safe_protocol:
+            arrow = f"-->|{safe_protocol}|"
         else:
             arrow = "-->"
             
@@ -257,7 +259,53 @@ def _load_stride_colors() -> Dict:
 
 def _sanitize_id(node_id: str) -> str:
     """Sanitize node ID for Mermaid syntax."""
-    return node_id.replace("-", "_").replace(" ", "_").replace(".", "_")
+    sanitized = re.sub(r"[^0-9A-Za-z_]", "_", str(node_id))
+    sanitized = re.sub(r"_+", "_", sanitized).strip("_")
+    if not sanitized:
+        sanitized = "node"
+    if sanitized[0].isdigit():
+        sanitized = f"node_{sanitized}"
+    return sanitized
+
+
+def _sanitize_label(label: str) -> str:
+    """Normalize labels so Mermaid treats them as plain text."""
+    sanitized = str(label or "")
+    sanitized = sanitized.replace("\\", "/")
+    sanitized = sanitized.replace('"', "'")
+    sanitized = sanitized.replace("\r", " ").replace("\n", " ")
+    sanitized = re.sub(r"\s+", " ", sanitized).strip()
+    return sanitized
+
+
+def _sanitize_edge_label(label: str) -> str:
+    """Normalize edge labels while removing Mermaid delimiter characters."""
+    sanitized = _sanitize_label(label)
+    sanitized = sanitized.replace("|", "/")
+    return sanitized
+
+
+def _format_node(node_id: str, label: str, shape: tuple) -> str:
+    """Render a Mermaid node with a quoted label."""
+    safe_label = _sanitize_label(label)
+    shape_open, shape_close = shape
+
+    if shape == ('[', ']'):
+        return f'{node_id}["{safe_label}"]'
+    if shape == ('(', ')'):
+        return f'{node_id}("{safe_label}")'
+    if shape == ('[(', ')]'):
+        return f'{node_id}[("{safe_label}")]'
+    if shape == ('([', '])'):
+        return f'{node_id}(["{safe_label}"])'
+    if shape == ('[[', ']]'):
+        return f'{node_id}[["{safe_label}"]]'
+    if shape == ('>', ']'):
+        return f'{node_id}>["{safe_label}"]'
+    if shape == ('[/', '\\]'):
+        return f'{node_id}[/"{safe_label}"\\]'
+
+    return f'{node_id}{shape_open}"{safe_label}"{shape_close}'
 
 def _get_dfd_shape(node_type: str, data: Dict) -> tuple:
     """
