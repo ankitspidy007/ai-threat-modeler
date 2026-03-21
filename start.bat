@@ -51,7 +51,7 @@ goto parse_args
 :end_parse
 
 echo =====================================================
-echo   AITM - AI Threat Modeler v2.0
+echo   Aegis Threat v2.0
 echo   NLP ^| Semantic Search ^| Attack Chains ^| Multi-LLM
 echo =====================================================
 echo.
@@ -117,21 +117,21 @@ echo.
 
 echo [2/4] Starting Backend Server on port %BACKEND_PORT%...
 echo.
-start "AITM - Backend" cmd /k "cd backend && python -m uvicorn app.main:app --reload --port %BACKEND_PORT%"
+start "Aegis Threat - Backend" cmd /k "cd backend && python -m uvicorn app.main:app --reload --port %BACKEND_PORT%"
 
 REM Wait for backend to start
 timeout /t 3 /nobreak >nul
 
 echo [3/4] Starting Frontend Server on port %FRONTEND_PORT%...
 echo.
-start "AITM - Frontend" cmd /k "npm run dev -- --port %FRONTEND_PORT%"
+start "Aegis Threat - Frontend" cmd /k "npm run dev -- --port %FRONTEND_PORT%"
 
 REM Wait for frontend to start
 timeout /t 3 /nobreak >nul
 
 echo.
 echo =====================================================
-echo   AITM - AI Threat Modeler - Running!
+echo   Aegis Threat - Running!
 echo =====================================================
 echo.
 echo Backend:  http://127.0.0.1:%BACKEND_PORT%

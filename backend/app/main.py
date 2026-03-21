@@ -27,9 +27,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AI Threat Modeler API", 
+    title="Aegis Threat API", 
     version="0.2.0",
-    description="AI-powered threat modeling API using STRIDE methodology",
+    description="Aegis Threat API for AI-assisted threat modeling and architecture risk analysis",
     lifespan=lifespan
 )
 
@@ -58,6 +58,7 @@ class AnalyzeRequest(BaseModel):
     description: str = Field(..., min_length=10, max_length=10000, description="System architecture description")
     use_local_slm: bool = Field(default=True, description="Enable local semantic analysis")
     analysis_mode: str = Field(default="standard", description="Analysis mode: fast, standard, or deep")
+    domain_profile: str = Field(default="general", description="Optional domain profile: general, saas, fintech, healthcare, ai, platform")
     
     @field_validator('project_name')
     @classmethod
@@ -79,6 +80,13 @@ class AnalyzeRequest(BaseModel):
     def validate_analysis_mode(cls, v):
         if v not in ['fast', 'standard', 'deep']:
             return 'standard'
+        return v
+
+    @field_validator('domain_profile')
+    @classmethod
+    def validate_domain_profile(cls, v):
+        if v not in ['general', 'saas', 'fintech', 'healthcare', 'ai', 'platform']:
+            return 'general'
         return v
 
 
@@ -199,21 +207,65 @@ def _stable_cache_key(*parts) -> str:
 def _build_diff_summary(previous: Optional[AnalysisResult], current: AnalysisResult) -> Optional[dict]:
     if previous is None:
         return None
-    previous_ids = {threat.id for threat in previous.threats}
-    current_ids = {threat.id for threat in current.threats}
+    previous_threats = {threat.id: threat for threat in previous.threats}
+    current_threats = {threat.id: threat for threat in current.threats}
+    previous_ids = set(previous_threats)
+    current_ids = set(current_threats)
     new_ids = sorted(current_ids - previous_ids)
     resolved_ids = sorted(previous_ids - current_ids)
-    if not new_ids and not resolved_ids:
+    score_delta = current.score - previous.score
+    component_delta = len(current.architecture.components) - len(previous.architecture.components)
+    flow_delta = len(current.architecture.flows) - len(previous.architecture.flows)
+
+    severity_changes = []
+    for threat_id in sorted(previous_ids & current_ids):
+        previous_threat = previous_threats[threat_id]
+        current_threat = current_threats[threat_id]
+        if previous_threat.severity != current_threat.severity or previous_threat.tier != current_threat.tier:
+            severity_changes.append({
+                "id": threat_id,
+                "title": current_threat.title,
+                "from_severity": previous_threat.severity,
+                "to_severity": current_threat.severity,
+                "from_tier": previous_threat.tier,
+                "to_tier": current_threat.tier,
+            })
+
+    if not new_ids and not resolved_ids and not severity_changes and score_delta == 0 and component_delta == 0 and flow_delta == 0:
         return {
             "compared_to_project": previous.project_name,
             "new_threats": [],
             "resolved_threats": [],
+            "severity_changes": [],
+            "score_delta": 0,
+            "component_delta": 0,
+            "flow_delta": 0,
             "changed": False,
         }
     return {
         "compared_to_project": previous.project_name,
-        "new_threats": new_ids,
-        "resolved_threats": resolved_ids,
+        "new_threats": [
+            {
+                "id": threat_id,
+                "title": current_threats[threat_id].title,
+                "severity": current_threats[threat_id].severity,
+                "tier": current_threats[threat_id].tier,
+            }
+            for threat_id in new_ids
+        ],
+        "resolved_threats": [
+            {
+                "id": threat_id,
+                "title": previous_threats[threat_id].title,
+                "severity": previous_threats[threat_id].severity,
+                "tier": previous_threats[threat_id].tier,
+            }
+            for threat_id in resolved_ids
+        ],
+        "severity_changes": severity_changes,
+        "score_delta": score_delta,
+        "component_delta": component_delta,
+        "flow_delta": flow_delta,
         "changed": True,
     }
 
@@ -246,7 +298,8 @@ async def analyze(request: Request, payload: AnalyzeRequest):
             payload.description,
             payload.project_name,
             payload.use_local_slm,
-            payload.analysis_mode
+            payload.analysis_mode,
+            payload.domain_profile
         )
         
         cached = _analysis_cache.get(cache_key)
@@ -259,7 +312,8 @@ async def analyze(request: Request, payload: AnalyzeRequest):
             payload.description,
             payload.project_name,
             use_local_slm=payload.use_local_slm,
-            analysis_mode=payload.analysis_mode
+            analysis_mode=payload.analysis_mode,
+            domain_profile=payload.domain_profile
         )
         result.diff_summary = _build_diff_summary(previous_result, result)
         
@@ -385,6 +439,7 @@ async def websocket_analyze(websocket: WebSocket):
         project_name = payload.get('project_name', 'Untitled Project')
         use_local_slm = payload.get('use_local_slm', True)
         analysis_mode = payload.get('analysis_mode', 'standard')
+        domain_profile = payload.get('domain_profile', 'general')
         
         if not description or len(description) < 10:
             await websocket.send_json({
@@ -412,7 +467,8 @@ async def websocket_analyze(websocket: WebSocket):
             description,
             project_name,
             use_local_slm=use_local_slm,
-            analysis_mode=analysis_mode
+            analysis_mode=analysis_mode,
+            domain_profile=domain_profile
         )
         
         # Send final result

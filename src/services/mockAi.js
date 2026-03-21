@@ -4,7 +4,7 @@ import { mapAnalysisResult } from '../utils/analysisMapper';
 
 const getAnalysisMode = (useLocalSlm = true) => (useLocalSlm ? 'standard' : 'fast');
 
-export const analyzeSystem = async (systemDescription, projectName = "Untitled Project", useLocalSlm = true) => {
+export const analyzeSystem = async (systemDescription, projectName = "Untitled Project", useLocalSlm = true, options = {}) => {
     try {
         const response = await fetch(`${API_BASE_URL}/analyze`, {
             method: 'POST',
@@ -15,7 +15,8 @@ export const analyzeSystem = async (systemDescription, projectName = "Untitled P
                 description: systemDescription,
                 project_name: projectName,
                 use_local_slm: useLocalSlm,
-                analysis_mode: getAnalysisMode(useLocalSlm)
+                analysis_mode: getAnalysisMode(useLocalSlm),
+                domain_profile: options.domainProfile || 'general',
             }),
         });
 

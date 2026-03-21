@@ -38,7 +38,7 @@ export function useStreamingAnalysis() {
         setMessage('Cancelled');
     }, []);
 
-    const analyze = useCallback((description, projectName = 'Untitled Project', useLocalSlm = true) => {
+    const analyze = useCallback((description, projectName = 'Untitled Project', useLocalSlm = true, options = {}) => {
         return new Promise((resolve, reject) => {
             // Reset state
             setProgress(0);
@@ -58,7 +58,8 @@ export function useStreamingAnalysis() {
                     description,
                     project_name: projectName,
                     use_local_slm: useLocalSlm,
-                    analysis_mode: getAnalysisMode(useLocalSlm)
+                    analysis_mode: getAnalysisMode(useLocalSlm),
+                    domain_profile: options.domainProfile || 'general'
                 }));
             };
 

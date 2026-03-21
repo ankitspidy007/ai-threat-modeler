@@ -32,14 +32,14 @@ function App() {
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
-  const handleAnalyze = async (description, name, useLocalSlm = true) => {
+  const handleAnalyze = async (description, name, useLocalSlm = true, options = {}) => {
     setProjectName(name);
     setData(null);
     setIsAnalyzing(true);
 
     try {
       // Try WebSocket streaming first
-      const result = await streaming.analyze(description, name, useLocalSlm);
+      const result = await streaming.analyze(description, name, useLocalSlm, options);
       setData(result);
       saveAnalysis(name, result);
       toast.success(`Analysis complete! Found ${result.threats.length} potential threats.`, 'Success');
@@ -47,7 +47,7 @@ function App() {
       // Fallback to REST API
       console.warn('WebSocket failed, falling back to REST:', wsError.message);
       try {
-        const result = await analyzeSystem(description, name, useLocalSlm);
+        const result = await analyzeSystem(description, name, useLocalSlm, options);
         setData(result);
         saveAnalysis(name, result);
         toast.success(`Analysis complete! Found ${result.threats.length} potential threats.`, 'Success');

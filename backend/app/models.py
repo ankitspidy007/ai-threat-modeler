@@ -47,6 +47,8 @@ class Threat(BaseModel):
     component_id: Optional[str] = None
     flow_source: Optional[str] = None
     flow_target: Optional[str] = None
+    explanation: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    review_state: Optional[str] = "open"
 
 class AnalysisResult(BaseModel):
     project_name: str
@@ -64,4 +66,7 @@ class AnalysisResult(BaseModel):
     architecture_insights: Optional[List[Dict[str, Any]]] = None  # Architecture intelligence insights
     coverage: Optional[Dict[str, Any]] = None  # Analysis coverage and assumption summary
     diff_summary: Optional[Dict[str, Any]] = None  # Delta vs prior analysis, when available
+    follow_up_questions: Optional[List[Dict[str, Any]]] = None  # Guided questions to reduce uncertainty
+    review_summary: Optional[Dict[str, Any]] = None  # Review workflow summary
+    domain_context: Optional[Dict[str, Any]] = None  # Domain-aware guidance and focus areas
 

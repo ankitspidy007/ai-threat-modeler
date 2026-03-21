@@ -1,4 +1,4 @@
-# AITM - AI Threat Modeler v2.0 - Startup Script
+# Aegis Threat v2.0 - Startup Script
 # Usage: .\start.ps1 [-BackendPort 8000] [-FrontendPort 5173]
 
 param(
@@ -7,7 +7,7 @@ param(
 )
 
 Write-Host "=====================================================" -ForegroundColor Cyan
-Write-Host "  AITM - AI Threat Modeler v2.0" -ForegroundColor Cyan
+Write-Host "  Aegis Threat v2.0" -ForegroundColor Cyan
 Write-Host "  NLP | Semantic Search | Attack Chains | Multi-LLM" -ForegroundColor Cyan
 Write-Host "=====================================================" -ForegroundColor Cyan
 Write-Host ""

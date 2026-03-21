@@ -2,7 +2,7 @@ import hashlib
 import json
 import logging
 from collections import OrderedDict
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Any
 from .graph_builder import GraphBuilder
 from .rules import RuleEngine
 from .parser import ArchitectureParser
@@ -55,6 +55,45 @@ STRIDE_MAPPING = {
     "Injection": "Tampering",
     "Authentication": "Spoofing",
     "Authorization": "Elevation of Privilege",
+}
+
+DOMAIN_PLAYBOOK = {
+    "general": {
+        "label": "General software system",
+        "headline": "Balance identity, data protection, and external exposure first.",
+        "priority_controls": ["authentication", "authorization", "logging", "encryption"],
+        "high_risk_areas": ["internet-facing entry points", "admin workflows", "sensitive data paths"],
+    },
+    "saas": {
+        "label": "Multi-tenant SaaS",
+        "headline": "Tenant isolation, admin abuse paths, and auth federation deserve the strongest scrutiny.",
+        "priority_controls": ["tenant isolation", "RBAC", "audit logging", "API rate limiting"],
+        "high_risk_areas": ["cross-tenant access", "support/admin tooling", "identity federation"],
+    },
+    "fintech": {
+        "label": "Fintech or payments",
+        "headline": "Payment integrity, fraud abuse, and secrets handling should drive the review order.",
+        "priority_controls": ["transaction integrity", "strong auth", "fraud monitoring", "key management"],
+        "high_risk_areas": ["payment flows", "ledger updates", "third-party payment integrations"],
+    },
+    "healthcare": {
+        "label": "Healthcare or PHI system",
+        "headline": "PHI access paths, session handling, and auditability are usually the highest-value review areas.",
+        "priority_controls": ["least privilege", "audit trails", "session controls", "data loss prevention"],
+        "high_risk_areas": ["record access", "file downloads", "break-glass workflows"],
+    },
+    "ai": {
+        "label": "AI or LLM application",
+        "headline": "Prompt injection, tool authorization, and data leakage through retrieval need explicit safeguards.",
+        "priority_controls": ["tool-call authorization", "prompt filtering", "retrieval access control", "artifact integrity"],
+        "high_risk_areas": ["prompt inputs", "agent tools", "vector stores", "model outputs"],
+    },
+    "platform": {
+        "label": "Cloud platform or Kubernetes stack",
+        "headline": "Control plane access, workload identity, and network segmentation matter more than surface polish.",
+        "priority_controls": ["workload identity", "network policy", "secret isolation", "cluster governance"],
+        "high_risk_areas": ["control plane", "service mesh", "cluster admin paths", "shared infrastructure"],
+    },
 }
 
 class ThreatAnalyzer:
@@ -169,6 +208,162 @@ class ThreatAnalyzer:
             },
             'assumptions': assumptions,
         }
+
+    def _build_follow_up_questions(self, architecture: SystemArchitecture, threats: List[Threat]) -> List[Dict[str, Any]]:
+        """Turn assumptions into concrete follow-up prompts for the user."""
+        assumptions = architecture.metadata.get('assumptions', [])
+        component_map = {component.id: component for component in architecture.components}
+        threat_map: Dict[str, int] = {}
+
+        for threat in threats:
+            related_scopes = set(threat.affected_components or [])
+            if threat.component_id:
+                related_scopes.add(threat.component_id)
+            if threat.flow_source and threat.flow_target:
+                related_scopes.add(f"{threat.flow_source}->{threat.flow_target}")
+            for flow_ref in threat.affected_data_flows or []:
+                normalized_flow = flow_ref.replace(" → ", "->").replace("â†’", "->")
+                related_scopes.add(normalized_flow)
+            for scope in related_scopes:
+                threat_map[scope] = threat_map.get(scope, 0) + 1
+
+        question_map = {
+            'authentication': "What authentication and authorization controls protect this component?",
+            'encryption': "Is encryption at rest enabled here, and who manages the keys?",
+            'logging': "What audit and application logging exists for this component or flow?",
+            'trust_boundary': "Does this flow cross a real trust boundary, and what validation or filtering exists at that boundary?",
+        }
+        priority_map = {
+            'authentication': 'high',
+            'trust_boundary': 'high',
+            'encryption': 'medium',
+            'logging': 'medium',
+        }
+
+        follow_ups: List[Dict[str, Any]] = []
+        for index, assumption in enumerate(assumptions[:8], start=1):
+            scope = assumption.get('scope', 'system')
+            assumption_type = assumption.get('type', 'general')
+            component = component_map.get(scope)
+            related_components = [component.name] if component else []
+            related_threats = threat_map.get(scope, 0)
+            if "->" in scope:
+                source_id, target_id = scope.split("->", 1)
+                related_components = [
+                    component_map.get(source_id).name if component_map.get(source_id) else source_id,
+                    component_map.get(target_id).name if component_map.get(target_id) else target_id,
+                ]
+
+            priority = priority_map.get(assumption_type, 'low')
+            if related_threats >= 2 and priority != 'high':
+                priority = 'high'
+
+            follow_ups.append({
+                'id': f"question-{index}",
+                'scope': scope,
+                'type': assumption_type,
+                'priority': priority,
+                'question': question_map.get(assumption_type, "What additional implementation detail can confirm or reject this assumption?"),
+                'rationale': assumption.get('message', ''),
+                'related_components': [name for name in related_components if name],
+                'related_threat_count': related_threats,
+            })
+
+        return follow_ups
+
+    def _enrich_threat_explanations(self, threats: List[Threat], architecture: SystemArchitecture) -> List[Threat]:
+        """Attach lightweight explainability metadata that the UI can render directly."""
+        component_map = {component.id: component for component in architecture.components}
+
+        for threat in threats:
+            component_ids = []
+            if threat.component_id:
+                component_ids.append(threat.component_id)
+            component_ids.extend(threat.affected_components or [])
+            component_names = []
+            for component_id in component_ids:
+                component = component_map.get(component_id)
+                component_names.append(component.name if component else component_id)
+
+            evidence_summary = threat.evidence[:3]
+            why_flagged = (
+                f"This finding was raised because the analyzer matched {threat.category.lower()} risk patterns "
+                f"against the architecture context and supporting evidence."
+            )
+            if threat.confidence == "High":
+                why_flagged = f"{why_flagged} Multiple strong signals or explicit controls gaps increased confidence."
+            elif threat.confidence == "Low":
+                why_flagged = f"{why_flagged} Evidence is weaker, so this remains a potential risk."
+
+            remediation_priority = "Planned"
+            if threat.severity in {"Critical", "High"} and threat.tier == "Confirmed":
+                remediation_priority = "Immediate"
+            elif threat.severity == "Medium":
+                remediation_priority = "Near-term"
+
+            threat.explanation = {
+                'why_flagged': why_flagged,
+                'evidence_summary': evidence_summary,
+                'impacted_components': component_names[:5],
+                'impacted_flows': (threat.affected_data_flows or [])[:4],
+                'remediation_priority': remediation_priority,
+            }
+
+        return threats
+
+    def _build_review_summary(self, threats: List[Threat]) -> Dict[str, Any]:
+        """Build a compact review workflow summary for the dashboard."""
+        severity_counts = {'Critical': 0, 'High': 0, 'Medium': 0, 'Low': 0}
+        confirmed = 0
+        potential = 0
+
+        for threat in threats:
+            severity_counts[threat.severity] = severity_counts.get(threat.severity, 0) + 1
+            if threat.tier == "Confirmed":
+                confirmed += 1
+            else:
+                potential += 1
+
+        top_queue = [
+            {
+                'id': threat.id,
+                'title': threat.title,
+                'severity': threat.severity,
+                'tier': threat.tier,
+            }
+            for threat in sorted(
+                threats,
+                key=lambda item: (
+                    {'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1}.get(item.severity, 0),
+                    1 if item.tier == "Confirmed" else 0,
+                    item.risk_score or 0,
+                ),
+                reverse=True
+            )[:5]
+        ]
+
+        return {
+            'open_findings': len(threats),
+            'confirmed_findings': confirmed,
+            'potential_findings': potential,
+            'severity_counts': severity_counts,
+            'priority_queue': top_queue,
+        }
+
+    def _build_domain_context(self, domain_profile: str, architecture: SystemArchitecture, threats: List[Threat]) -> Dict[str, Any]:
+        """Return domain-specific guidance to help the UI feel more specialized."""
+        profile = DOMAIN_PLAYBOOK.get(domain_profile or "general", DOMAIN_PLAYBOOK["general"])
+        threat_titles = [threat.title for threat in threats[:5]]
+        component_types = sorted({component.type for component in architecture.components})
+        return {
+            'profile': domain_profile or 'general',
+            'label': profile['label'],
+            'headline': profile['headline'],
+            'priority_controls': profile['priority_controls'],
+            'high_risk_areas': profile['high_risk_areas'],
+            'observed_component_types': component_types[:8],
+            'top_findings': threat_titles,
+        }
     
     def _init_ml_components(self):
         """Initialize ML/NLP components (graceful fallback)."""
@@ -268,7 +463,8 @@ class ThreatAnalyzer:
         description: str,
         project_name: str = "Untitled Project",
         use_local_slm: bool = True,
-        analysis_mode: str = "standard"
+        analysis_mode: str = "standard",
+        domain_profile: str = "general"
     ) -> AnalysisResult:
         """Parse text and analyze the resulting architecture."""
         cache_key = self._stable_hash({'description': description})
@@ -281,7 +477,8 @@ class ThreatAnalyzer:
             system_architecture,
             project_name,
             use_local_slm=use_local_slm,
-            analysis_mode=analysis_mode
+            analysis_mode=analysis_mode,
+            domain_profile=domain_profile
         )
 
     def analyze(
@@ -289,7 +486,8 @@ class ThreatAnalyzer:
         architecture: SystemArchitecture,
         project_name: str = "Untitled Project",
         use_local_slm: bool = True,
-        analysis_mode: str = "standard"
+        analysis_mode: str = "standard",
+        domain_profile: str = "general"
     ) -> AnalysisResult:
         analysis_flags = self._analysis_flags(analysis_mode, use_local_slm)
         graph = self._get_cached_graph(architecture)
@@ -376,6 +574,8 @@ class ThreatAnalyzer:
             except Exception as e:
                 logger.warning(f"Attack chain analysis failed: {e}")
         
+        normalized_threats = self._enrich_threat_explanations(normalized_threats, architecture)
+
         # ========================================
         # PHASE 6: Calculate Risk Score (post-aggregation)
         # ========================================
@@ -420,6 +620,9 @@ class ThreatAnalyzer:
             'nlp_parser': architecture.metadata.get('nlp_enhanced', False),
         }
         result.coverage = self._build_coverage(architecture, normalized_threats, analysis_flags)
+        result.follow_up_questions = self._build_follow_up_questions(architecture, normalized_threats)
+        result.review_summary = self._build_review_summary(normalized_threats)
+        result.domain_context = self._build_domain_context(domain_profile, architecture, normalized_threats)
         
         # Generate comprehensive markdown report
         result.report_markdown = self._generate_report_markdown(result)

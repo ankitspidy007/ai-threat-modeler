@@ -1,6 +1,6 @@
-# AI Threat Modeler
+# Aegis Threat
 
-AI Threat Modeler is a React + FastAPI application that turns architecture descriptions into practical threat models. It combines rule-based analysis, NLP-assisted parsing, local semantic retrieval, optional LLM augmentation, attack-chain reasoning, compliance mappings, and exportable reports.
+Aegis Threat is a React + FastAPI application that turns architecture descriptions into practical threat models. It combines rule-based analysis, NLP-assisted parsing, local semantic retrieval, optional LLM augmentation, attack-chain reasoning, compliance mappings, and exportable reports.
 
 ## Highlights
 
@@ -10,6 +10,11 @@ AI Threat Modeler is a React + FastAPI application that turns architecture descr
 - Local semantic matching and retrainable STRIDE-oriented intelligence
 - Optional OpenAI, Claude, and Gemini augmentation
 - Coverage summaries, diff summaries, and export-ready reports
+- Guided follow-up questions that help reduce model uncertainty
+- Explainable findings with impacted components and remediation priority
+- Review workflow cards for triaging findings in the dashboard
+- Domain-aware analysis profiles for SaaS, fintech, healthcare, AI, and platform systems
+- Analyst workbench with action-register export, architecture notes, and a local analysis copilot
 - Mermaid architecture diagrams with hardened label and ID sanitization
 
 ## What The App Produces
@@ -19,6 +24,10 @@ AI Threat Modeler is a React + FastAPI application that turns architecture descr
 - Architecture diagram output in Mermaid
 - Attack chain summaries
 - Coverage and assumption metadata
+- Follow-up questions tied to assumptions and likely gaps
+- Change summaries with score, component, flow, and severity deltas
+- Domain guidance with priority controls and high-risk review areas
+- Analyst workbench output for ownership, notes, and action export
 - Markdown, JSON, CSV, and PDF exports
 
 ## Project Structure
@@ -53,6 +62,36 @@ backend/
 
 - Python 3.8+
 - pip
+- Python should be available on your `PATH` as `python`
+
+## Quick Start
+
+1. Install frontend dependencies:
+
+```bash
+npm install
+```
+
+2. Install backend dependencies:
+
+```bash
+cd backend
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+cd ..
+```
+
+3. Start the app:
+
+```bash
+npm start
+```
+
+4. Open:
+
+- Frontend: [http://localhost:5173](http://localhost:5173)
+- Backend: [http://127.0.0.1:8000](http://127.0.0.1:8000)
+- API docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ## Install
 
@@ -80,6 +119,11 @@ python -m spacy download en_core_web_sm
 npm start
 ```
 
+This uses the `start` script from [package.json](C:/Users/Ankit/Documents/codex/ai-threat-modeler/package.json) and launches:
+
+- frontend on port `5173`
+- backend on port `8000`
+
 ### Windows helpers
 
 ```powershell
@@ -104,6 +148,8 @@ Frontend:
 ```bash
 npm run dev
 ```
+
+If `python` is not recognized on Windows, fix your Python installation or add Python to `PATH` first. The backend will not start until `python -m uvicorn ...` works from your terminal.
 
 Default URLs:
 
@@ -144,7 +190,8 @@ Default URLs:
   "project_name": "Payments Platform",
   "description": "React frontend, API gateway, JWT auth, PostgreSQL, Redis, S3, and Stripe integration.",
   "use_local_slm": true,
-  "analysis_mode": "standard"
+  "analysis_mode": "standard",
+  "domain_profile": "fintech"
 }
 ```
 
@@ -161,6 +208,9 @@ Common response fields include:
 - `architecture_insights`
 - `coverage`
 - `diff_summary`
+- `follow_up_questions`
+- `review_summary`
+- `domain_context`
 
 ## Knowledge Base And Local Intelligence
 
@@ -192,6 +242,9 @@ POST /admin/retrain-local-models
 - `fast` mode skips the heaviest optional analysis stages for lower latency.
 - Admin cache clearing and local retraining use `ADMIN_API_TOKEN` when configured.
 - Mermaid diagram generation now sanitizes node IDs, labels, and edge labels to reduce render failures from unusual component names or metadata.
+- The dashboard includes a lightweight review workflow so teams can mark findings as open, mitigated, accepted, or false positive during triage.
+- The static analysis intake now supports domain profiles so the UI can highlight domain-specific control priorities and risk areas.
+- The analyst workbench adds a lightweight local copilot, component note-taking, and exportable action registers.
 - Frontend result mapping is centralized in [analysisMapper.js](C:/Users/Ankit/Documents/codex/ai-threat-modeler/src/utils/analysisMapper.js).
 - WebSocket and API URLs are environment-aware through [config.js](C:/Users/Ankit/Documents/codex/ai-threat-modeler/src/config.js).
 

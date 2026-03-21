@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { Send, Cpu, ChevronDown } from 'lucide-react';
 
+const DOMAIN_OPTIONS = [
+    { value: 'general', label: 'General Software' },
+    { value: 'saas', label: 'SaaS / Multi-tenant' },
+    { value: 'fintech', label: 'Fintech / Payments' },
+    { value: 'healthcare', label: 'Healthcare / PHI' },
+    { value: 'ai', label: 'AI / LLM App' },
+    { value: 'platform', label: 'Platform / Kubernetes' },
+];
+
 const TEMPLATES = {
     'e-commerce': {
         name: 'E-Commerce Platform',
@@ -85,11 +94,12 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
     const [projectName, setProjectName] = useState('My Security Audit');
     const [showTemplates, setShowTemplates] = useState(false);
     const [useLocalSlm, setUseLocalSlm] = useState(true);
+    const [domainProfile, setDomainProfile] = useState('general');
 
     const handleSubmit = (e) => {
         e.preventDefault();
         if (description.trim()) {
-            onAnalyze(description, projectName, useLocalSlm);
+            onAnalyze(description, projectName, useLocalSlm, { domainProfile });
         }
     };
 
@@ -97,7 +107,7 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
             e.preventDefault();
             if (description.trim() && !isAnalyzing) {
-                onAnalyze(description, projectName, useLocalSlm);
+                onAnalyze(description, projectName, useLocalSlm, { domainProfile });
             }
         }
     };
@@ -106,6 +116,7 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
         const template = TEMPLATES[key];
         setProjectName(template.name);
         setDescription(template.description);
+        setDomainProfile(key === 'saas' ? 'saas' : key === 'healthcare' ? 'healthcare' : 'general');
         setShowTemplates(false);
     };
 
@@ -149,7 +160,7 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                         )}
                     </div>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-[1.2fr_0.8fr] mb-5">
+                <div className="grid gap-4 sm:grid-cols-[1.1fr_0.7fr_0.8fr] mb-5">
                     <div>
                     <label className="block text-xs font-mono text-brand-500 mb-1.5 uppercase tracking-[0.2em]">Project Name</label>
                     <input
@@ -159,6 +170,18 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                         className="input-brand w-full font-mono"
                         placeholder="e.g. Payment Gateway V2"
                     />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-mono text-brand-500 mb-1.5 uppercase tracking-[0.2em]">Domain Profile</label>
+                        <select
+                            value={domainProfile}
+                            onChange={(e) => setDomainProfile(e.target.value)}
+                            className="input-brand w-full font-mono"
+                        >
+                            {DOMAIN_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                        </select>
                     </div>
                     <div className="rounded-2xl bg-brand-50/80 dark:bg-brand-900/30 border border-brand-200/80 dark:border-brand-700/60 px-4 py-3">
                         <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-brand-500 mb-1">Best Inputs</div>

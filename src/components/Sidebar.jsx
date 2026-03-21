@@ -35,8 +35,8 @@ export default function Sidebar({ activeTab, onTabChange, darkMode, onToggleDark
         </div>
         {!collapsed && (
           <div className="overflow-hidden animate-fade-in-up">
-            <h1 className="whitespace-nowrap text-lg font-bold tracking-tight text-brand-900 dark:text-white">AITM</h1>
-            <p className="mt-0.5 text-[10px] font-mono text-brand-500 dark:text-brand-400">Clean Threat Modeling</p>
+            <h1 className="whitespace-nowrap text-lg font-bold tracking-tight text-brand-900 dark:text-white">Aegis Threat</h1>
+            <p className="mt-0.5 text-[10px] font-mono text-brand-500 dark:text-brand-400">Modern Threat Modeling</p>
           </div>
         )}
       </div>
