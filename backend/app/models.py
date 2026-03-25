@@ -39,6 +39,7 @@ class Threat(BaseModel):
     owasp_top_10: Optional[List[str]] = Field(default_factory=list)
     cwe: Optional[List[str]] = Field(default_factory=list)
     mitre_attack: Optional[List[str]] = Field(default_factory=list)
+    mitre_atlas: Optional[List[str]] = Field(default_factory=list)
     nist_800_53: Optional[List[str]] = Field(default_factory=list)
     # Aggregated fields
     affected_components: List[str] = Field(default_factory=list)
@@ -69,4 +70,6 @@ class AnalysisResult(BaseModel):
     follow_up_questions: Optional[List[Dict[str, Any]]] = None  # Guided questions to reduce uncertainty
     review_summary: Optional[Dict[str, Any]] = None  # Review workflow summary
     domain_context: Optional[Dict[str, Any]] = None  # Domain-aware guidance and focus areas
+    ai_security_lens: Optional[Dict[str, Any]] = None  # AI-specific risk storytelling
+    priority_actions: Optional[List[Dict[str, Any]]] = None  # Top actions to take first
 

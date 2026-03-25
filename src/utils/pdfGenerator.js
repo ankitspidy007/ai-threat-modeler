@@ -1,296 +1,308 @@
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import mermaid from 'mermaid';
+
+const COLORS = {
+    ink: [23, 31, 46],
+    muted: [99, 110, 128],
+    line: [225, 230, 238],
+    panel: [246, 248, 252],
+    brand: [16, 16, 16],
+    success: [22, 163, 74],
+    warning: [217, 119, 6],
+    danger: [220, 38, 38],
+    info: [16, 16, 16],
+};
+
+const SEVERITY_RANK = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+
+const SEVERITY_THEME = {
+    Critical: { fill: [220, 38, 38], soft: [254, 226, 226] },
+    High: { fill: [234, 88, 12], soft: [255, 237, 213] },
+    Medium: { fill: [217, 119, 6], soft: [254, 243, 199] },
+    Low: { fill: [37, 99, 235], soft: [219, 234, 254] },
+};
+
+const LENS_THEME = {
+    high: { fill: [254, 226, 226], ink: [153, 27, 27] },
+    medium: { fill: [255, 237, 213], ink: [154, 52, 18] },
+    low: { fill: [220, 252, 231], ink: [22, 101, 52] },
+};
 
 export const generateReport = async (data, projectName) => {
     try {
         if (!data) {
-            alert("No data to export.");
+            alert('No data to export.');
             return;
         }
 
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        let yPos = 20;
-        const leftMargin = 15;
-        const rightMargin = 15;
-        const contentWidth = pageWidth - leftMargin - rightMargin;
-        const lineHeight = 5;
+        const footerTop = pageHeight - 13;
+        const contentBottomLimit = footerTop - 4;
+        const left = 14;
+        const right = 14;
+        const contentWidth = pageWidth - left - right;
+        const lineGap = 4.5;
+        let y = 16;
 
-        // Separate threats by tier
-        const confirmed = data.threats?.filter(t => t.tier === 'Confirmed') || [];
-        const potential = data.threats?.filter(t => t.tier === 'Potential') || [];
-        const allThreats = data.threats || [];
+        const allThreats = [...(data.threats || [])].sort((a, b) => {
+            const sevDelta = (SEVERITY_RANK[b.severity] || 1) - (SEVERITY_RANK[a.severity] || 1);
+            if (sevDelta !== 0) return sevDelta;
+            return (b.risk_score || 0) - (a.risk_score || 0);
+        });
+        const confirmed = allThreats.filter((t) => t.tier === 'Confirmed');
+        const potential = allThreats.filter((t) => t.tier !== 'Confirmed');
+        const score = data.score || 0;
+        const aiLens = data.ai_security_lens || { overview: '', items: [] };
+        const priorityActions = (data.priority_actions || []).slice(0, 3);
 
-        // --- Helpers ---
-        const addText = (text, size = 10, style = 'normal', color = [0, 0, 0]) => {
-            if (!text) return;
+        const checkPageBreak = (requiredHeight = 24) => {
+            if (y + requiredHeight > contentBottomLimit) {
+                doc.addPage();
+                y = 16;
+                drawPageHeader();
+            }
+        };
+
+        const writeText = (text, options = {}) => {
+            const {
+                size = 10,
+                style = 'normal',
+                color = COLORS.ink,
+                maxWidth = contentWidth,
+                x = left,
+                leading = lineGap,
+            } = options;
+
             doc.setFontSize(size);
             doc.setFont('helvetica', style);
             doc.setTextColor(...color);
-            const lines = doc.splitTextToSize(String(text), contentWidth);
-            doc.text(lines, leftMargin, yPos);
-            yPos += lines.length * lineHeight;
-            checkPageBreak();
+            const lines = doc.splitTextToSize(String(text || ''), maxWidth);
+            doc.text(lines, x, y);
+            y += Math.max(lines.length, 1) * leading;
+            checkPageBreak(0);
         };
 
-        const addHeading = (text, size = 14, color = [44, 62, 80]) => {
-            yPos += 6;
-            checkPageBreak(20);
-            addText(text, size, 'bold', color);
-            doc.setDrawColor(200, 200, 200);
-            doc.line(leftMargin, yPos - 2, pageWidth - rightMargin, yPos - 2);
-            yPos += 4;
-        };
-
-        const checkPageBreak = (buffer = 25) => {
-            if (yPos > pageHeight - buffer) {
-                doc.addPage();
-                yPos = 20;
+        const drawSectionTitle = (title, subtitle) => {
+            y += 2;
+            checkPageBreak(28);
+            doc.setDrawColor(...COLORS.line);
+            doc.setFillColor(...COLORS.brand);
+            doc.roundedRect(left, y - 1.5, 1.8, 8, 0.8, 0.8, 'F');
+            doc.line(left + 3.8, y + 6.6, pageWidth - right, y + 6.6);
+            writeText(title, { size: 14, style: 'bold', x: left + 5, leading: 5.5 });
+            if (subtitle) {
+                writeText(subtitle, { size: 9, color: COLORS.muted, x: left + 5, leading: 4.3 });
+            } else {
+                y += 1;
             }
         };
 
-        // =============================================
-        // COVER / HEADER
-        // =============================================
-        doc.setFillColor(44, 62, 80);
-        doc.rect(0, 0, pageWidth, 35, 'F');
+        const drawCard = (x, w, h, fill = COLORS.panel) => {
+            doc.setFillColor(...fill);
+            doc.setDrawColor(...COLORS.line);
+            doc.roundedRect(x, y, w, h, 2.4, 2.4, 'FD');
+        };
 
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(20);
-        doc.setFont('helvetica', 'bold');
-        doc.text("THREAT MODEL REPORT", leftMargin, 16);
+        const drawMetricCards = () => {
+            const critical = allThreats.filter((t) => t.severity === 'Critical').length;
+            const high = allThreats.filter((t) => t.severity === 'High').length;
+            const medium = allThreats.filter((t) => t.severity === 'Medium').length;
+            const low = allThreats.filter((t) => t.severity === 'Low').length;
 
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'normal');
-        doc.text(projectName || "Untitled Project", leftMargin, 24);
+            const cards = [
+                { label: 'Critical findings', value: critical, color: COLORS.danger },
+                { label: 'High findings', value: high, color: [234, 88, 12] },
+                { label: 'Confirmed risks', value: confirmed.length, color: COLORS.brand },
+                { label: 'Potential risks', value: potential.length, color: COLORS.warning },
+            ];
 
-        doc.setFontSize(8);
-        doc.text(`Generated: ${new Date().toLocaleString()}`, leftMargin, 31);
+            const gap = 4;
+            const cardW = (contentWidth - gap * 3) / 4;
+            const cardH = 20;
+            checkPageBreak(cardH + 6);
 
-        // Score badge
-        const scoreColor = (data.score || 0) >= 70 ? [39, 174, 96] : (data.score || 0) >= 40 ? [241, 196, 15] : [231, 76, 60];
-        doc.setFillColor(...scoreColor);
-        doc.roundedRect(pageWidth - 50, 8, 40, 22, 3, 3, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`${data.score || 0}/100`, pageWidth - 46, 19);
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'normal');
-        doc.text('Security Score', pageWidth - 46, 26);
+            cards.forEach((card, i) => {
+                const x = left + i * (cardW + gap);
+                doc.setFillColor(248, 250, 253);
+                doc.setDrawColor(...COLORS.line);
+                doc.roundedRect(x, y, cardW, cardH, 2.2, 2.2, 'FD');
+                doc.setFillColor(...card.color);
+                doc.roundedRect(x, y, cardW, 4.4, 2.2, 2.2, 'F');
 
-        yPos = 45;
+                doc.setFontSize(7.5);
+                doc.setTextColor(...COLORS.muted);
+                doc.setFont('helvetica', 'bold');
+                doc.text(card.label, x + 2.3, y + 9);
 
-        // =============================================
-        // EXECUTIVE SUMMARY
-        // =============================================
-        addHeading("1. Executive Summary");
-        addText(data.summary || '', 10);
-        yPos += 2;
+                doc.setFontSize(15);
+                doc.setTextColor(...COLORS.ink);
+                doc.setFont('helvetica', 'bold');
+                doc.text(String(card.value), x + 2.3, y + 16.2);
+            });
 
-        // Stats boxes
-        const statsY = yPos;
-        const boxW = contentWidth / 4 - 3;
+            y += cardH + 6;
+        };
 
-        const drawStatBox = (x, label, value, bgColor) => {
-            doc.setFillColor(...bgColor);
-            doc.roundedRect(x, statsY, boxW, 18, 2, 2, 'F');
-            doc.setFontSize(14);
+        const drawPageHeader = () => {
+            doc.setFillColor(250, 251, 254);
+            doc.rect(0, 0, pageWidth, 10.5, 'F');
+            doc.setDrawColor(...COLORS.line);
+            doc.line(0, 10.5, pageWidth, 10.5);
+
+            doc.setFontSize(7.5);
             doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...COLORS.brand);
+            doc.text('Aegis Threat Report', left, 7);
+
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...COLORS.muted);
+            doc.text(projectName || 'Untitled Project', pageWidth - right, 7, { align: 'right' });
+        };
+
+        const drawCover = () => {
+            doc.setFillColor(...COLORS.brand);
+            doc.rect(0, 0, pageWidth, 44, 'F');
+
             doc.setTextColor(255, 255, 255);
-            doc.text(String(value), x + boxW / 2, statsY + 8, { align: 'center' });
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(21);
+            doc.text('Aegis Threat', left, 18);
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'normal');
+            doc.text('Threat Modeling Report', left, 26);
+
+            const generatedAt = new Date().toLocaleString();
+            doc.setFontSize(8);
+            doc.text(`Generated: ${generatedAt}`, left, 35);
+
+            const scoreColor = score >= 70 ? COLORS.success : score >= 40 ? COLORS.warning : COLORS.danger;
+            doc.setFillColor(...scoreColor);
+            doc.roundedRect(pageWidth - 52, 10, 38, 23, 2.6, 2.6, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.text(`${score}/100`, pageWidth - 33, 21.5, { align: 'center' });
             doc.setFontSize(7);
             doc.setFont('helvetica', 'normal');
-            doc.text(label, x + boxW / 2, statsY + 14, { align: 'center' });
+            doc.text('Security score', pageWidth - 33, 27.5, { align: 'center' });
+
+            y = 52;
         };
 
-        const critCount = allThreats.filter(t => t.severity === 'Critical').length;
-        const highCount = allThreats.filter(t => t.severity === 'High').length;
-        const medCount = allThreats.filter(t => t.severity === 'Medium').length;
-        const lowCount = allThreats.filter(t => t.severity === 'Low').length;
-
-        drawStatBox(leftMargin, 'Critical', critCount, [231, 76, 60]);
-        drawStatBox(leftMargin + boxW + 4, 'High', highCount, [230, 126, 34]);
-        drawStatBox(leftMargin + (boxW + 4) * 2, 'Medium', medCount, [241, 196, 15]);
-        drawStatBox(leftMargin + (boxW + 4) * 3, 'Low', lowCount, [52, 152, 219]);
-
-        yPos = statsY + 24;
-        addText(`Total: ${allThreats.length} threats (${confirmed.length} confirmed, ${potential.length} potential)`, 9, 'normal', [100, 100, 100]);
-
-        // =============================================
-        // RISK ASSESSMENT MATRIX
-        // =============================================
-        addHeading("2. Risk Assessment Matrix");
-
-        const matrixData = {
-            High: { High: 0, Medium: 0, Low: 0 },
-            Medium: { High: 0, Medium: 0, Low: 0 },
-            Low: { High: 0, Medium: 0, Low: 0 },
-        };
-        allThreats.forEach(t => {
-            const sev = t.severity === 'Critical' ? 'High' : t.severity;
-            const lik = t.likelihood || 'Medium';
-            if (matrixData[sev] && matrixData[sev][lik] !== undefined) {
-                matrixData[sev][lik]++;
+        const drawAILens = () => {
+            drawSectionTitle('AI Security Lens', aiLens.overview || 'Focused AI-native risk storytelling across prompt, data, model, tool, and training surfaces.');
+            if (!aiLens.items?.length) {
+                writeText('No AI-specific lens was generated for this analysis run.', { color: COLORS.muted, size: 9 });
+                return;
             }
-        });
 
-        const matrixX = leftMargin + 20;
-        const matrixY = yPos;
-        const cellW = 28;
-        const cellH = 14;
-        const labelW = 18;
+            const gap = 4;
+            const boxW = (contentWidth - gap) / 2;
+            const boxH = 24;
+            for (let i = 0; i < aiLens.items.length; i += 2) {
+                checkPageBreak(boxH + 6);
+                const rowItems = aiLens.items.slice(i, i + 2);
+                rowItems.forEach((item, col) => {
+                    const x = left + col * (boxW + gap);
+                    const tone = LENS_THEME[item.level] || LENS_THEME.low;
 
-        const getCellColor = (impact, likelihood) => {
-            if (impact === 'High') {
-                if (likelihood === 'High') return [231, 76, 60];
-                if (likelihood === 'Medium') return [230, 126, 34];
-                return [241, 196, 15];
-            }
-            if (impact === 'Medium') {
-                if (likelihood === 'High') return [230, 126, 34];
-                if (likelihood === 'Medium') return [241, 196, 15];
-                return [241, 220, 100];
-            }
-            return [39, 174, 96];
-        };
+                    doc.setFillColor(...tone.fill);
+                    doc.setDrawColor(...COLORS.line);
+                    doc.roundedRect(x, y, boxW, boxH, 2.2, 2.2, 'FD');
 
-        // Column headers
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(80, 80, 80);
-        ['Low', 'Medium', 'High'].forEach((label, i) => {
-            doc.text(label, matrixX + labelW + i * cellW + cellW / 2, matrixY, { align: 'center' });
-        });
-
-        // Y-axis label
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.text('IMPACT', matrixX - 5, matrixY + (cellH * 1.5) + 4, { angle: 90 });
-
-        // Rows
-        const impacts = ['High', 'Medium', 'Low'];
-        impacts.forEach((impact, row) => {
-            const rowY = matrixY + 4 + row * cellH;
-
-            // Row label
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(80, 80, 80);
-            doc.text(impact, matrixX + labelW - 2, rowY + cellH / 2 + 1, { align: 'right' });
-
-            // Cells
-            ['Low', 'Medium', 'High'].forEach((likelihood, col) => {
-                const x = matrixX + labelW + col * cellW;
-                const count = matrixData[impact]?.[likelihood] || 0;
-                const color = getCellColor(impact, likelihood);
-
-                if (count > 0) {
-                    doc.setFillColor(...color);
-                } else {
-                    // Lighter version for empty cells
-                    doc.setFillColor(
-                        Math.min(color[0] + 100, 240),
-                        Math.min(color[1] + 100, 240),
-                        Math.min(color[2] + 100, 240)
-                    );
-                }
-                doc.roundedRect(x + 1, rowY, cellW - 2, cellH - 1, 1, 1, 'F');
-
-                if (count > 0) {
-                    doc.setFontSize(12);
                     doc.setFont('helvetica', 'bold');
-                    doc.setTextColor(255, 255, 255);
-                    doc.text(String(count), x + cellW / 2, rowY + cellH / 2 + 1, { align: 'center' });
-                }
-            });
-        });
+                    doc.setFontSize(8);
+                    doc.setTextColor(...tone.ink);
+                    doc.text(item.label, x + 2.5, y + 5.6);
 
-        // X-axis label
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(80, 80, 80);
-        doc.text('LIKELIHOOD', matrixX + labelW + (cellW * 1.5), matrixY + 4 + 3 * cellH + 5, { align: 'center' });
+                    doc.setFontSize(13);
+                    doc.text(String(item.count || 0), x + 2.5, y + 12.5);
 
-        yPos = matrixY + 4 + 3 * cellH + 12;
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(7.3);
+                    doc.text((item.summary || '').substring(0, 120), x + 2.5, y + 18.2, {
+                        maxWidth: boxW - 5,
+                    });
+                });
+                y += boxH + gap;
+            }
+            y += 3;
+        };
 
-        // =============================================
-        // STRIDE DISTRIBUTION
-        // =============================================
-        addHeading("3. STRIDE Threat Distribution");
-
-        const strideCategories = [
-            { key: 'Spoofing', color: [231, 76, 60], label: 'S' },
-            { key: 'Tampering', color: [230, 126, 34], label: 'T' },
-            { key: 'Repudiation', color: [241, 196, 15], label: 'R' },
-            { key: 'Information Disclosure', color: [52, 152, 219], label: 'I' },
-            { key: 'Denial of Service', color: [142, 68, 173], label: 'D' },
-            { key: 'Elevation of Privilege', color: [231, 76, 137], label: 'E' },
-        ];
-
-        const strideCounts = {};
-        strideCategories.forEach(c => { strideCounts[c.key] = 0; });
-        allThreats.forEach(t => {
-            const cat = t.stride_category || t.category;
-            const match = strideCategories.find(c =>
-                cat?.toLowerCase().includes(c.key.toLowerCase().split(' ')[0])
-            );
-            if (match) strideCounts[match.key]++;
-        });
-
-        const maxCount = Math.max(...Object.values(strideCounts), 1);
-        const barStartX = leftMargin + 50;
-        const barMaxWidth = contentWidth - 60;
-        const barHeight = 7;
-        const barGap = 3;
-
-        checkPageBreak(strideCategories.length * (barHeight + barGap) + 10);
-
-        strideCategories.forEach((cat, i) => {
-            const count = strideCounts[cat.key];
-            const barWidth = maxCount > 0 ? (count / maxCount) * barMaxWidth : 0;
-            const rowY = yPos + i * (barHeight + barGap);
-
-            // Category label
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(60, 60, 60);
-            doc.text(cat.key, leftMargin, rowY + barHeight / 2 + 1);
-
-            // Bar background
-            doc.setFillColor(235, 235, 235);
-            doc.roundedRect(barStartX, rowY, barMaxWidth, barHeight, 1, 1, 'F');
-
-            // Bar fill
-            if (barWidth > 0) {
-                doc.setFillColor(...cat.color);
-                doc.roundedRect(barStartX, rowY, Math.max(barWidth, 4), barHeight, 1, 1, 'F');
+        const drawTopActions = () => {
+            drawSectionTitle('Top 3 Things To Fix First', 'Highest-leverage actions based on severity, confidence, and architectural exposure.');
+            if (!priorityActions.length) {
+                writeText('No priority actions available for this run.', { color: COLORS.muted, size: 9 });
+                return;
             }
 
-            // Count label
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(...cat.color);
-            doc.text(String(count), barStartX + barMaxWidth + 4, rowY + barHeight / 2 + 1);
-        });
+            priorityActions.forEach((action, index) => {
+                checkPageBreak(36);
+                const theme = SEVERITY_THEME[action.priority] || SEVERITY_THEME.Low;
+                const cardH = 31;
+                const x = left;
+                drawCard(x, contentWidth, cardH);
 
-        yPos += strideCategories.length * (barHeight + barGap) + 8;
+                doc.setFillColor(...theme.fill);
+                doc.roundedRect(x, y, 10, 10, 1.8, 1.8, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9);
+                doc.text(String(index + 1), x + 5, y + 6.6, { align: 'center' });
 
-        // =============================================
-        // INFERRED ARCHITECTURE
-        // =============================================
-        addHeading("4. Inferred Architecture");
+                doc.setTextColor(...COLORS.ink);
+                doc.setFontSize(9.5);
+                doc.setFont('helvetica', 'bold');
+                doc.text(action.title || 'Priority action', x + 13, y + 4.8, { maxWidth: contentWidth - 17 });
 
-        // Strategy: Re-render using mermaid.render() with htmlLabels:false
-        // (generates native SVG <text>, no <foreignObject> that browsers block).
-        // Then SVG blob → Image → Canvas → PDF. No html2canvas needed.
-        let diagramCaptured = false;
+                doc.setFontSize(7.4);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(...COLORS.muted);
+                doc.text(`Why now: ${action.why_now || 'High risk finding with immediate mitigation value.'}`, x + 13, y + 9.2, {
+                    maxWidth: contentWidth - 17,
+                });
 
-        if (data.diagram) {
+                doc.setTextColor(...COLORS.success);
+                doc.setFont('helvetica', 'bold');
+                doc.text('Action', x + 13, y + 17.5);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(...COLORS.ink);
+                doc.text(action.action || 'Apply mitigation guidance from this finding.', x + 13, y + 21.3, {
+                    maxWidth: contentWidth - 17,
+                });
+
+                if (action.focus_area?.length) {
+                    doc.setTextColor(...COLORS.muted);
+                    doc.setFontSize(7);
+                    doc.text(`Focus area: ${action.focus_area.join(', ')}`, x + 13, y + 27.6, {
+                        maxWidth: contentWidth - 17,
+                    });
+                }
+
+                y += cardH + 4;
+            });
+        };
+
+        const drawArchitectureSnapshot = async () => {
+            drawSectionTitle('Architecture Snapshot', 'A compact view of key components, flows, and rendered system diagram.');
+
+            const components = data.architecture?.components || [];
+            const flows = data.architecture?.flows || [];
+
+            const compPreview = components.slice(0, 8).map((c) => `${c.name || c.id} (${c.type || 'Service'})`);
+            const flowPreview = flows.slice(0, 8).map((f) => `${f.source_id} -> ${f.target_id} (${(f.protocol || 'n/a').toUpperCase()})`);
+
+            writeText(`Components modeled: ${components.length}`, { size: 9, style: 'bold', color: COLORS.brand });
+            writeText(compPreview.join(' | ') || 'No components parsed.', { size: 8.5, color: COLORS.muted });
+            y += 1;
+            writeText(`Data flows modeled: ${flows.length}`, { size: 9, style: 'bold', color: COLORS.brand });
+            writeText(flowPreview.join(' | ') || 'No flows parsed.', { size: 8.5, color: COLORS.muted });
+
+            if (!data.diagram) return;
+
+            let diagramPlaced = false;
             try {
-                // Initialize mermaid with htmlLabels OFF to avoid foreignObject
                 mermaid.initialize({
                     startOnLoad: false,
                     theme: 'default',
@@ -299,371 +311,189 @@ export const generateReport = async (data, projectName) => {
                     flowchart: { useMaxWidth: false, htmlLabels: false, curve: 'basis' },
                 });
 
-                // Render the diagram fresh
-                const diagramId = `pdf-mermaid-${Date.now()}`;
-                const { svg: svgString } = await mermaid.render(diagramId, data.diagram);
+                const diagramId = `pdf-diagram-${Date.now()}`;
+                const { svg } = await mermaid.render(diagramId, data.diagram);
 
-                // Parse SVG and set explicit large dimensions
                 const parser = new DOMParser();
-                const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
-                const svgEl = svgDoc.querySelector('svg');
-
-                if (svgEl) {
-                    // Get viewBox for aspect ratio
-                    const vb = svgEl.getAttribute('viewBox');
-                    let vbW = 800, vbH = 600;
-                    if (vb) {
-                        const parts = vb.split(/[\s,]+/).map(Number);
-                        vbW = parts[2] || 800;
-                        vbH = parts[3] || 600;
-                    }
-
-                    // Set large explicit pixel dimensions for sharp rendering
-                    const renderW = 1400;
+                const svgDoc = parser.parseFromString(svg, 'image/svg+xml');
+                const svgNode = svgDoc.querySelector('svg');
+                if (svgNode) {
+                    const viewBox = (svgNode.getAttribute('viewBox') || '0 0 900 620').split(/\s+/).map(Number);
+                    const vbW = viewBox[2] || 900;
+                    const vbH = viewBox[3] || 620;
+                    const renderW = 1280;
                     const renderH = Math.round(renderW * (vbH / vbW));
-                    svgEl.setAttribute('width', renderW);
-                    svgEl.setAttribute('height', renderH);
-                    svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 
-                    // Add white background rect
+                    svgNode.setAttribute('width', String(renderW));
+                    svgNode.setAttribute('height', String(renderH));
+                    svgNode.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
                     const bgRect = svgDoc.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    bgRect.setAttribute('x', '0');
+                    bgRect.setAttribute('y', '0');
                     bgRect.setAttribute('width', '100%');
                     bgRect.setAttribute('height', '100%');
                     bgRect.setAttribute('fill', '#ffffff');
-                    svgEl.insertBefore(bgRect, svgEl.firstChild);
+                    svgNode.insertBefore(bgRect, svgNode.firstChild);
 
-                    // Serialize to base64 data URI (avoids tainted canvas from blob URL)
-                    const serializer = new XMLSerializer();
-                    const svgStr = serializer.serializeToString(svgEl);
-                    const dataUri = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+                    const serialized = new XMLSerializer().serializeToString(svgNode);
+                    const encoded = btoa(unescape(encodeURIComponent(serialized)));
+                    const src = `data:image/svg+xml;base64,${encoded}`;
 
-                    // Load as Image
-                    const img = new Image();
-                    const loaded = await new Promise(resolve => {
-                        img.onload = () => resolve(true);
-                        img.onerror = (e) => { console.error('SVG Image load error:', e); resolve(false); };
-                        img.src = dataUri;
+                    const image = new Image();
+                    const loaded = await new Promise((resolve) => {
+                        image.onload = () => resolve(true);
+                        image.onerror = () => resolve(false);
+                        image.src = src;
                     });
 
-                    if (loaded && img.naturalWidth > 0) {
-                        // Draw to canvas
+                    if (loaded && image.naturalWidth > 0) {
                         const canvas = document.createElement('canvas');
                         canvas.width = renderW;
                         canvas.height = renderH;
                         const ctx = canvas.getContext('2d');
                         ctx.fillStyle = '#ffffff';
                         ctx.fillRect(0, 0, renderW, renderH);
-                        ctx.drawImage(img, 0, 0, renderW, renderH);
+                        ctx.drawImage(image, 0, 0, renderW, renderH);
+                        const png = canvas.toDataURL('image/png');
 
-                        const imgData = canvas.toDataURL('image/png');
-
-                        // Place diagram on a DEDICATED new page for maximum visibility
-                        doc.addPage();
-                        yPos = 15;
-                        doc.setFontSize(12);
-                        doc.setFont('helvetica', 'bold');
-                        doc.setTextColor(44, 62, 80);
-                        doc.text("Inferred Architecture Diagram", leftMargin, yPos);
-                        yPos += 8;
-
-                        // Calculate size: fill as much of the page as possible
-                        const diagramAR = renderH / renderW;
-                        const maxW = contentWidth;
-                        const maxH = pageHeight - yPos - 20;
-                        let pdfW = maxW;
-                        let pdfH = pdfW * diagramAR;
+                        checkPageBreak(88);
+                        const maxH = 82;
+                        let pdfW = contentWidth;
+                        let pdfH = (renderH / renderW) * pdfW;
                         if (pdfH > maxH) {
                             pdfH = maxH;
-                            pdfW = pdfH / diagramAR;
+                            pdfW = (renderW / renderH) * pdfH;
                         }
-                        // Enforce minimum height of 80mm
-                        if (pdfH < 80) {
-                            pdfH = 80;
-                        }
-                        const xOff = leftMargin + (contentWidth - pdfW) / 2;
-
-                        doc.addImage(imgData, 'PNG', xOff, yPos, pdfW, pdfH);
-                        yPos += pdfH + 8;
-                        diagramCaptured = true;
+                        const x = left + (contentWidth - pdfW) / 2;
+                        doc.setDrawColor(...COLORS.line);
+                        doc.roundedRect(x - 1.4, y - 1.4, pdfW + 2.8, pdfH + 2.8, 2, 2, 'S');
+                        doc.addImage(png, 'PNG', x, y, pdfW, pdfH);
+                        y += pdfH + 5;
+                        diagramPlaced = true;
                     }
                 }
-            } catch (e) {
-                console.error('Diagram PDF capture failed:', e);
+            } catch (error) {
+                console.error('Diagram rendering failed for PDF export:', error);
+            } finally {
+                mermaid.initialize({
+                    startOnLoad: false,
+                    theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+                    securityLevel: 'loose',
+                    fontFamily: 'Arial, sans-serif',
+                });
             }
-        }
 
-        // Re-initialize mermaid back to default for dashboard rendering
-        if (data.diagram) {
-            mermaid.initialize({
-                startOnLoad: false,
-                theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
-                securityLevel: 'loose',
-                fontFamily: 'Arial, sans-serif',
-            });
-        }
-
-        // Fallback: render the Mermaid code as a styled code block
-        if (!diagramCaptured && data.diagram) {
-            addText("Architecture Diagram (Mermaid Code):", 9, 'bold', [44, 62, 80]);
-            yPos += 2;
-            const codeLines = data.diagram.split('\n').slice(0, 35);
-            const lineH = 3.2;
-            const codeBlockHeight = codeLines.length * lineH + 10;
-            checkPageBreak(codeBlockHeight + 5);
-            doc.setFillColor(248, 249, 250);
-            doc.roundedRect(leftMargin, yPos - 2, contentWidth, codeBlockHeight, 2, 2, 'F');
-            doc.setDrawColor(220, 220, 220);
-            doc.roundedRect(leftMargin, yPos - 2, contentWidth, codeBlockHeight, 2, 2, 'S');
-            doc.setFontSize(5.5);
-            doc.setFont('courier', 'normal');
-            doc.setTextColor(40, 40, 40);
-            codeLines.forEach((line, i) => {
-                doc.text(line.substring(0, 110), leftMargin + 3, yPos + 4 + i * lineH);
-            });
-            const totalLines = data.diagram.split('\n').length;
-            if (totalLines > 35) {
-                doc.setTextColor(120, 120, 120);
-                doc.setFont('courier', 'italic');
-                doc.text(`... ${totalLines - 35} more lines`, leftMargin + 3, yPos + 4 + 35 * lineH);
+            if (!diagramPlaced) {
+                writeText('Diagram preview could not be rendered. Mermaid source is included below for reference.', {
+                    size: 8,
+                    color: COLORS.muted,
+                });
+                const previewLines = data.diagram.split('\n').slice(0, 18);
+                checkPageBreak(35);
+                doc.setFillColor(250, 251, 254);
+                doc.setDrawColor(...COLORS.line);
+                doc.roundedRect(left, y, contentWidth, 30, 2, 2, 'FD');
+                doc.setFont('courier', 'normal');
+                doc.setFontSize(6.7);
+                doc.setTextColor(...COLORS.muted);
+                doc.text(previewLines.map((line) => line.substring(0, 110)), left + 2.2, y + 4.6);
+                y += 33;
             }
-            yPos += codeBlockHeight + 4;
-            addText("Tip: Paste this code at mermaid.live to view the interactive diagram.", 7, 'italic', [100, 100, 100]);
-        } else if (!diagramCaptured) {
-            addText("(Architecture diagram not available)", 8, 'italic', [128, 128, 128]);
-        }
+        };
 
-        // Build a name lookup from architecture components
-        const nameMap = {};
-        (data.architecture?.components || []).forEach(c => {
-            nameMap[c.id] = c.name || c.id;
-        });
-        const resolveName = (id) => nameMap[id] || id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const drawThreatSection = (title, threats, toneColor) => {
+            drawSectionTitle(title, `${threats.length} findings in this section.`);
+            if (!threats.length) {
+                writeText('No findings in this section.', { size: 9, color: COLORS.muted });
+                return;
+            }
 
-        // Components table
-        if (data.architecture?.components?.length) {
-            yPos += 2;
-            addText("Components:", 10, 'bold');
+            threats.forEach((threat) => {
+                checkPageBreak(46);
+                const severity = threat.severity || 'Low';
+                const theme = SEVERITY_THEME[severity] || SEVERITY_THEME.Low;
+                const boxHeight = 38;
 
-            const compTableX = leftMargin;
-            const colWidths = [contentWidth * 0.45, contentWidth * 0.25, contentWidth * 0.30];
-            const rowH = 6;
+                doc.setFillColor(252, 253, 255);
+                doc.setDrawColor(...COLORS.line);
+                doc.roundedRect(left, y, contentWidth, boxHeight, 2.4, 2.4, 'FD');
 
-            // Table header
-            checkPageBreak(10);
-            doc.setFillColor(44, 62, 80);
-            doc.rect(compTableX, yPos - 3, contentWidth, rowH + 1, 'F');
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(255, 255, 255);
-            doc.text('Component', compTableX + 2, yPos + 1);
-            doc.text('Type', compTableX + colWidths[0] + 2, yPos + 1);
-            doc.text('Properties', compTableX + colWidths[0] + colWidths[1] + 2, yPos + 1);
-            yPos += rowH + 2;
-
-            data.architecture.components.forEach((c, i) => {
-                checkPageBreak(rowH + 2);
-                if (i % 2 === 0) {
-                    doc.setFillColor(245, 245, 245);
-                    doc.rect(compTableX, yPos - 3, contentWidth, rowH, 'F');
-                }
-                doc.setFontSize(8);
-                doc.setFont('helvetica', 'normal');
-                doc.setTextColor(30, 30, 30);
-                doc.text((c.name || c.id).substring(0, 35), compTableX + 2, yPos + 1);
-                doc.text((c.type || '—').substring(0, 18), compTableX + colWidths[0] + 2, yPos + 1);
-                const props = Object.entries(c.properties || {}).filter(([, v]) => v === true).map(([k]) => k).join(', ');
-                doc.text((props || '—').substring(0, 28), compTableX + colWidths[0] + colWidths[1] + 2, yPos + 1);
-                yPos += rowH;
-            });
-            yPos += 4;
-        }
-
-        // Data Flows table
-        if (data.architecture?.flows?.length) {
-            yPos += 2;
-            addText("Data Flows:", 10, 'bold');
-
-            const flowTableX = leftMargin;
-            const fColWidths = [contentWidth * 0.30, contentWidth * 0.30, contentWidth * 0.20, contentWidth * 0.20];
-            const fRowH = 6;
-
-            // Table header
-            checkPageBreak(10);
-            doc.setFillColor(44, 62, 80);
-            doc.rect(flowTableX, yPos - 3, contentWidth, fRowH + 1, 'F');
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(255, 255, 255);
-            doc.text('Source', flowTableX + 2, yPos + 1);
-            doc.text('Target', flowTableX + fColWidths[0] + 2, yPos + 1);
-            doc.text('Protocol', flowTableX + fColWidths[0] + fColWidths[1] + 2, yPos + 1);
-            doc.text('Description', flowTableX + fColWidths[0] + fColWidths[1] + fColWidths[2] + 2, yPos + 1);
-            yPos += fRowH + 2;
-
-            data.architecture.flows.forEach((f, i) => {
-                checkPageBreak(fRowH + 2);
-                if (i % 2 === 0) {
-                    doc.setFillColor(245, 245, 245);
-                    doc.rect(flowTableX, yPos - 3, contentWidth, fRowH, 'F');
-                }
-                doc.setFontSize(7.5);
-                doc.setFont('helvetica', 'normal');
-                doc.setTextColor(30, 30, 30);
-                doc.text(resolveName(f.source_id).substring(0, 24), flowTableX + 2, yPos + 1);
-                doc.text(resolveName(f.target_id).substring(0, 24), flowTableX + fColWidths[0] + 2, yPos + 1);
-                doc.text((f.protocol || '—').substring(0, 14).toUpperCase(), flowTableX + fColWidths[0] + fColWidths[1] + 2, yPos + 1);
-                doc.text((f.description || '—').substring(0, 18), flowTableX + fColWidths[0] + fColWidths[1] + fColWidths[2] + 2, yPos + 1);
-                yPos += fRowH;
-            });
-            yPos += 4;
-        }
-
-        // =============================================
-        // CONFIRMED RISKS
-        // =============================================
-        addHeading("5. Confirmed Risks", 14, [39, 174, 96]);
-
-        if (confirmed.length === 0) {
-            addText("No confirmed risks detected.", 10, 'italic', [100, 100, 100]);
-        } else {
-            confirmed.forEach(t => renderThreat(doc, t, leftMargin, contentWidth, checkPageBreak, () => yPos, (v) => yPos = v));
-        }
-
-        // =============================================
-        // POTENTIAL RISKS
-        // =============================================
-        addHeading("6. Potential Risks (Assumption-Based)", 14, [241, 196, 15]);
-
-        if (potential.length === 0) {
-            addText("No potential risks detected.", 10, 'italic', [100, 100, 100]);
-        } else {
-            potential.forEach(t => renderThreat(doc, t, leftMargin, contentWidth, checkPageBreak, () => yPos, (v) => yPos = v));
-        }
-
-        // =============================================
-        // FOOTER on every page
-        // =============================================
-        const pageCount = doc.internal.getNumberOfPages();
-        for (let i = 1; i <= pageCount; i++) {
-            doc.setPage(i);
-            // Footer line
-            doc.setDrawColor(200, 200, 200);
-            doc.line(leftMargin, pageHeight - 15, pageWidth - rightMargin, pageHeight - 15);
-            // Footer text
-            doc.setFontSize(7);
-            doc.setTextColor(150, 150, 150);
-            doc.setFont('helvetica', 'normal');
-            doc.text(`Page ${i} of ${pageCount}`, pageWidth - 30, pageHeight - 10);
-            doc.text(`AI Threat Modeler • ${projectName || 'Report'}`, leftMargin, pageHeight - 10);
-            doc.text(new Date().toLocaleDateString(), pageWidth / 2, pageHeight - 10, { align: 'center' });
-        }
-
-        doc.save(`${(projectName || 'Threat_Report').replace(/\s+/g, '_')}.pdf`);
-
-        // =============================================
-        // RENDER INDIVIDUAL THREAT
-        // =============================================
-        function renderThreat(doc, t, leftMargin, contentWidth, checkPageBreak, getY, setY) {
-            let y = getY();
-            checkPageBreak(55);
-            y = getY();
-
-            // Severity color
-            const sevColors = { Critical: [231, 76, 60], High: [230, 126, 34], Medium: [241, 196, 15], Low: [52, 152, 219] };
-            const sevColor = sevColors[t.severity] || [100, 100, 100];
-
-            // Header bar
-            doc.setFillColor(...sevColor);
-            doc.roundedRect(leftMargin, y - 4, contentWidth, 8, 1, 1, 'F');
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'bold');
-            doc.text(`[${t.severity}] ${t.title}`.substring(0, 85), leftMargin + 3, y + 1);
-            y += 10;
-            setY(y);
-
-            // Meta line
-            doc.setTextColor(100, 100, 100);
-            doc.setFontSize(7);
-            doc.setFont('helvetica', 'normal');
-            const metaParts = [t.category, `Confidence: ${t.confidence}`];
-            if (t.stride_category && t.stride_category !== t.category) metaParts.push(`STRIDE: ${t.stride_category}`);
-            doc.text(metaParts.join(' | '), leftMargin, y);
-            y += 5;
-            setY(y);
-
-            // Description
-            doc.setTextColor(50, 50, 50);
-            doc.setFontSize(9);
-            const descLines = doc.splitTextToSize(t.description || '', contentWidth - 5);
-            doc.text(descLines.slice(0, 4), leftMargin, y);
-            y += descLines.slice(0, 4).length * 4 + 2;
-            setY(y);
-            checkPageBreak(20);
-            y = getY();
-
-            // Affected components
-            if (t.affected_components?.length) {
-                doc.setFontSize(7);
+                doc.setFillColor(...theme.fill);
+                doc.roundedRect(left, y, contentWidth, 5.6, 2.4, 2.4, 'F');
                 doc.setFont('helvetica', 'bold');
-                doc.setTextColor(80, 80, 80);
-                doc.text("Affected: ", leftMargin, y);
-                doc.setFont('helvetica', 'normal');
-                doc.text(t.affected_components.join(', ').substring(0, 80), leftMargin + 16, y);
-                y += 4;
-                setY(y);
-            }
+                doc.setFontSize(8.2);
+                doc.setTextColor(255, 255, 255);
+                doc.text(`${severity.toUpperCase()} | ${threat.title || 'Untitled threat'}`.substring(0, 112), left + 2.6, y + 3.9);
 
-            // Evidence
-            if (t.evidence?.length) {
+                doc.setTextColor(...COLORS.muted);
+                doc.setFontSize(7.2);
+                doc.setFont('helvetica', 'normal');
+                const meta = [
+                    threat.category || 'Unknown category',
+                    `Confidence: ${threat.confidence || 'Medium'}`,
+                    threat.stride_category ? `STRIDE: ${threat.stride_category}` : '',
+                ].filter(Boolean);
+                doc.text(meta.join(' | '), left + 2.6, y + 10.1);
+
+                doc.setTextColor(...COLORS.ink);
+                doc.setFontSize(8.2);
+                const descLines = doc.splitTextToSize(threat.description || '', contentWidth - 5.2).slice(0, 3);
+                doc.text(descLines, left + 2.6, y + 14.2);
+
+                const refs = [];
+                if (threat.cwe?.length) refs.push(`CWE ${threat.cwe.join(', ')}`);
+                if (threat.mitre_attack?.length) refs.push(`MITRE ATT&CK ${threat.mitre_attack.join(', ')}`);
+                if (threat.mitre_atlas?.length) refs.push(`MITRE ATLAS ${threat.mitre_atlas.join(', ')}`);
+                if (threat.owasp_top_10?.length) refs.push(`OWASP ${threat.owasp_top_10.map((o) => String(o).split('-')[0]).join(', ')}`);
+                if (refs.length) {
+                    doc.setTextColor(...toneColor);
+                    doc.setFontSize(7);
+                    doc.text(refs.join(' | ').substring(0, 128), left + 2.6, y + 26.6);
+                }
+
+                doc.setFillColor(...theme.soft);
+                doc.roundedRect(left + 2, y + 28.2, contentWidth - 4, 8, 1.8, 1.8, 'F');
+                doc.setTextColor(...COLORS.ink);
+                doc.setFontSize(7.3);
+                doc.text(`Mitigation: ${(threat.mitigation || 'N/A').substring(0, 144)}`, left + 3.2, y + 33.2);
+
+                y += boxHeight + 4;
+            });
+        };
+
+        const drawFooterOnAllPages = () => {
+            const pages = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= pages; i += 1) {
+                doc.setPage(i);
+                doc.setDrawColor(...COLORS.line);
+                doc.line(left, pageHeight - 13, pageWidth - right, pageHeight - 13);
+
                 doc.setFontSize(7);
-                doc.setFont('helvetica', 'italic');
-                doc.setTextColor(100, 100, 100);
-                doc.text(`Evidence: ${t.evidence.slice(0, 2).join('; ').substring(0, 90)}`, leftMargin, y);
-                y += 4;
-                setY(y);
-            }
-
-            // Compliance/Framework Mappings
-            const complianceParts = [];
-            if (t.cwe?.length) complianceParts.push(`CWE: ${t.cwe.join(', ')}`);
-            if (t.mitre_attack?.length) complianceParts.push(`MITRE: ${t.mitre_attack.join(', ')}`);
-            if (t.owasp_top_10?.length) complianceParts.push(`OWASP: ${t.owasp_top_10.map(o => o.split('-')[0]).join(', ')}`);
-            if (t.nist_800_53?.length) complianceParts.push(`NIST: ${t.nist_800_53.join(', ')}`);
-
-            if (complianceParts.length > 0) {
-                doc.setFontSize(6.5);
+                doc.setTextColor(...COLORS.muted);
                 doc.setFont('helvetica', 'normal');
-                doc.setTextColor(80, 80, 140);
-                doc.text(complianceParts.join('  |  ').substring(0, 120), leftMargin, y);
-                y += 4;
-                setY(y);
+                doc.text(`Aegis Threat | ${projectName || 'Untitled Project'}`, left, pageHeight - 8.4);
+                doc.text(`Page ${i} / ${pages}`, pageWidth - right, pageHeight - 8.4, { align: 'right' });
+                doc.text(new Date().toLocaleDateString(), pageWidth / 2, pageHeight - 8.4, { align: 'center' });
             }
+        };
 
-            // Mitigation box
-            doc.setFillColor(232, 245, 233);
-            const mitText = t.mitigation || 'N/A';
-            const mitLines = doc.splitTextToSize(mitText, contentWidth - 28);
-            const mitBoxHeight = Math.max(mitLines.slice(0, 3).length * 4 + 4, 10);
+        drawCover();
+        drawSectionTitle('Executive Summary', 'A concise leadership view of current risk exposure and analysis confidence.');
+        writeText(data.summary || 'No summary available.', { size: 9.5, color: COLORS.ink });
+        drawMetricCards();
 
-            checkPageBreak(mitBoxHeight + 5);
-            y = getY();
+        drawTopActions();
+        drawAILens();
+        await drawArchitectureSnapshot();
 
-            doc.roundedRect(leftMargin, y - 2, contentWidth, mitBoxHeight, 1, 1, 'F');
-            doc.setFontSize(7);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(39, 174, 96);
-            doc.text("✓ Mitigation:", leftMargin + 2, y + 3);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(30, 30, 30);
-            doc.text(mitLines.slice(0, 3), leftMargin + 24, y + 3);
+        drawThreatSection('Confirmed Risks', confirmed, COLORS.brand);
+        drawThreatSection('Potential Risks', potential, COLORS.warning);
 
-            y += mitBoxHeight + 6;
-            setY(y);
-        }
-
+        drawFooterOnAllPages();
+        doc.save(`${(projectName || 'Aegis_Threat_Report').replace(/\s+/g, '_')}.pdf`);
     } catch (error) {
-        console.error("PDF Generation Error:", error);
+        console.error('PDF Generation Error:', error);
         alert(`PDF generation failed: ${error.message}`);
     }
 };

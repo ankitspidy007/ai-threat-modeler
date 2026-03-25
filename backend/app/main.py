@@ -371,8 +371,8 @@ def health_check():
         'attack_chains': False,
     }
     try:
-        from .engine.nlp_processor import SPACY_AVAILABLE
-        ml_features['nlp_parser'] = SPACY_AVAILABLE
+        from .engine.nlp_processor import nlp_runtime_ready
+        ml_features['nlp_parser'] = nlp_runtime_ready()
     except ImportError:
         pass
     try:

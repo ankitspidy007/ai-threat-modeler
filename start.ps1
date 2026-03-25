@@ -97,7 +97,7 @@ Write-Host "API Docs: " -NoNewline
 Write-Host "http://127.0.0.1:$BackendPort/docs" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Features:" -ForegroundColor Cyan
-Write-Host "  - NLP-powered architecture parsing (spaCy)" -ForegroundColor Gray
+Write-Host "  - Hybrid NLP parsing (BlingFire + transformers + rules)" -ForegroundColor Gray
 Write-Host "  - Semantic threat matching (FAISS vector search)" -ForegroundColor Gray
 Write-Host "  - Attack chain analysis (NetworkX)" -ForegroundColor Gray
 Write-Host "  - STRIDE-based threat analysis" -ForegroundColor Gray

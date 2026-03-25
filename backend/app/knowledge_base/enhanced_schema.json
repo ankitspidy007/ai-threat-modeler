@@ -199,6 +199,14 @@
                     },
                     "description": "MITRE ATT&CK technique IDs"
                 },
+                "atlas": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "pattern": "^AML\\.T[0-9]{4}$"
+                    },
+                    "description": "MITRE ATLAS technique IDs"
+                },
                 "capec": {
                     "type": "array",
                     "items": {

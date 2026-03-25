@@ -1,370 +1,297 @@
 [
-    {
-        "threat_id": "AI-001",
-        "threat_name": "Prompt Injection Through Untrusted Content",
-        "component": [
-            "API",
-            "Service",
-            "WebClient",
-            "ML Service"
-        ],
-        "cloud_platform": [
-            "AWS",
-            "Azure",
-            "GCP",
-            "On-Premise"
-        ],
-        "stride_category": "Tampering",
-        "attack_vector": "Untrusted user or document content is passed directly into an LLM prompt, allowing hidden instructions to override system behavior and alter downstream decisions.",
-        "likelihood": "High",
-        "impact": "High",
-        "affected_cia": [
-            "Integrity",
-            "Confidentiality"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "ml_pipeline",
-                        "op": "==",
-                        "value": true
-                    },
-                    {
-                        "field": "input_validation",
-                        "op": "==",
-                        "value": false
-                    }
-                ]
-            },
-            "auto_detectable": true,
-            "confidence": "high"
-        },
-        "mitigations": [
-            {
-                "control_type": "Preventive",
-                "description": "Separate system instructions from untrusted user or document content",
-                "implementation": "Use structured prompt templates with explicit content boundaries and tool constraints",
-                "tools": [
-                    "Prompt Templates",
-                    "Guardrails"
-                ]
-            }
-        ],
-        "references": {
-            "owasp": [
-                "LLM01"
-            ],
-            "cwe": [
-                "CWE-74"
-            ]
-        }
+  {
+    "threat_id": "AI-001",
+    "threat_name": "Direct Prompt Injection Against LLM Controls",
+    "component": ["API", "Service", "WebClient", "ML Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise"],
+    "stride_category": "Tampering",
+    "attack_vector": "An adversary submits a malicious prompt directly to the AI component to override instructions, disable guardrails, or coerce privileged behavior.",
+    "likelihood": "High",
+    "impact": "High",
+    "affected_cia": ["Integrity", "Confidentiality"],
+    "detection": {
+      "logic": {
+        "operator": "AND",
+        "conditions": [
+          { "field": "ml_pipeline", "op": "==", "value": true },
+          { "field": "public_access", "op": "==", "value": true }
+        ]
+      },
+      "auto_detectable": true,
+      "confidence": "high"
     },
-    {
-        "threat_id": "AI-002",
-        "threat_name": "Sensitive Data Leakage Through LLM Responses",
-        "component": [
-            "API",
-            "Service",
-            "ML Service",
-            "Database"
-        ],
-        "cloud_platform": [
-            "AWS",
-            "Azure",
-            "GCP",
-            "On-Premise"
-        ],
-        "stride_category": "Information Disclosure",
-        "attack_vector": "The application sends sensitive records to an LLM or returns model output without redaction, exposing credentials, PII, or proprietary content.",
-        "likelihood": "High",
-        "impact": "Critical",
-        "affected_cia": [
-            "Confidentiality"
-        ],
-        "detection": {
-            "logic": {
-                "operator": "AND",
-                "conditions": [
-                    {
-                        "field": "ml_pipeline",
-                        "op": "==",
-                        "value": true
-                    },
-                    {
-                        "field": "data_sensitivity",
-                        "op": "in",
-                        "value": [
-                            "pii",
-                            "financial",
-                            "credentials",
-                            "phi"
-                        ]
-                    }
-                ]
-            },
-            "auto_detectable": true,
-            "confidence": "high"
-        },
-        "mitigations": [
-            {
-                "control_type": "Preventive",
-                "description": "Apply data minimization and redaction before model calls",
-                "implementation": "Strip secrets, PII, and regulated data before passing context to LLMs",
-                "tools": [
-                    "DLP",
-                    "PII Redaction"
-                ]
-            }
-        ],
-        "references": {
-            "owasp": [
-                "LLM02"
-            ],
-            "cwe": [
-                "CWE-200"
-            ]
-        }
-    },
-    {
-        "threat_id": "AI-003",
-        "threat_name": "Insecure Vector Store Exposure",
-        "component": [
-            "Database",
-            "Object Storage",
-            "ML Service",
-            "Service"
-        ],
-        "cloud_platform": [
-            "AWS",
-            "Azure",
-            "GCP",
-            "On-Premise"
-        ],
-        "stride_category": "Information Disclosure",
-        "attack_vector": "Embeddings and retrieved context are stored in a vector database without proper access control, exposing source documents and semantic search content.",
-        "likelihood": "Medium",
-        "impact": "High",
-        "affected_cia": [
-            "Confidentiality"
-        ],
-        "mitigations": [
-            {
-                "control_type": "Preventive",
-                "description": "Protect vector indexes with the same controls as source data",
-                "implementation": "Require authentication, encryption, and tenant-aware isolation for vector storage",
-                "tools": [
-                    "RBAC",
-                    "Encryption"
-                ]
-            }
-        ],
-        "references": {
-            "cwe": [
-                "CWE-284"
-            ]
-        }
-    },
-    {
-        "threat_id": "AI-004",
-        "threat_name": "Tool Invocation Without Authorization Guardrails",
-        "component": [
-            "API",
-            "Service",
-            "ML Service"
-        ],
-        "cloud_platform": [
-            "AWS",
-            "Azure",
-            "GCP",
-            "On-Premise"
-        ],
-        "stride_category": "Elevation of Privilege",
-        "attack_vector": "An LLM is allowed to call tools or privileged actions based on user requests without checking authorization or business policy.",
-        "likelihood": "High",
-        "impact": "Critical",
-        "affected_cia": [
-            "Integrity",
-            "Confidentiality",
-            "Availability"
-        ],
-        "mitigations": [
-            {
-                "control_type": "Preventive",
-                "description": "Enforce authorization outside the model",
-                "implementation": "Validate all tool calls against user role, policy, and resource ownership before execution",
-                "tools": [
-                    "RBAC",
-                    "Policy Engine"
-                ]
-            }
-        ],
-        "references": {
-            "owasp": [
-                "LLM08"
-            ],
-            "cwe": [
-                "CWE-285"
-            ]
-        }
-    },
-    {
-        "threat_id": "AI-005",
-        "threat_name": "Training Data Poisoning in Local Model Pipeline",
-        "component": [
-            "ML Service",
-            "Data Warehouse",
-            "Object Storage",
-            "Service"
-        ],
-        "cloud_platform": [
-            "AWS",
-            "Azure",
-            "GCP",
-            "On-Premise"
-        ],
-        "stride_category": "Tampering",
-        "attack_vector": "Attackers insert manipulated examples into the training corpus, causing the locally trained model or classifier to learn unsafe or biased behavior.",
-        "likelihood": "Medium",
-        "impact": "High",
-        "affected_cia": [
-            "Integrity"
-        ],
-        "mitigations": [
-            {
-                "control_type": "Preventive",
-                "description": "Gate and validate training data provenance",
-                "implementation": "Require signed sources, review workflows, and anomaly checks before training on new datasets",
-                "tools": [
-                    "Data Validation",
-                    "CI/CD"
-                ]
-            }
-        ],
-        "references": {
-            "owasp": [
-                "LLM03"
-            ]
-        }
-    },
-    {
-        "threat_id": "AI-006",
-        "threat_name": "Model Artifact Supply Chain Tampering",
-        "component": [
-            "ML Service",
-            "Object Storage",
-            "Service",
-            "Container"
-        ],
-        "cloud_platform": [
-            "AWS",
-            "Azure",
-            "GCP",
-            "On-Premise"
-        ],
-        "stride_category": "Tampering",
-        "attack_vector": "Model weights, prompt templates, or embedding artifacts are replaced in storage or CI/CD, causing compromised local inference behavior.",
-        "likelihood": "Medium",
-        "impact": "Critical",
-        "affected_cia": [
-            "Integrity",
-            "Availability"
-        ],
-        "mitigations": [
-            {
-                "control_type": "Preventive",
-                "description": "Sign and verify model artifacts",
-                "implementation": "Use checksums, signed releases, and deployment-time verification for models and prompts",
-                "tools": [
-                    "Artifact Signing",
-                    "SBOM"
-                ]
-            }
-        ],
-        "references": {
-            "cwe": [
-                "CWE-494"
-            ]
-        }
-    },
-    {
-        "threat_id": "AI-007",
-        "threat_name": "Unbounded LLM Request Cost or Resource Exhaustion",
-        "component": [
-            "API",
-            "Service",
-            "ML Service"
-        ],
-        "cloud_platform": [
-            "AWS",
-            "Azure",
-            "GCP",
-            "On-Premise"
-        ],
-        "stride_category": "Denial of Service",
-        "attack_vector": "Attackers submit oversized prompts, recursive tasks, or repeated retrieval-heavy requests that exhaust local compute or paid model quotas.",
-        "likelihood": "High",
-        "impact": "High",
-        "affected_cia": [
-            "Availability"
-        ],
-        "mitigations": [
-            {
-                "control_type": "Preventive",
-                "description": "Add prompt, token, and request budget controls",
-                "implementation": "Enforce per-user quotas, prompt size limits, and timeout limits on model execution",
-                "tools": [
-                    "Rate Limiter",
-                    "Quota Manager"
-                ]
-            }
-        ],
-        "references": {
-            "owasp": [
-                "LLM04"
-            ],
-            "cwe": [
-                "CWE-400"
-            ]
-        }
-    },
-    {
-        "threat_id": "AI-008",
-        "threat_name": "Missing Audit Trail for AI-Assisted Decisions",
-        "component": [
-            "API",
-            "Service",
-            "ML Service"
-        ],
-        "cloud_platform": [
-            "AWS",
-            "Azure",
-            "GCP",
-            "On-Premise"
-        ],
-        "stride_category": "Repudiation",
-        "attack_vector": "The system cannot reconstruct which prompt, context, model, or tool output led to an AI-generated action or recommendation.",
-        "likelihood": "Medium",
-        "impact": "High",
-        "affected_cia": [
-            "Integrity"
-        ],
-        "mitigations": [
-            {
-                "control_type": "Detective",
-                "description": "Record structured audit metadata for AI flows",
-                "implementation": "Log prompts, retrieved context identifiers, model version, user ID, and tool decisions with privacy controls",
-                "tools": [
-                    "Audit Logging",
-                    "SIEM"
-                ]
-            }
-        ],
-        "references": {
-            "cwe": [
-                "CWE-778"
-            ]
-        }
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Separate trusted instructions from user-controlled content",
+        "implementation": "Use structured prompt templates, explicit role separation, allow-listed tools, and server-side policy checks before executing model-driven actions.",
+        "tools": ["Prompt Templates", "Policy Engine", "Guardrails"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0051"],
+      "owasp": ["LLM01"],
+      "cwe": ["CWE-74"],
+      "external_links": [
+        "https://atlas.mitre.org/pdf-files/SAFEAI_Full_Report.pdf",
+        "https://atlas.mitre.org/pdf-files/MITRE_ATLAS_Fact_Sheet.pdf"
+      ]
     }
+  },
+  {
+    "threat_id": "AI-002",
+    "threat_name": "Indirect Prompt Injection Through Retrieved or Plugin Content",
+    "component": ["API", "Service", "WebClient", "ML Service", "Object Storage", "Database"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise"],
+    "stride_category": "Tampering",
+    "attack_vector": "The AI component ingests malicious instructions from untrusted documents, websites, vector-store results, or plugin output and follows them as if they were trusted instructions.",
+    "likelihood": "High",
+    "impact": "Critical",
+    "affected_cia": ["Integrity", "Confidentiality"],
+    "detection": {
+      "logic": {
+        "operator": "AND",
+        "conditions": [
+          { "field": "ml_pipeline", "op": "==", "value": true },
+          { "field": "input_validation", "op": "==", "value": false }
+        ]
+      },
+      "auto_detectable": true,
+      "confidence": "high"
+    },
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Treat retrieved content and plugin results as untrusted",
+        "implementation": "Sanitize retrieved context, isolate tool outputs, enforce content boundaries, and require policy validation before the model can act on external instructions.",
+        "tools": ["RAG Guardrails", "Content Filters", "Policy Engine"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0051"],
+      "owasp": ["LLM01"],
+      "cwe": ["CWE-74", "CWE-20"],
+      "external_links": [
+        "https://atlas.mitre.org/pdf-files/SAFEAI_Full_Report.pdf"
+      ]
+    }
+  },
+  {
+    "threat_id": "AI-003",
+    "threat_name": "System Prompt or Meta-Prompt Extraction",
+    "component": ["API", "Service", "ML Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise"],
+    "stride_category": "Information Disclosure",
+    "attack_vector": "An attacker induces the model to reveal system prompts, hidden instructions, safety policies, or protected chain-of-thought-like control material.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Confidentiality", "Integrity"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Minimize exposure of hidden prompts and sensitive control logic",
+        "implementation": "Keep sensitive instructions server-side, redact protected prompt material from logs and responses, and test prompt leakage paths regularly.",
+        "tools": ["Prompt Templates", "Redaction", "Security Testing"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0056"],
+      "owasp": ["LLM07"],
+      "cwe": ["CWE-200"],
+      "external_links": [
+        "https://atlas.mitre.org/pdf-files/SAFEAI_Full_Report.pdf"
+      ]
+    }
+  },
+  {
+    "threat_id": "AI-004",
+    "threat_name": "Model or Sensitive Context Exfiltration via Inference API",
+    "component": ["API", "Service", "ML Service", "Database"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise"],
+    "stride_category": "Information Disclosure",
+    "attack_vector": "Attackers repeatedly query the inference interface to extract model behavior, protected prompts, tenant data, or sensitive retrieved content.",
+    "likelihood": "High",
+    "impact": "Critical",
+    "affected_cia": ["Confidentiality"],
+    "detection": {
+      "logic": {
+        "operator": "AND",
+        "conditions": [
+          { "field": "ml_pipeline", "op": "==", "value": true },
+          { "field": "public_access", "op": "==", "value": true }
+        ]
+      },
+      "auto_detectable": true,
+      "confidence": "high"
+    },
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Constrain model and retrieval output exposure",
+        "implementation": "Enforce tenant isolation, output filtering, per-user quotas, and strict authorization around retrieved context and model metadata.",
+        "tools": ["RBAC", "Output Filters", "Quota Manager", "DLP"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0024"],
+      "owasp": ["LLM02"],
+      "cwe": ["CWE-200", "CWE-359"],
+      "external_links": [
+        "https://atlas.mitre.org/pdf-files/SAFEAI_Full_Report.pdf"
+      ]
+    }
+  },
+  {
+    "threat_id": "AI-005",
+    "threat_name": "Training Data Poisoning",
+    "component": ["ML Service", "Data Warehouse", "Object Storage", "Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise"],
+    "stride_category": "Tampering",
+    "attack_vector": "An attacker poisons training or fine-tuning data so the model learns unsafe behavior, hidden triggers, biased outputs, or harmful failure modes.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Integrity"],
+    "detection": {
+      "logic": {
+        "operator": "AND",
+        "conditions": [
+          { "field": "ml_pipeline", "op": "==", "value": true },
+          { "field": "logging_enabled", "op": "==", "value": false }
+        ]
+      },
+      "auto_detectable": true,
+      "confidence": "medium"
+    },
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Gate training data with provenance and validation controls",
+        "implementation": "Require signed sources, dataset review, anomaly detection, and reproducible training pipelines before accepting new data for tuning.",
+        "tools": ["Data Validation", "CI/CD", "Provenance Tracking"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0020"],
+      "owasp": ["LLM03"],
+      "external_links": [
+        "https://atlas.mitre.org/pdf-files/SAFEAI_Full_Report.pdf"
+      ]
+    }
+  },
+  {
+    "threat_id": "AI-006",
+    "threat_name": "LLM Jailbreak and Guardrail Bypass",
+    "component": ["API", "Service", "ML Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise"],
+    "stride_category": "Elevation of Privilege",
+    "attack_vector": "The attacker coaxes the model into bypassing safety policies or execution constraints, enabling harmful outputs or higher-privilege operations.",
+    "likelihood": "High",
+    "impact": "High",
+    "affected_cia": ["Integrity", "Confidentiality"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Enforce guardrails outside the model",
+        "implementation": "Validate actions and sensitive outputs with deterministic policy checks instead of relying solely on the model to honor safety instructions.",
+        "tools": ["Policy Engine", "Output Moderation", "Authorization"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0054"],
+      "owasp": ["LLM01"],
+      "external_links": [
+        "https://atlas.mitre.org/pdf-files/SAFEAI_Full_Report.pdf"
+      ]
+    }
+  },
+  {
+    "threat_id": "AI-007",
+    "threat_name": "Denial of ML Service Through Token or Compute Exhaustion",
+    "component": ["API", "Service", "ML Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise"],
+    "stride_category": "Denial of Service",
+    "attack_vector": "Oversized prompts, repeated long-context requests, or tool-intensive chains consume model tokens, GPU resources, or downstream retrieval capacity until the service degrades or fails.",
+    "likelihood": "High",
+    "impact": "High",
+    "affected_cia": ["Availability"],
+    "detection": {
+      "logic": {
+        "operator": "AND",
+        "conditions": [
+          { "field": "ml_pipeline", "op": "==", "value": true },
+          { "field": "rate_limiting", "op": "==", "value": false }
+        ]
+      },
+      "auto_detectable": true,
+      "confidence": "high"
+    },
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Apply request budgets and model execution limits",
+        "implementation": "Enforce prompt size caps, per-tenant quotas, timeout controls, and bounded tool recursion for model-driven workflows.",
+        "tools": ["Rate Limiter", "Quota Manager", "Timeout Controls"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0029"],
+      "owasp": ["LLM04"],
+      "cwe": ["CWE-400"],
+      "external_links": [
+        "https://atlas.mitre.org/pdf-files/SAFEAI_Full_Report.pdf"
+      ]
+    }
+  },
+  {
+    "threat_id": "AI-008",
+    "threat_name": "AI-Enabled Identity Spoofing and Deepfake Phishing",
+    "component": ["WebClient", "API", "Identity Provider", "Service", "ML Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise"],
+    "stride_category": "Spoofing",
+    "attack_vector": "Adversaries use generated identities, voice/video deepfakes, or AI-enhanced phishing to defeat user verification flows and gain access to protected systems.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Confidentiality", "Integrity"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Harden authentication against AI-enabled impersonation",
+        "implementation": "Require phishing-resistant MFA, step-up verification for sensitive actions, and anti-automation controls for account recovery and onboarding.",
+        "tools": ["MFA", "Adaptive Authentication", "Fraud Detection"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0052"],
+      "cwe": ["CWE-290"],
+      "external_links": [
+        "https://atlas.mitre.org/pdf-files/SAFEAI_Full_Report.pdf",
+        "https://atlas.mitre.org/pdf-files/MITRE_ATLAS_Fact_Sheet.pdf"
+      ]
+    }
+  },
+  {
+    "threat_id": "AI-009",
+    "threat_name": "Prompt Self-Replication or Autonomous Agent Persistence",
+    "component": ["API", "Service", "ML Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise"],
+    "stride_category": "Elevation of Privilege",
+    "attack_vector": "An attacker embeds instructions that persist across agent steps or tool invocations, allowing malicious behavior to survive beyond a single prompt and influence later actions.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Integrity", "Availability"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Reset and validate agent state between high-risk steps",
+        "implementation": "Constrain long-lived memory, clear untrusted context, require approval for stateful tool chains, and validate persisted instructions before reuse.",
+        "tools": ["Workflow Isolation", "Human Approval", "State Validation"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0061"],
+      "external_links": [
+        "https://atlas.mitre.org/pdf-files/SAFEAI_Full_Report.pdf"
+      ]
+    }
+  }
 ]

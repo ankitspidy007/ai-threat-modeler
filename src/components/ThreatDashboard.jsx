@@ -120,6 +120,53 @@ const MetricCard = ({ label, value, tone = 'default', detail }) => {
     );
 };
 
+const aiLensTone = {
+    high: 'border-red-200 bg-red-50/80 text-red-900 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-200',
+    medium: 'border-amber-200 bg-amber-50/80 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200',
+    low: 'border-emerald-200 bg-emerald-50/80 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200',
+};
+
+const AISecurityLensCard = ({ item }) => (
+    <div className={clsx('rounded-[22px] border p-4 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.28)]', aiLensTone[item.level] || aiLensTone.low)}>
+        <div className="flex items-center justify-between gap-3">
+            <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-70">{item.label}</p>
+                <p className="mt-2 text-2xl font-black tracking-tight">{item.count}</p>
+            </div>
+            <span className="rounded-full bg-white/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-current dark:bg-black/10">
+                {item.level}
+            </span>
+        </div>
+        <p className="mt-3 text-sm leading-6 opacity-90">{item.summary}</p>
+    </div>
+);
+
+const PriorityActionCard = ({ action, index }) => (
+    <div className="rounded-[24px] border border-brand-100 bg-brand-50/80 p-5 shadow-[0_18px_45px_-36px_rgba(15,23,42,0.28)] dark:border-brand-700 dark:bg-brand-900/25">
+        <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-primary text-sm font-black text-white">
+                    {index + 1}
+                </div>
+                <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Fix first</p>
+                    <h4 className="mt-1 text-base font-bold text-brand-950 dark:text-white">{action.title}</h4>
+                </div>
+            </div>
+            <SeverityBadge severity={action.priority} />
+        </div>
+        <p className="mt-4 text-sm leading-6 text-brand-700 dark:text-brand-300">{action.why_now}</p>
+        <div className="mt-4 rounded-2xl bg-white/80 px-4 py-3 text-sm font-medium leading-6 text-brand-800 dark:bg-brand-800/60 dark:text-brand-200">
+            {action.action}
+        </div>
+        {action.focus_area?.length > 0 && (
+            <p className="mt-3 text-xs leading-5 text-brand-500 dark:text-brand-400">
+                Focus area: {action.focus_area.join(', ')}
+            </p>
+        )}
+    </div>
+);
+
 const ThreatCard = ({ threat, reviewState = 'open', onReviewStateChange }) => {
     const theme = severityTheme[threat.severity] || severityTheme.Low;
     const evidencePreview = threat.explanation?.evidence_summary?.length
@@ -340,6 +387,8 @@ export default function ThreatDashboard({ data, projectName }) {
     const assumptions = data.coverage?.assumptions || [];
     const diffSummary = data.diff_summary;
     const followUpQuestions = data.follow_up_questions || [];
+    const aiSecurityLens = data.ai_security_lens || { enabled: false, overview: '', items: [] };
+    const priorityActions = data.priority_actions || [];
 
     const allThreatsSorted = [...(data.threats || [])].sort((a, b) => {
         const severityDelta = (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0);
@@ -728,6 +777,54 @@ export default function ThreatDashboard({ data, projectName }) {
                             </div>
                         </div>
                     </div>
+                </div>
+            </section>
+
+            <section className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+                <div className={clsx(insightCardBase, 'bg-white/80 p-6 backdrop-blur-xl dark:bg-brand-800/70')}>
+                    <div className="flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-brand-primary" />
+                        <h3 className="text-lg font-bold text-brand-950 dark:text-white">AI security lens</h3>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-brand-600 dark:text-brand-400">
+                        {aiSecurityLens.overview || 'A focused readout on prompt, data, model, and agent-specific AI risk themes.'}
+                    </p>
+                    {aiSecurityLens.items?.length ? (
+                        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            {aiSecurityLens.items.map((item) => (
+                                <AISecurityLensCard key={item.id} item={item} />
+                            ))}
+                        </div>
+                    ) : (
+                        <EmptyInsight
+                            icon={Sparkles}
+                            title="No AI-specific lens available"
+                            description="This run did not generate AI-specific risk storytelling, which usually means the current architecture does not look AI-native yet."
+                        />
+                    )}
+                </div>
+
+                <div className={clsx(insightCardBase, 'bg-white/80 p-6 backdrop-blur-xl dark:bg-brand-800/70')}>
+                    <div className="flex items-center gap-2">
+                        <ShieldAlert className="h-5 w-5 text-brand-primary" />
+                        <h3 className="text-lg font-bold text-brand-950 dark:text-white">Top 3 things to fix first</h3>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-brand-600 dark:text-brand-400">
+                        The fastest path to reducing the current risk story, based on severity, evidence, and architectural exposure.
+                    </p>
+                    {priorityActions.length ? (
+                        <div className="mt-5 space-y-4">
+                            {priorityActions.slice(0, 3).map((action, index) => (
+                                <PriorityActionCard key={`${action.title}-${index}`} action={action} index={index} />
+                            ))}
+                        </div>
+                    ) : (
+                        <EmptyInsight
+                            icon={ShieldCheck}
+                            title="No urgent actions surfaced"
+                            description="The analyzer did not generate a short priority list for this run. Add more detail or rerun after a design change to surface clearer next steps."
+                        />
+                    )}
                 </div>
             </section>
 

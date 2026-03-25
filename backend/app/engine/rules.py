@@ -146,6 +146,8 @@ class RuleEngine:
                 mapped_controls['cwe'] = refs['cwe']
             if refs.get('mitre_attack'):
                 mapped_controls['mitre_attack'] = refs['mitre_attack']
+            if refs.get('atlas'):
+                mapped_controls['mitre_atlas'] = refs['atlas']
             if refs.get('nist'):
                 mapped_controls['nist_800_53'] = refs['nist']
 
@@ -572,6 +574,7 @@ class RuleEngine:
         owasp_top_10 = mapped.get('owasp_top_10', [])
         cwe = mapped.get('cwe', [])
         mitre_attack = mapped.get('mitre_attack', mapped.get('mitre', []))
+        mitre_atlas = mapped.get('mitre_atlas', mapped.get('atlas', []))
         nist_800_53 = mapped.get('nist_800_53', [])
 
         return Threat(
@@ -593,5 +596,6 @@ class RuleEngine:
             owasp_top_10=owasp_top_10,
             cwe=cwe,
             mitre_attack=mitre_attack,
+            mitre_atlas=mitre_atlas,
             nist_800_53=nist_800_53,
         )

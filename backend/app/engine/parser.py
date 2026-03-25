@@ -374,8 +374,8 @@ class ArchitectureParser:
     def parse(self, text: str) -> SystemArchitecture:
         """
         Enhanced parser with NLP integration.
-        Uses spaCy NER and dependency parsing when available,
-        falls back to regex-based extraction.
+        Uses the hybrid NLP pipeline when available,
+        with rule-based extraction as the fallback.
         """
         text_lower = text.lower()
         components: Dict[str, Component] = {}

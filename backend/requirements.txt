@@ -1,5 +1,5 @@
 # AI Threat Modeler Backend Requirements
-# Python 3.8+ required
+# Python 3.10+ recommended.
 
 # Web framework
 fastapi>=0.115.0,<1.0.0
@@ -13,9 +13,8 @@ numpy>=1.26.0,<3.0.0
 pyyaml>=6.0.1,<7.0.0
 
 # NLP
-spacy>=3.7.0,<4.0.0
-# Optional model:
-# python -m spacy download en_core_web_sm
+blingfire>=0.1.8,<1.0.0
+transformers>=4.41.0,<5.0.0
 
 # Semantic retrieval and local ML
 sentence-transformers>=2.6.0,<4.0.0

@@ -139,7 +139,7 @@ echo Frontend: http://localhost:%FRONTEND_PORT%
 echo API Docs: http://127.0.0.1:%BACKEND_PORT%/docs
 echo.
 echo Features:
-echo   - NLP-powered architecture parsing (spaCy)
+echo   - Hybrid NLP parsing (BlingFire + transformers + rules)
 echo   - Semantic threat matching (sentence-transformers + FAISS)
 echo   - Attack chain analysis (NetworkX)
 echo   - STRIDE-based threat analysis

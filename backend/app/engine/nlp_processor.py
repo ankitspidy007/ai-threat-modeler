@@ -1,27 +1,40 @@
 """
-NLP Processor - spaCy-based NER and dependency parsing for architecture descriptions.
+Hybrid NLP processor for architecture descriptions.
 
-Replaces pure regex parsing with linguistic analysis:
-- Named Entity Recognition for components, technologies, protocols
-- Dependency parsing for data flow extraction
-- Semantic similarity for component classification
+This module intentionally avoids a hard dependency on spaCy and instead uses:
+- blingfire for fast sentence splitting when available
+- regex and domain dictionaries as the primary extraction engine
+- optional transformers pipeline for targeted NER enrichment
+
+The public API is kept compatible with the previous NLPProcessor so the rest of
+the analyzer can use the same methods without change.
 """
 
 import logging
+import os
 import re
-from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 try:
-    import spacy
+    from blingfire import text_to_sentences
 
-    SPACY_AVAILABLE = True
+    BLINGFIRE_AVAILABLE = True
 except Exception:
-    SPACY_AVAILABLE = False
-    logger.warning("spaCy not available. NLP features will be disabled, falling back to regex.")
+    BLINGFIRE_AVAILABLE = False
+    logger.warning("blingfire not available. Falling back to regex sentence splitting.")
 
+try:
+    from transformers import pipeline
+
+    TRANSFORMERS_AVAILABLE = True
+except Exception:
+    TRANSFORMERS_AVAILABLE = False
+    logger.warning("transformers not available. Named-entity enrichment will be disabled.")
+
+
+NER_MODEL = os.getenv("AEGIS_THREAT_NER_MODEL", "dslim/bert-base-NER")
 
 TECH_COMPONENT_MAP = {
     "postgresql": "Database",
@@ -181,16 +194,65 @@ TECH_COMPONENT_MAP = {
 }
 
 FLOW_VERBS = {
-    "send", "sends", "sent", "transmit", "transmits", "forward", "forwards",
-    "connect", "connects", "connected", "communicate", "communicates",
-    "query", "queries", "queried", "read", "reads", "write", "writes",
-    "call", "calls", "invoke", "invokes", "fetch", "fetches",
-    "push", "pushes", "pull", "pulls", "store", "stores", "stored",
-    "route", "routes", "routed", "redirect", "redirects",
-    "authenticate", "authenticates", "authorize", "authorizes",
-    "publish", "publishes", "subscribe", "subscribes", "consume", "consumes",
-    "upload", "uploads", "download", "downloads", "stream", "streams",
-    "proxy", "proxies", "cache", "caches", "replicate", "replicates",
+    "send",
+    "sends",
+    "sent",
+    "transmit",
+    "transmits",
+    "forward",
+    "forwards",
+    "connect",
+    "connects",
+    "connected",
+    "communicate",
+    "communicates",
+    "query",
+    "queries",
+    "queried",
+    "read",
+    "reads",
+    "write",
+    "writes",
+    "call",
+    "calls",
+    "invoke",
+    "invokes",
+    "fetch",
+    "fetches",
+    "push",
+    "pushes",
+    "pull",
+    "pulls",
+    "store",
+    "stores",
+    "stored",
+    "route",
+    "routes",
+    "routed",
+    "redirect",
+    "redirects",
+    "authenticate",
+    "authenticates",
+    "authorize",
+    "authorizes",
+    "publish",
+    "publishes",
+    "subscribe",
+    "subscribes",
+    "consume",
+    "consumes",
+    "upload",
+    "uploads",
+    "download",
+    "downloads",
+    "stream",
+    "streams",
+    "proxy",
+    "proxies",
+    "cache",
+    "caches",
+    "replicate",
+    "replicates",
 }
 
 PROTOCOL_INDICATORS = {
@@ -218,90 +280,43 @@ SERVICE_NAME_PATTERNS = [
 
 
 class NLPProcessor:
-    """Advanced NLP processor for architecture descriptions."""
+    """Hybrid NLP processor for architecture descriptions."""
 
     def __init__(self):
-        self.nlp = None
-        self._doc_cache: "OrderedDict[str, Any]" = OrderedDict()
-        self._max_doc_cache = 64
-        self._load_nlp()
+        self.sentence_splitter = text_to_sentences if BLINGFIRE_AVAILABLE else None
+        self.ner_pipeline = None
+        self.ready = True
+        self._load_optional_models()
 
-    def _load_nlp(self):
-        """Load spaCy model with custom pipeline components."""
-        if not SPACY_AVAILABLE:
+    def _load_optional_models(self) -> None:
+        if not TRANSFORMERS_AVAILABLE:
+            return
+
+        if os.getenv("AEGIS_THREAT_ENABLE_TRANSFORMERS", "").lower() not in {"1", "true", "yes"}:
             return
 
         try:
-            try:
-                self.nlp = spacy.load("en_core_web_sm")
-            except OSError:
-                logger.info("Downloading spaCy English model...")
-                import subprocess
-
-                subprocess.run(
-                    ["python", "-m", "spacy", "download", "en_core_web_sm"],
-                    check=True,
-                    capture_output=True,
-                )
-                self.nlp = spacy.load("en_core_web_sm")
-
-            if "entity_ruler" not in self.nlp.pipe_names:
-                ruler = self.nlp.add_pipe("entity_ruler", before="ner")
-                ruler.add_patterns(self._build_entity_patterns())
-
-            logger.info("NLP processor initialized with spaCy")
+            self.ner_pipeline = pipeline(
+                "token-classification",
+                model=NER_MODEL,
+                aggregation_strategy="simple",
+                local_files_only=True,
+            )
+            logger.info("Transformers NER pipeline initialized.")
         except Exception as exc:
-            logger.warning(f"Failed to load spaCy: {exc}. Falling back to regex.")
-            self.nlp = None
+            logger.info("Transformers NER pipeline unavailable: %s", exc)
+            self.ner_pipeline = None
 
-    def _build_entity_patterns(self) -> List[Dict]:
-        """Build spaCy entity patterns from our technology map."""
-        patterns = []
-        for tech, comp_type in TECH_COMPONENT_MAP.items():
-            label = "TECH"
-            if comp_type == "Database":
-                label = "DATABASE"
-            elif comp_type in ("API", "API Gateway"):
-                label = "API_TECH"
-            elif comp_type == "WebClient":
-                label = "FRONTEND"
-            elif comp_type == "Queue":
-                label = "QUEUE"
-            elif comp_type in ("Object Storage", "CDN"):
-                label = "STORAGE"
-            elif comp_type == "Identity Provider":
-                label = "AUTH"
-            elif comp_type == "Monitoring":
-                label = "MONITORING"
-            elif comp_type == "IoT Device":
-                label = "IOT"
-            elif comp_type == "ML Service":
-                label = "ML"
-
-            patterns.append({"label": label, "pattern": [{"LOWER": word.lower()} for word in tech.split()]})
-        return patterns
-
-    def _cache_get_doc(self, text: str):
-        doc = self._doc_cache.get(text)
-        if doc is not None:
-            self._doc_cache.move_to_end(text)
-        return doc
-
-    def _cache_set_doc(self, text: str, doc) -> None:
-        self._doc_cache[text] = doc
-        self._doc_cache.move_to_end(text)
-        if len(self._doc_cache) > self._max_doc_cache:
-            self._doc_cache.popitem(last=False)
-
-    def _get_doc(self, text: str):
-        if not self.nlp:
-            return None
-        cached = self._cache_get_doc(text)
-        if cached is not None:
-            return cached
-        doc = self.nlp(text)
-        self._cache_set_doc(text, doc)
-        return doc
+    def _split_sentences(self, text: str) -> List[str]:
+        if not text:
+            return []
+        if self.sentence_splitter:
+            try:
+                return [line.strip() for line in self.sentence_splitter(text).splitlines() if line.strip()]
+            except Exception:
+                pass
+        chunks = re.split(r"(?<=[.!?])\s+|\n+", text)
+        return [chunk.strip() for chunk in chunks if chunk.strip()]
 
     def _normalize_component_name(self, text: str) -> str:
         normalized = re.sub(r"[^a-z0-9\s/-]", " ", text.lower())
@@ -316,43 +331,53 @@ class NLPProcessor:
             "security_controls": [],
         }
 
-        if self.nlp:
-            result = self._extract_with_spacy(text)
+        result = self._merge_entities(result, self._extract_with_regex(text))
+        if self.ner_pipeline:
+            result = self._merge_entities(result, self._extract_with_transformers(text))
+        return result
 
-        return self._merge_entities(result, self._extract_with_regex(text))
-
-    def _extract_with_spacy(self, text: str) -> Dict[str, List[Dict]]:
-        doc = self._get_doc(text)
+    def _extract_with_transformers(self, text: str) -> Dict[str, List[Dict]]:
         result = {
             "technologies": [],
             "services": [],
             "protocols": [],
             "security_controls": [],
         }
-        seen = set()
+        try:
+            entities = self.ner_pipeline(text)
+        except Exception as exc:
+            logger.info("Transformers NER extraction skipped: %s", exc)
+            return result
 
-        for ent in doc.ents:
-            key = (ent.text.lower(), ent.label_)
-            if key in seen:
+        for ent in entities:
+            label = ent.get("entity_group", "")
+            value = ent.get("word", "").strip()
+            normalized = self._normalize_component_name(value)
+            if not normalized or len(normalized) < 3:
                 continue
-            seen.add(key)
 
-            entity_info = {
-                "text": ent.text,
-                "label": ent.label_,
-                "start": ent.start_char,
-                "end": ent.end_char,
-                "component_type": TECH_COMPONENT_MAP.get(ent.text.lower()),
-            }
-
-            if ent.label_ in {"DATABASE", "API_TECH", "FRONTEND", "QUEUE", "STORAGE", "AUTH", "MONITORING", "IOT", "TECH", "ML"}:
-                result["technologies"].append(entity_info)
-            elif ent.label_ in {"ORG", "PRODUCT"}:
-                if ent.text.lower() in TECH_COMPONENT_MAP:
-                    entity_info["component_type"] = TECH_COMPONENT_MAP[ent.text.lower()]
-                    result["technologies"].append(entity_info)
-                else:
-                    result["services"].append(entity_info)
+            if normalized in TECH_COMPONENT_MAP:
+                result["technologies"].append(
+                    {
+                        "text": value,
+                        "label": "TECH",
+                        "component_type": TECH_COMPONENT_MAP[normalized],
+                        "source": "transformers",
+                    }
+                )
+            elif label in {"ORG", "MISC", "PRODUCT"} and re.search(
+                r"(service|api|gateway|worker|engine|pipeline|database|cache)$",
+                value,
+                re.IGNORECASE,
+            ):
+                result["services"].append(
+                    {
+                        "text": value,
+                        "label": "SERVICE",
+                        "component_type": self.classify_component_type(value),
+                        "source": "transformers",
+                    }
+                )
 
         return result
 
@@ -438,102 +463,55 @@ class NLPProcessor:
 
     def extract_data_flows(self, text: str, components: Dict[str, Any]) -> List[Dict]:
         flows = []
-        if self.nlp:
-            flows = self._extract_flows_with_spacy(text, components)
+        component_names = self._build_component_name_map(components)
+        existing_pairs = set()
 
-        regex_flows = self._extract_flows_with_regex(text, components)
-        existing_pairs = {(flow["source"], flow["target"]) for flow in flows}
-        for regex_flow in regex_flows:
-            pair = (regex_flow["source"], regex_flow["target"])
-            if pair not in existing_pairs:
-                flows.append(regex_flow)
+        for sentence in self._split_sentences(text):
+            sentence_lower = sentence.lower()
+            if not any(verb in sentence_lower for verb in FLOW_VERBS):
+                continue
+
+            sentence_flows = self._extract_sentence_flows(sentence, component_names)
+            for flow in sentence_flows:
+                pair = (flow["source"], flow["target"])
+                if pair in existing_pairs:
+                    continue
                 existing_pairs.add(pair)
-        return flows
-
-    def _extract_flows_with_spacy(self, text: str, components: Dict[str, Any]) -> List[Dict]:
-        flows = []
-        doc = self._get_doc(text)
-        component_names = self._build_component_name_map(components)
-
-        for sent in doc.sents:
-            for token in sent:
-                if token.lemma_.lower() in FLOW_VERBS or token.text.lower() in FLOW_VERBS:
-                    source_id = None
-                    target_id = None
-                    protocol = "HTTPS"
-
-                    for child in token.children:
-                        if child.dep_ in {"nsubj", "nsubjpass", "agent"}:
-                            source_text = self._normalize_component_name(self._get_compound_text(child))
-                            source_id = self._match_component(source_text, component_names)
-
-                        if child.dep_ in {"dobj", "pobj", "attr"}:
-                            target_text = self._normalize_component_name(self._get_compound_text(child))
-                            target_id = self._match_component(target_text, component_names)
-
-                        if child.dep_ == "prep":
-                            for pobj in child.children:
-                                if pobj.dep_ == "pobj":
-                                    target_text = self._normalize_component_name(self._get_compound_text(pobj))
-                                    tid = self._match_component(target_text, component_names)
-                                    if tid:
-                                        target_id = tid
-
-                    for proto_key, proto_name in PROTOCOL_INDICATORS.items():
-                        if proto_key in sent.text.lower():
-                            protocol = proto_name
-                            break
-
-                    if source_id and target_id and source_id != target_id:
-                        flows.append(
-                            {
-                                "source": source_id,
-                                "target": target_id,
-                                "protocol": protocol,
-                                "verb": token.text,
-                                "evidence": sent.text.strip(),
-                                "method": "nlp_dependency",
-                            }
-                        )
+                flows.append(flow)
 
         return flows
 
-    def _extract_flows_with_regex(self, text: str, components: Dict[str, Any]) -> List[Dict]:
-        flows = []
-        text_lower = text.lower()
-        component_names = self._build_component_name_map(components)
+    def _extract_sentence_flows(self, sentence: str, component_names: Dict[str, str]) -> List[Dict]:
+        sentence_lower = sentence.lower()
+        protocol = self._infer_protocol(sentence_lower)
+        matches = []
+
         patterns = [
-            r"(\b\w[\w\s]+?)\s+(?:sends?|forwards?|pushes?|transmits?|routes?)\s+(?:[\w\s]+?\s+)?(?:to|into)\s+(\b\w[\w\s]+?)(?:\.|,|;|\n)",
-            r"(\b\w[\w\s]+?)\s+(?:connects?|communicates?|integrates?|interfaces?)\s+(?:with|to)\s+(\b\w[\w\s]+?)(?:\.|,|;|\n)",
-            r"(\b\w[\w\s]+?)\s+(?:queries|reads?\s+from|writes?\s+to|stores?\s+(?:data\s+)?in|fetches?\s+from|pulls?\s+from)\s+(\b\w[\w\s]+?)(?:\.|,|;|\n)",
-            r"(\b\w[\w\s]+?)\s*(?:->|=>)\s*(\b\w[\w\s]+?)(?:\.|,|;|\n)",
-            r"(\b\w[\w\s]+?)\s+(?:authenticates?|authorizes?|validates?)\s+(?:with|through|via|using)\s+(\b\w[\w\s]+?)(?:\.|,|;|\n)",
-            r"(?:data|traffic|requests?)\s+(?:flows?|goes?|moves?|travels?)\s+from\s+(\b\w[\w\s]+?)\s+to\s+(\b\w[\w\s]+?)(?:\.|,|;|\n)",
-            r"(\b\w[\w\s]+?)\s+(?:receives?|consumes?|ingests?)\s+(?:[\w\s]+?\s+)?from\s+(\b\w[\w\s]+?)(?:\.|,|;|\n)",
+            r"(\b[\w\s/-]+?)\s+(?:sends?|forwards?|pushes?|transmits?|routes?)\s+(?:[\w\s/-]+?\s+)?(?:to|into)\s+(\b[\w\s/-]+)",
+            r"(\b[\w\s/-]+?)\s+(?:connects?|communicates?|integrates?|interfaces?)\s+(?:with|to)\s+(\b[\w\s/-]+)",
+            r"(\b[\w\s/-]+?)\s+(?:queries|reads?\s+from|writes?\s+to|stores?\s+(?:data\s+)?in|fetches?\s+from|pulls?\s+from)\s+(\b[\w\s/-]+)",
+            r"(\b[\w\s/-]+?)\s*(?:->|=>)\s*(\b[\w\s/-]+)",
+            r"(?:data|traffic|requests?)\s+(?:flows?|goes?|moves?|travels?)\s+from\s+(\b[\w\s/-]+?)\s+to\s+(\b[\w\s/-]+)",
+            r"(\b[\w\s/-]+?)\s+(?:receives?|consumes?|ingests?)\s+(?:[\w\s/-]+?\s+)?from\s+(\b[\w\s/-]+)",
         ]
 
-        existing_pairs = set()
         for pattern in patterns:
-            for match in re.finditer(pattern, text_lower):
+            for match in re.finditer(pattern, sentence_lower):
                 source_text = self._normalize_component_name(match.group(1).strip())
                 target_text = self._normalize_component_name(match.group(2).strip())
                 source_id = self._match_component(source_text, component_names)
                 target_id = self._match_component(target_text, component_names)
                 if source_id and target_id and source_id != target_id:
-                    pair = (source_id, target_id)
-                    if pair in existing_pairs:
-                        continue
-                    existing_pairs.add(pair)
-                    flows.append(
+                    matches.append(
                         {
                             "source": source_id,
                             "target": target_id,
-                            "protocol": self._infer_protocol(text_lower),
-                            "evidence": match.group(0).strip(),
-                            "method": "regex",
+                            "protocol": protocol,
+                            "evidence": sentence.strip(),
+                            "method": "hybrid_regex",
                         }
                     )
-        return flows
+        return matches
 
     def _build_component_name_map(self, components: Dict[str, Any]) -> Dict[str, str]:
         component_names = {}
@@ -547,14 +525,6 @@ class NLPProcessor:
                 if len(word) > 3:
                     component_names[word] = cid
         return component_names
-
-    def _get_compound_text(self, token) -> str:
-        parts = []
-        for child in token.children:
-            if child.dep_ in {"compound", "amod", "nmod"}:
-                parts.append(child.text)
-        parts.append(token.text)
-        return " ".join(parts)
 
     def _match_component(self, text: str, component_names: Dict[str, str]) -> Optional[str]:
         text = self._normalize_component_name(text)
@@ -612,37 +582,6 @@ class NLPProcessor:
 
     def extract_security_properties(self, text: str) -> Dict[str, Any]:
         text_lower = text.lower()
-        if self.nlp:
-            return self._extract_security_with_nlp(self._get_doc(text), text_lower)
-        return self._extract_security_with_regex(text_lower)
-
-    def _extract_security_with_nlp(self, doc, text_lower: str) -> Dict[str, Any]:
-        props = self._extract_security_with_regex(text_lower)
-        for sent in doc.sents:
-            sent_text = sent.text.lower()
-            for token in sent:
-                if token.dep_ == "neg" or token.text.lower() in {"not", "no", "without", "lacking", "missing"}:
-                    negated_text = token.head.text.lower()
-                    if any(word in negated_text for word in ["encrypt", "encryption"]):
-                        props["encryption_at_rest"] = False
-                    if any(word in negated_text for word in ["auth", "authenticate", "authentication"]):
-                        props["auth_type"] = "none"
-                    if any(word in negated_text for word in ["log", "logging", "audit"]):
-                        props["logging_enabled"] = False
-                    if any(word in negated_text for word in ["valid", "validate", "validation"]):
-                        props["input_validation"] = False
-                    if any(word in negated_text for word in ["rate", "limit", "throttl"]):
-                        props["rate_limiting"] = False
-            if "does not" in sent_text or "doesn't" in sent_text or "do not" in sent_text:
-                if "validate" in sent_text and "jwt" in sent_text:
-                    props["jwt_validation"] = False
-                if "encrypt" in sent_text:
-                    props["encryption_at_rest"] = False
-                if "log" in sent_text:
-                    props["logging_enabled"] = False
-        return props
-
-    def _extract_security_with_regex(self, text_lower: str) -> Dict[str, Any]:
         props = {
             "auth_type": "none",
             "encryption_at_rest": False,
@@ -746,15 +685,35 @@ class NLPProcessor:
         elif any(word in text_lower for word in ["internal only", "private network", "backoffice only"]):
             props["trust_boundary"] = "internal"
 
+        self._apply_negation_signals(text_lower, props)
         return props
+
+    def _apply_negation_signals(self, text_lower: str, props: Dict[str, Any]) -> None:
+        negation_checks = [
+            (r"(does not|do not|doesn't|no|without).{0,40}(validate|validation).{0,20}(jwt|token)", lambda: props.update({"jwt_validation": False})),
+            (r"(does not|do not|doesn't|no|without).{0,30}(rate limit|throttl)", lambda: props.update({"rate_limiting": False})),
+            (r"(does not|do not|doesn't|no|without).{0,30}(encrypt|encryption)", lambda: props.update({"encryption_at_rest": False})),
+            (r"(does not|do not|doesn't|no|without).{0,30}(log|logging|audit)", lambda: props.update({"logging_enabled": False})),
+            (r"(does not|do not|doesn't|no|without).{0,30}(input validation|sanitize)", lambda: props.update({"input_validation": False})),
+        ]
+        for pattern, action in negation_checks:
+            if re.search(pattern, text_lower):
+                action()
 
 
 _nlp_instance: Optional[NLPProcessor] = None
 
 
 def get_nlp_processor() -> NLPProcessor:
-    """Get or create global NLP processor instance."""
     global _nlp_instance
     if _nlp_instance is None:
         _nlp_instance = NLPProcessor()
     return _nlp_instance
+
+
+def nlp_runtime_ready() -> bool:
+    try:
+        processor = get_nlp_processor()
+        return processor.ready
+    except Exception:
+        return False

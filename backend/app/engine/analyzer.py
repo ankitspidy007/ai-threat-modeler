@@ -271,6 +271,157 @@ class ThreatAnalyzer:
 
         return follow_ups
 
+    def _build_ai_security_lens(self, architecture: SystemArchitecture, threats: List[Threat]) -> Dict[str, Any]:
+        """Summarize AI-specific risk themes for the dashboard."""
+        components = architecture.components or []
+        all_props = [component.properties or {} for component in components]
+        ai_enabled = any(props.get("ml_pipeline") for props in all_props)
+
+        lens_config = {
+            "prompt_risk": {
+                "label": "Prompt risk",
+                "keywords": ("prompt", "jailbreak", "meta-prompt"),
+                "default_summary": "Prompt handling looks relatively contained in the current model.",
+            },
+            "data_leakage_risk": {
+                "label": "Data leakage risk",
+                "keywords": ("leak", "exfiltration", "vector", "sensitive", "prompt extraction"),
+                "default_summary": "No major AI-driven data leakage theme is dominating this run.",
+            },
+            "model_abuse_risk": {
+                "label": "Model abuse risk",
+                "keywords": ("model", "inference api", "jailbreak", "denial of ml service", "exhaustion"),
+                "default_summary": "Model abuse signals are present but not dominating the architecture story.",
+            },
+            "agent_tool_risk": {
+                "label": "Agent and tool risk",
+                "keywords": ("tool", "agent", "plugin", "authorization", "self-replication"),
+                "default_summary": "Agent and tool execution risks are not strongly indicated from the current input.",
+            },
+            "training_pipeline_risk": {
+                "label": "Training pipeline risk",
+                "keywords": ("training", "fine-tuning", "poison", "artifact"),
+                "default_summary": "Training and model-supply risks appear limited from the current architecture detail.",
+            },
+        }
+
+        lens_items = []
+        for lens_id, config in lens_config.items():
+            matched = []
+            for threat in threats:
+                corpus = " ".join(
+                    [
+                        threat.id or "",
+                        threat.title or "",
+                        threat.description or "",
+                        " ".join(threat.mitre_atlas or []),
+                    ]
+                ).lower()
+                if any(keyword in corpus for keyword in config["keywords"]):
+                    matched.append(threat)
+
+            severity_rank = max(({"Critical": 4, "High": 3, "Medium": 2, "Low": 1}.get(t.severity, 1) for t in matched), default=0)
+            level = "low"
+            if severity_rank >= 4 or len(matched) >= 3:
+                level = "high"
+            elif severity_rank >= 3 or len(matched) >= 1:
+                level = "medium"
+
+            if matched:
+                top_titles = [threat.title for threat in sorted(matched, key=lambda t: {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}.get(t.severity, 1), reverse=True)[:2]]
+                summary = f"{config['label']} is being driven by {', '.join(top_titles)}."
+            else:
+                summary = config["default_summary"]
+
+            lens_items.append(
+                {
+                    "id": lens_id,
+                    "label": config["label"],
+                    "level": level,
+                    "count": len(matched),
+                    "summary": summary,
+                }
+            )
+
+        highest_themes = [item["label"] for item in lens_items if item["level"] == "high"]
+        overview = (
+            "AI-specific exposure is active in this architecture."
+            if ai_enabled
+            else "The current architecture does not strongly indicate an AI-native system."
+        )
+        if highest_themes:
+            overview = f"Highest AI security pressure is around {', '.join(highest_themes)}."
+
+        return {
+            "enabled": ai_enabled,
+            "overview": overview,
+            "items": lens_items,
+        }
+
+    def _build_priority_actions(
+        self,
+        threats: List[Threat],
+        architecture: SystemArchitecture,
+        ai_security_lens: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """Create a short, executive-friendly top-three action list."""
+        component_map = {component.id: component.name for component in architecture.components}
+        ai_enabled = ai_security_lens.get("enabled", False)
+
+        def action_priority(threat: Threat):
+            base = (
+                {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}.get(threat.severity, 1) * 100
+                + (threat.risk_score or 0)
+            )
+            ai_bonus = 0
+            threat_text = f"{threat.title} {threat.description}".lower()
+            if ai_enabled:
+                if threat.mitre_atlas:
+                    ai_bonus += 40
+                if any(keyword in threat_text for keyword in ("prompt", "llm", "model", "vector", "agent", "tool", "training", "inference")):
+                    ai_bonus += 20
+            return base + ai_bonus
+
+        sorted_threats = sorted(threats, key=action_priority, reverse=True)
+        if ai_enabled:
+            ai_sorted = [threat for threat in sorted_threats if threat.mitre_atlas]
+            non_ai_sorted = [threat for threat in sorted_threats if not threat.mitre_atlas]
+            sorted_threats = ai_sorted + non_ai_sorted
+
+        actions: List[Dict[str, Any]] = []
+        seen_titles = set()
+        for threat in sorted_threats:
+            normalized_title = threat.title.lower()
+            if normalized_title in seen_titles:
+                continue
+            seen_titles.add(normalized_title)
+
+            impacted = threat.affected_components or ([component_map[threat.component_id]] if threat.component_id and threat.component_id in component_map else [])
+            actions.append(
+                {
+                    "title": threat.title,
+                    "priority": threat.severity,
+                    "why_now": threat.explanation.get("why_flagged") if threat.explanation else threat.description,
+                    "action": threat.mitigation,
+                    "focus_area": impacted[:3],
+                }
+            )
+            if len(actions) == 3:
+                break
+
+        if not actions and ai_security_lens.get("enabled"):
+            actions.append(
+                {
+                    "title": "Tighten AI control boundaries",
+                    "priority": "Medium",
+                    "why_now": ai_security_lens.get("overview"),
+                    "action": "Review prompt, retrieval, and tool-execution boundaries for explicit authorization and data minimization controls.",
+                    "focus_area": [],
+                }
+            )
+
+        return actions
+
     def _enrich_threat_explanations(self, threats: List[Threat], architecture: SystemArchitecture) -> List[Threat]:
         """Attach lightweight explainability metadata that the UI can render directly."""
         component_map = {component.id: component for component in architecture.components}
@@ -623,7 +774,9 @@ class ThreatAnalyzer:
         result.follow_up_questions = self._build_follow_up_questions(architecture, normalized_threats)
         result.review_summary = self._build_review_summary(normalized_threats)
         result.domain_context = self._build_domain_context(domain_profile, architecture, normalized_threats)
-        
+        result.ai_security_lens = self._build_ai_security_lens(architecture, normalized_threats)
+        result.priority_actions = self._build_priority_actions(normalized_threats, architecture, result.ai_security_lens)
+
         # Generate comprehensive markdown report
         result.report_markdown = self._generate_report_markdown(result)
         
@@ -886,6 +1039,7 @@ class ThreatAnalyzer:
                     owasp_top_10=list(t.owasp_top_10 or []),
                     cwe=list(t.cwe or []),
                     mitre_attack=list(t.mitre_attack or []),
+                    mitre_atlas=list(t.mitre_atlas or []),
                     nist_800_53=list(t.nist_800_53 or []),
                 )
             
