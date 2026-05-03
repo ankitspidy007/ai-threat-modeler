@@ -1,55 +1,97 @@
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
+
 class Component(BaseModel):
     id: str
     name: str
-    type: str  # API, Database, Service, WebClient, etc.
+    type: str
+    trust_level: str = "internal"
     description: Optional[str] = ""
     properties: Dict[str, Any] = Field(default_factory=dict)
-    # Common properties: auth_type, logging_enabled, encryption_at_rest, rate_limiting, input_validation
+
 
 class DataFlow(BaseModel):
     source_id: str
     target_id: str
-    protocol: str  # http, https, tcp, etc.
+    protocol: str
+    data_type: str = "application_data"
+    assumed: bool = False
     properties: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TrustBoundary(BaseModel):
+    name: str
+    boundary_type: str
+    components: List[str] = Field(default_factory=list)
+    description: Optional[str] = ""
+
+
+class Asset(BaseModel):
+    name: str
+    sensitivity: str
+    location: str
+    asset_type: str = "data"
+    related_component_id: Optional[str] = None
+    related_data_flows: List[str] = Field(default_factory=list)
+
 
 class SystemArchitecture(BaseModel):
     components: List[Component]
     flows: List[DataFlow]
-    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)  # NEW: For known issues and other metadata
+    trust_boundaries: List[TrustBoundary] = Field(default_factory=list)
+    assets: List[Asset] = Field(default_factory=list)
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
 
 class Threat(BaseModel):
     id: str
     category: str
-    stride_category: Optional[str] = None  # Normalized STRIDE mapping
+    stride_category: Optional[str] = None
     title: str
     description: str
     severity: str
     likelihood: Optional[str] = "Unknown"
     impact: Optional[str] = "Unknown"
     risk_score: Optional[int] = 0
-    confidence: Optional[str] = "Medium"  # High, Medium, Low
-    tier: Optional[str] = "Potential"  # Confirmed, Potential
+    confidence: Optional[str] = "Medium"
+    tier: Optional[str] = "Potential"
     status: Optional[str] = "Identified"
     evidence: List[str] = Field(default_factory=list)
     mitigation: str
-    # Compliance & framework mappings
+    component: Optional[str] = None
+    data_flow: Optional[str] = None
+    asset: Optional[str] = None
+    affected_component: Optional[str] = None
+    related_data_flow: Optional[str] = None
+    root_cause: Optional[str] = None
+    realistic_attack_scenario: Optional[str] = None
+    attack_scenario: Optional[str] = None
+    business_impact: Optional[str] = None
+    attack_path: Optional[Dict[str, Any]] = None
+    specific_control: Optional[str] = None
+    implementation_detail: Optional[str] = None
+    optional_config_example: Optional[str] = None
+    exposure: Optional[str] = None
+    data_sensitivity: Optional[str] = None
+    exploit_complexity: Optional[str] = None
+    privilege_required: Optional[str] = None
+    # Compliance and framework mappings
     owasp_top_10: Optional[List[str]] = Field(default_factory=list)
     cwe: Optional[List[str]] = Field(default_factory=list)
     mitre_attack: Optional[List[str]] = Field(default_factory=list)
     mitre_atlas: Optional[List[str]] = Field(default_factory=list)
     nist_800_53: Optional[List[str]] = Field(default_factory=list)
-    # Aggregated fields
+    # Aggregated and compatibility fields
     affected_components: List[str] = Field(default_factory=list)
     affected_data_flows: List[str] = Field(default_factory=list)
-    # Legacy fields (kept for compatibility)
+    affected_assets: List[str] = Field(default_factory=list)
     component_id: Optional[str] = None
     flow_source: Optional[str] = None
     flow_target: Optional[str] = None
     explanation: Optional[Dict[str, Any]] = Field(default_factory=dict)
     review_state: Optional[str] = "open"
+
 
 class AnalysisResult(BaseModel):
     project_name: str
@@ -58,18 +100,16 @@ class AnalysisResult(BaseModel):
     architecture: SystemArchitecture
     score: int
     mermaid_diagram: Optional[str] = None
-    diagram: Optional[str] = None  # Alias for frontend compatibility
+    diagram: Optional[str] = None
     report_markdown: Optional[str] = None
-    timestamp: Optional[str] = None  # For tracking when analysis was done
-    # NLP/DL enhancement fields
-    attack_chains: Optional[Dict[str, Any]] = None  # Attack chain analysis summary
-    ml_enhanced: Optional[Dict[str, Any]] = None  # Which ML features were active
-    architecture_insights: Optional[List[Dict[str, Any]]] = None  # Architecture intelligence insights
-    coverage: Optional[Dict[str, Any]] = None  # Analysis coverage and assumption summary
-    diff_summary: Optional[Dict[str, Any]] = None  # Delta vs prior analysis, when available
-    follow_up_questions: Optional[List[Dict[str, Any]]] = None  # Guided questions to reduce uncertainty
-    review_summary: Optional[Dict[str, Any]] = None  # Review workflow summary
-    domain_context: Optional[Dict[str, Any]] = None  # Domain-aware guidance and focus areas
-    ai_security_lens: Optional[Dict[str, Any]] = None  # AI-specific risk storytelling
-    priority_actions: Optional[List[Dict[str, Any]]] = None  # Top actions to take first
-
+    timestamp: Optional[str] = None
+    attack_chains: Optional[Dict[str, Any]] = None
+    ml_enhanced: Optional[Dict[str, Any]] = None
+    architecture_insights: Optional[List[Dict[str, Any]]] = None
+    coverage: Optional[Dict[str, Any]] = None
+    diff_summary: Optional[Dict[str, Any]] = None
+    follow_up_questions: Optional[List[Dict[str, Any]]] = None
+    review_summary: Optional[Dict[str, Any]] = None
+    domain_context: Optional[Dict[str, Any]] = None
+    ai_security_lens: Optional[Dict[str, Any]] = None
+    priority_actions: Optional[List[Dict[str, Any]]] = None

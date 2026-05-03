@@ -34,6 +34,8 @@ class TestAPI:
         assert "score" in data
         assert isinstance(data["threats"], list)
         assert isinstance(data["score"], (int, float))
+        assert "assets" in data["architecture"]
+        assert "trust_boundaries" in data["architecture"]
     
     async def test_analyze_endpoint_validation_short_description(self):
         """Test validation for too short description."""
@@ -88,6 +90,45 @@ class TestAPI:
             
             # Results should be identical
             assert response1.json() == response2.json()
+
+    async def test_analyze_documents_endpoint_success(self):
+        """Test analysis from uploaded design documents."""
+        files = [
+            ("files", ("architecture.md", b"# Architecture\nReact frontend talks to a FastAPI API and PostgreSQL database over HTTPS.\nJWT auth is used.", "text/markdown")),
+        ]
+        data = {
+            "project_name": "Document Intake",
+            "use_local_slm": "true",
+            "analysis_mode": "standard",
+            "domain_profile": "general",
+            "context_text": "Known issue: audit logging is incomplete.",
+        }
+
+        async with AsyncClient(app=app, base_url="http://test") as ac:
+            response = await ac.post("/analyze-documents", data=data, files=files)
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["project_name"] == "Document Intake"
+        assert "coverage" in payload
+        assert payload["coverage"]["document_driven_analysis"] is True
+        assert payload["coverage"]["source_documents"][0]["filename"] == "architecture.md"
+        assert "trust_boundaries" in payload["architecture"]
+
+    async def test_analyze_documents_endpoint_rejects_unsupported_type(self):
+        files = [
+            ("files", ("diagram.exe", b"not-a-real-doc", "application/octet-stream")),
+        ]
+        data = {
+            "project_name": "Unsupported Doc",
+            "context_text": "Architecture context",
+        }
+
+        async with AsyncClient(app=app, base_url="http://test") as ac:
+            response = await ac.post("/analyze-documents", data=data, files=files)
+
+        assert response.status_code == 400
+        assert "Unsupported file type" in response.json()["detail"]
     
     async def test_clear_cache_endpoint(self):
         """Test cache clearing endpoint."""

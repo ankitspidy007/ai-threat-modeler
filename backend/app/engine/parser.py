@@ -2,7 +2,7 @@ import re
 import uuid
 import logging
 from typing import List, Dict, Any, Optional
-from ..models import Component, DataFlow, SystemArchitecture
+from ..models import Asset, Component, DataFlow, SystemArchitecture, TrustBoundary
 import networkx as nx
 from collections import defaultdict
 
@@ -52,6 +52,29 @@ COMPONENT_SYNONYMS = {
 }
 
 class ArchitectureParser:
+    def _infer_trust_level(self, component_type: str, props: Dict[str, Any]) -> str:
+        if props.get('external'):
+            return 'external'
+        if props.get('public_access') or component_type in ['WebClient', 'API Gateway', 'CDN', 'Load Balancer']:
+            return 'public'
+        if component_type in ['Identity Provider', 'Secrets Manager', 'Database', 'Object Storage']:
+            return 'restricted'
+        return 'internal'
+
+    def _infer_data_type(self, source: Optional[Component], target: Optional[Component]) -> str:
+        sensitivity = None
+        if source:
+            sensitivity = (source.properties or {}).get('data_sensitivity')
+        if not sensitivity and target:
+            sensitivity = (target.properties or {}).get('data_sensitivity')
+        if sensitivity:
+            return sensitivity
+        if target and target.type in ['Secrets Manager']:
+            return 'secrets'
+        if target and target.type in ['Database', 'Object Storage']:
+            return 'application_data'
+        return 'application_data'
+
     def _extract_component_context(self, text: str, component_name: str, radius: int = 220) -> str:
         """Extract a component-local text window so properties are inferred from nearby context."""
         if not component_name:
@@ -124,20 +147,61 @@ class ArchitectureParser:
 
         return assumptions
 
-    def _build_trust_boundaries(self, components: Dict[str, Component], flows: List[DataFlow]) -> List[Dict[str, Any]]:
+    def _build_trust_boundaries(self, components: Dict[str, Component], flows: List[DataFlow]) -> List[TrustBoundary]:
         """Summarize trust boundaries crossed by the modeled architecture."""
-        boundaries = []
+        boundaries: Dict[str, TrustBoundary] = {}
+
+        for component in components.values():
+            level = component.trust_level or 'internal'
+            if level not in boundaries:
+                boundary_type = 'network_zone'
+                if level == 'public':
+                    boundary_type = 'external'
+                elif level == 'restricted':
+                    boundary_type = 'sensitive'
+                elif level == 'external':
+                    boundary_type = 'third_party'
+                boundaries[level] = TrustBoundary(
+                    name=level,
+                    boundary_type=boundary_type,
+                    components=[]
+                )
+            boundaries[level].components.append(component.id)
+
         for flow in flows:
             boundary = flow.properties.get('trust_boundary')
-            if not boundary:
-                continue
-            boundaries.append({
-                'name': boundary,
-                'source': flow.source_id,
-                'target': flow.target_id,
-                'crosses_boundary': flow.properties.get('crosses_trust_boundary', False),
-            })
-        return boundaries
+            if boundary and boundary not in boundaries:
+                boundaries[boundary] = TrustBoundary(
+                    name=boundary,
+                    boundary_type='flow_boundary',
+                    components=[flow.source_id, flow.target_id],
+                    description='Derived from inferred communication boundary.',
+                )
+
+        return list(boundaries.values())
+
+    def _extract_assets(self, components: Dict[str, Component], flows: List[DataFlow]) -> List[Asset]:
+        assets: List[Asset] = []
+        for component in components.values():
+            props = component.properties or {}
+            sensitivity = props.get('data_sensitivity')
+            if component.type in ['Database', 'Object Storage', 'Secrets Manager', 'Data Warehouse'] or sensitivity:
+                asset_name = f"{component.name} data"
+                asset_sensitivity = sensitivity or ('secrets' if component.type == 'Secrets Manager' else 'internal')
+                related_flows = [
+                    f"{flow.source_id}->{flow.target_id}"
+                    for flow in flows
+                    if flow.source_id == component.id or flow.target_id == component.id
+                ]
+                assets.append(Asset(
+                    name=asset_name,
+                    sensitivity=asset_sensitivity,
+                    location=component.name,
+                    asset_type='credential_store' if component.type == 'Secrets Manager' else 'data_store',
+                    related_component_id=component.id,
+                    related_data_flows=related_flows,
+                ))
+        return assets
 
     def parse_known_issues(self, text: str) -> List[Dict]:
         """
@@ -538,21 +602,47 @@ class ArchitectureParser:
                 component_context = self._extract_component_context(text, comp.name)
                 scoped_security_props = nlp.extract_security_properties(component_context) if nlp else nlp_security_props
                 comp.properties = self._apply_security_properties(comp.properties, scoped_security_props)
+
+        # 9.5. Normalize trust levels and enrich flow metadata for architecture modeling
+        for comp in components.values():
+            comp.trust_level = self._infer_trust_level(comp.type, comp.properties or {})
+            comp.properties['trust_level'] = comp.trust_level
+
+        component_map = components
+        for flow in flows:
+            source = component_map.get(flow.source_id)
+            target = component_map.get(flow.target_id)
+            if source and target:
+                flow.data_type = self._infer_data_type(source, target)
+                if not flow.properties.get('trust_boundary'):
+                    if source.trust_level != target.trust_level:
+                        flow.properties['trust_boundary'] = f"{source.trust_level}_to_{target.trust_level}"
+                        flow.properties['crosses_trust_boundary'] = True
+                    else:
+                        flow.properties['trust_boundary'] = source.trust_level
+                flow.properties['source_trust_level'] = source.trust_level
+                flow.properties['target_trust_level'] = target.trust_level
+            flow.assumed = flow.properties.get('trust_boundary') == 'inferred' or flow.properties.get('extraction_method') == 'nlp'
+            flow.properties['assumed'] = flow.assumed
         
         # 10. Parse known issues
         known_issues = self.parse_known_issues(text)
         assumptions = self._collect_assumptions(components, flows)
         trust_boundaries = self._build_trust_boundaries(components, flows)
+        assets = self._extract_assets(components, flows)
         
         return SystemArchitecture(
             components=list(components.values()),
             flows=flows,
+            trust_boundaries=trust_boundaries,
+            assets=assets,
             metadata={
                 'known_issues': known_issues,
                 'nlp_enhanced': NLP_AVAILABLE and nlp_entities is not None,
                 'global_security_signals': nlp_security_props,
                 'assumptions': assumptions,
-                'trust_boundaries': trust_boundaries,
+                'trust_boundaries': [boundary.model_dump() for boundary in trust_boundaries],
+                'assets': [asset.model_dump() for asset in assets],
             }
         )
     
@@ -1111,7 +1201,7 @@ class ArchitectureParser:
         
         # CORS configuration
         if 'cors' in text_lower:
-            if 'wildcard' in text_lower or 'cors.*\*' in text_lower or 'allow.*origin.*\*' in text_lower:
+            if 'wildcard' in text_lower or 'cors.*\\*' in text_lower or 'allow.*origin.*\\*' in text_lower:
                 props['cors_wildcard'] = True
             else:
                 props['cors_wildcard'] = False

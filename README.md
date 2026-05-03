@@ -5,6 +5,10 @@ Aegis Threat is a React + FastAPI application that turns architecture descriptio
 ## Highlights
 
 - `fast`, `standard`, and `deep` analysis modes
+- Design-document intake for requirements, architecture notes, Markdown, DOCX, and PDF inputs
+- Structured architecture modeling with components, assets, data flows, and trust boundaries
+- Context-aware threat findings tied to affected components, flows, root causes, and attack scenarios
+- Attack path generation and missing-information detection for incomplete designs
 - Automatic component, flow, trust-boundary, and assumption extraction
 - Local semantic matching and retrainable STRIDE-oriented intelligence
 - Optional OpenAI, Claude, and Gemini augmentation
@@ -20,8 +24,9 @@ Aegis Threat is a React + FastAPI application that turns architecture descriptio
 
 - Threat findings with STRIDE categories and mitigation guidance
 - Parsed architecture model with components and data flows
+- Trust boundaries, inferred flows, and classified assets
 - Architecture diagram output in Mermaid
-- Attack chain summaries
+- Attack path summaries
 - Coverage and assumption metadata
 - Follow-up questions tied to assumptions and likely gaps
 - Change summaries with score, component, flow, and severity deltas
@@ -222,6 +227,7 @@ Default URLs:
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/analyze` | `POST` | Analyze a text-based architecture description |
+| `/analyze-documents` | `POST` | Analyze uploaded design and architecture documents |
 | `/analyze-iac` | `POST` | Analyze Docker Compose or Kubernetes-style IaC input |
 | `/analyze-with-llm` | `POST` | Run LLM-augmented analysis with retrieval context |
 | `/validate-api-key` | `POST` | Validate provider API keys |
@@ -291,6 +297,8 @@ POST /admin/retrain-local-models
 - Mermaid diagram generation now sanitizes node IDs, labels, and edge labels to reduce render failures from unusual component names or metadata.
 - The dashboard includes a lightweight review workflow so teams can mark findings as open, mitigated, accepted, or false positive during triage.
 - The static analysis intake now supports domain profiles so the UI can highlight domain-specific control priorities and risk areas.
+- Static analysis now accepts uploaded design artifacts and extracts text server-side for `pdf`, `docx`, `txt`, `md`, `json`, `yaml`, and related text formats.
+- The core analysis engine now uses a context-aware threat pipeline with architecture assets, trust boundaries, attack paths, contextual mitigations, and explicit missing-information reporting.
 - The analyst workbench adds a lightweight local copilot, component note-taking, and exportable action registers.
 - Hybrid NLP uses `blingfire` for fast segmentation, `sentence-transformers` for semantic matching, and optional `transformers` pipelines for targeted NER/classification.
 - Frontend result mapping is centralized in [analysisMapper.js](C:/Users/Ankit/Documents/codex/ai-threat-modeler/src/utils/analysisMapper.js).

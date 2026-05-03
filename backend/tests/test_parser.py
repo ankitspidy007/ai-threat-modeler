@@ -119,6 +119,15 @@ class TestArchitectureParser:
         for flow in result.flows:
             assert flow.source_id is not None
             assert flow.target_id is not None
+            assert isinstance(flow.assumed, bool)
+
+    def test_architecture_modeling_enrichment(self):
+        text = "Public React frontend sends patient data to a FastAPI service and PostgreSQL database with a Stripe integration"
+        result = self.parser.parse(text)
+
+        assert len(result.trust_boundaries) > 0
+        assert len(result.assets) > 0
+        assert any(component.trust_level in ['public', 'restricted', 'internal', 'external'] for component in result.components)
     
     def test_protocol_inference(self):
         """Test protocol inference for flows."""

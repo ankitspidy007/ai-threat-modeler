@@ -10,20 +10,27 @@ class GraphBuilder:
     def _build_graph(self):
         # Add nodes
         for component in self.architecture.components:
+            component_props = dict(component.properties or {})
+            component_props.pop("trust_level", None)
             self.graph.add_node(
                 component.id, 
                 label=component.name,
                 type=component.type,
-                **component.properties
+                trust_level=component.trust_level,
+                **component_props
             )
 
         # Add edges
         for flow in self.architecture.flows:
+            flow_props = dict(flow.properties or {})
+            flow_props.pop("assumed", None)
             self.graph.add_edge(
                 flow.source_id,
                 flow.target_id,
                 protocol=flow.protocol,
-                **flow.properties
+                data_type=flow.data_type,
+                assumed=flow.assumed,
+                **flow_props
             )
 
     def get_graph(self) -> nx.DiGraph:

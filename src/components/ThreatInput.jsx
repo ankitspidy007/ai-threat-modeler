@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, Cpu, ChevronDown } from 'lucide-react';
+import { Send, Cpu, ChevronDown, Upload, FileText } from 'lucide-react';
 
 const DOMAIN_OPTIONS = [
     { value: 'general', label: 'General Software' },
@@ -95,21 +95,37 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
     const [showTemplates, setShowTemplates] = useState(false);
     const [useLocalSlm, setUseLocalSlm] = useState(true);
     const [domainProfile, setDomainProfile] = useState('general');
+    const [uploadedFiles, setUploadedFiles] = useState([]);
+
+    const canSubmit = description.trim() || uploadedFiles.length > 0;
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (description.trim()) {
-            onAnalyze(description, projectName, useLocalSlm, { domainProfile });
+        if (canSubmit) {
+            onAnalyze(description, projectName, useLocalSlm, {
+                domainProfile,
+                files: uploadedFiles,
+                contextText: description,
+            });
         }
     };
 
     const handleKeyDown = (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
             e.preventDefault();
-            if (description.trim() && !isAnalyzing) {
-                onAnalyze(description, projectName, useLocalSlm, { domainProfile });
+            if (canSubmit && !isAnalyzing) {
+                onAnalyze(description, projectName, useLocalSlm, {
+                    domainProfile,
+                    files: uploadedFiles,
+                    contextText: description,
+                });
             }
         }
+    };
+
+    const handleFileUpload = (e) => {
+        const files = Array.from(e.target.files || []);
+        setUploadedFiles(files);
     };
 
     const applyTemplate = (key) => {
@@ -130,10 +146,10 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                         </div>
                         <h2 className="text-2xl font-bold flex items-center gap-2 text-brand-950 dark:text-white">
                         <Cpu className="w-6 h-6" />
-                        System Architecture Description
+                        System Architecture And Design Intake
                         </h2>
                         <p className="text-brand-600 dark:text-brand-400 text-sm mt-2 max-w-2xl">
-                            Describe your system in plain language. Keep it focused on components, trust boundaries, data flows, and known issues.
+                            Paste architecture notes, or upload requirement docs, design specs, architecture writeups, Markdown, or PDFs. Keep the content focused on components, trust boundaries, data flows, and known issues.
                         </p>
                     </div>
                     <div className="relative">
@@ -186,14 +202,49 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                     <div className="rounded-2xl bg-brand-50/80 dark:bg-brand-900/30 border border-brand-200/80 dark:border-brand-700/60 px-4 py-3">
                         <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-brand-500 mb-1">Best Inputs</div>
                         <p className="text-sm text-brand-700 dark:text-brand-300 leading-6">
-                            Components, auth, data stores, external APIs, trust boundaries, deployment, and known weaknesses.
+                            Requirements, architecture design, auth, data stores, external APIs, trust boundaries, deployment, and known weaknesses.
                         </p>
                     </div>
                 </div>
                 <form onSubmit={handleSubmit} className="relative">
+                    <div className="mb-4 rounded-2xl border border-brand-200/80 bg-white/70 p-4 dark:border-brand-700/60 dark:bg-brand-900/20">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <p className="text-xs font-mono uppercase tracking-[0.18em] text-brand-500">Design Documents</p>
+                                <p className="mt-1 text-sm text-brand-600 dark:text-brand-400">
+                                    Upload one or more `.txt`, `.md`, `.pdf`, `.docx`, `.json`, or `.yaml` files.
+                                </p>
+                            </div>
+                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-brand-200 px-4 py-2 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50 dark:border-brand-600 dark:text-brand-300 dark:hover:bg-brand-800">
+                                <Upload className="h-4 w-4" />
+                                Add Files
+                                <input
+                                    type="file"
+                                    multiple
+                                    accept=".txt,.md,.markdown,.rst,.pdf,.docx,.json,.yaml,.yml,.csv"
+                                    className="hidden"
+                                    onChange={handleFileUpload}
+                                    disabled={isAnalyzing}
+                                />
+                            </label>
+                        </div>
+                        {uploadedFiles.length > 0 && (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {uploadedFiles.map((file) => (
+                                    <span
+                                        key={`${file.name}-${file.size}`}
+                                        className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700 dark:bg-brand-800 dark:text-brand-300"
+                                    >
+                                        <FileText className="h-3.5 w-3.5" />
+                                        {file.name}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                     <textarea
                         className="input-brand w-full h-52 resize-none font-mono text-sm leading-relaxed"
-                        placeholder="// Describe your stack here... (Ctrl+Enter to submit)"
+                        placeholder="// Optional: add extra context, assumptions, or questions for the uploaded design documents... (Ctrl+Enter to submit)"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         onKeyDown={handleKeyDown}
@@ -223,7 +274,7 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                         <span className="text-xs text-brand-400 font-mono uppercase tracking-[0.18em]">Ctrl+Enter to submit</span>
                         <button
                             type="submit"
-                            disabled={isAnalyzing || !description.trim()}
+                            disabled={isAnalyzing || !canSubmit}
                             className={`btn-brand flex items-center gap-2 ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             {isAnalyzing ? (
@@ -231,7 +282,7 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                             ) : (
                                 <>
                                     <Send className="w-4 h-4" />
-                                    Analyze Threats
+                                    Analyze Design
                                 </>
                             )}
                         </button>

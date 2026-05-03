@@ -34,6 +34,42 @@ export const analyzeSystem = async (systemDescription, projectName = "Untitled P
     }
 };
 
+export const analyzeDocuments = async (
+    files,
+    projectName = "Untitled Project",
+    useLocalSlm = true,
+    options = {}
+) => {
+    try {
+        const formData = new FormData();
+        formData.append('project_name', projectName);
+        formData.append('use_local_slm', String(useLocalSlm));
+        formData.append('analysis_mode', getAnalysisMode(useLocalSlm));
+        formData.append('domain_profile', options.domainProfile || 'general');
+        formData.append('context_text', options.contextText || '');
+
+        for (const file of files || []) {
+            formData.append('files', file);
+        }
+
+        const response = await fetch(`${API_BASE_URL}/analyze-documents`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorPayload = await response.json().catch(() => null);
+            throw new Error(errorPayload?.detail || `API error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        return mapAnalysisResult(result);
+    } catch (error) {
+        console.error("Backend connection failed for document analysis.", error);
+        throw error;
+    }
+};
+
 export const analyzeIac = async (iacContent, projectName = "Untitled Project", formatHint = 'auto') => {
     try {
         const response = await fetch(`${API_BASE_URL}/analyze-iac`, {

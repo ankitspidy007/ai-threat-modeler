@@ -5,7 +5,7 @@ import ThreatDashboard from './components/ThreatDashboard';
 import AIAnalysis from './components/AIAnalysis';
 import AnalysisHistory from './components/AnalysisHistory';
 import Sidebar from './components/Sidebar';
-import { analyzeSystem, analyzeIac } from './services/mockAi';
+import { analyzeDocuments, analyzeSystem, analyzeIac } from './services/mockAi';
 import { useStreamingAnalysis } from './hooks/useStreamingAnalysis';
 import { saveAnalysis } from './utils/storage';
 import { mapAnalysisResult } from './utils/analysisMapper';
@@ -37,7 +37,17 @@ function App() {
     setData(null);
     setIsAnalyzing(true);
 
+    const uploadedFiles = options.files || [];
+
     try {
+      if (uploadedFiles.length > 0) {
+        const result = await analyzeDocuments(uploadedFiles, name, useLocalSlm, options);
+        setData(result);
+        saveAnalysis(name, result);
+        toast.success(`Document analysis complete! Found ${result.threats.length} potential threats.`, 'Success');
+        return;
+      }
+
       // Try WebSocket streaming first
       const result = await streaming.analyze(description, name, useLocalSlm, options);
       setData(result);

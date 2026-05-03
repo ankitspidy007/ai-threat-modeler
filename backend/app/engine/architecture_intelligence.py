@@ -299,7 +299,7 @@ class ArchitectureIntelligence:
         if internet_facing and has_db:
             # Check if any component has trust_boundary metadata
             has_boundary = any(
-                data.get('trust_boundary') or data.get('zone')
+                data.get('trust_boundary') or data.get('zone') or data.get('trust_level')
                 for data in nodes.values()
             )
             
@@ -403,6 +403,7 @@ def _is_internet_facing(data: Dict) -> bool:
         data.get('public_access', False),
         data.get('internet_facing', False),
         data.get('trust_boundary') in ('internet', 'public', 'dmz'),
+        data.get('trust_level') in ('public', 'external'),
         data.get('type', '') in ('Web Server', 'CDN', 'Load Balancer', 'WAF',
                                   'Web Application', 'Frontend', 'SPA', 'Client'),
     ]

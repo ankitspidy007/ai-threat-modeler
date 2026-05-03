@@ -5,12 +5,13 @@ import hashlib
 from contextlib import asynccontextmanager
 from collections import OrderedDict
 from typing import Dict, Optional, Tuple
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from .engine.analyzer import ThreatAnalyzer
 from .models import AnalysisResult
+from .services.document_ingestion import extract_documents
 from .services.llm_analyzer import LLMAnalyzer
 
 # Environment-based configuration
@@ -284,6 +285,53 @@ def get_shared_analyzer(request_or_socket) -> ThreatAnalyzer:
     return analyzer or ThreatAnalyzer()
 
 
+def _sanitize_project_name(value: str) -> str:
+    import re
+    sanitized = re.sub(r'[<>"\'\\/;]', '', value or "")
+    return sanitized.strip()
+
+
+def _normalize_analysis_mode(value: str) -> str:
+    return value if value in ['fast', 'standard', 'deep'] else 'standard'
+
+
+def _normalize_domain_profile(value: str) -> str:
+    return value if value in ['general', 'saas', 'fintech', 'healthcare', 'ai', 'platform'] else 'general'
+
+
+def _analyze_text_payload(
+    analyzer: ThreatAnalyzer,
+    description: str,
+    project_name: str,
+    use_local_slm: bool = True,
+    analysis_mode: str = "standard",
+    domain_profile: str = "general",
+    source_documents: Optional[list] = None,
+) -> AnalysisResult:
+    previous_result = _latest_analysis_by_project.get(project_name)
+    result = analyzer.analyze_from_text(
+        description,
+        project_name,
+        use_local_slm=use_local_slm,
+        analysis_mode=analysis_mode,
+        domain_profile=domain_profile
+    )
+    result.diff_summary = _build_diff_summary(previous_result, result)
+
+    if source_documents:
+        coverage = result.coverage or {}
+        coverage["source_documents"] = source_documents
+        coverage["document_driven_analysis"] = True
+        result.coverage = coverage
+
+        metadata = result.architecture.metadata or {}
+        metadata["source_documents"] = source_documents
+        result.architecture.metadata = metadata
+
+    _latest_analysis_by_project[project_name] = result
+    return result
+
+
 @app.post("/analyze", response_model=AnalysisResult)
 async def analyze(request: Request, payload: AnalyzeRequest):
     """
@@ -307,24 +355,95 @@ async def analyze(request: Request, payload: AnalyzeRequest):
             return cached
         
         analyzer = get_shared_analyzer(request)
-        previous_result = _latest_analysis_by_project.get(payload.project_name)
-        result = analyzer.analyze_from_text(
+        result = _analyze_text_payload(
+            analyzer,
             payload.description,
             payload.project_name,
             use_local_slm=payload.use_local_slm,
             analysis_mode=payload.analysis_mode,
             domain_profile=payload.domain_profile
         )
-        result.diff_summary = _build_diff_summary(previous_result, result)
         
         _analysis_cache.set(cache_key, result)
-        _latest_analysis_by_project[payload.project_name] = result
         
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@app.post("/analyze-documents", response_model=AnalysisResult)
+async def analyze_documents(
+    request: Request,
+    project_name: str = Form(...),
+    use_local_slm: bool = Form(True),
+    analysis_mode: str = Form("standard"),
+    domain_profile: str = Form("general"),
+    context_text: str = Form(""),
+    files: list[UploadFile] = File(...),
+):
+    """
+    Analyze uploaded design artifacts such as requirements docs, architecture notes, Markdown, or PDFs.
+    """
+    try:
+        project_name = _sanitize_project_name(project_name)
+        analysis_mode = _normalize_analysis_mode(analysis_mode)
+        domain_profile = _normalize_domain_profile(domain_profile)
+        context_text = (context_text or "").strip()
+
+        extracted_text, source_documents = await extract_documents(files)
+        design_docs = [doc for doc in source_documents if doc.get("role") != "reference_report"]
+        reference_docs = [doc for doc in source_documents if doc.get("role") == "reference_report"]
+
+        combined_description = extracted_text
+        if design_docs:
+            design_names = {doc["filename"] for doc in design_docs}
+            sections = []
+            for section in extracted_text.split("\n\n---\n\n"):
+                if any(f"Document: {name}\n" in section for name in design_names):
+                    sections.append(section)
+            combined_description = "\n\n---\n\n".join(sections)
+
+        if context_text:
+            combined_description = f"User Context:\n{context_text}\n\n---\n\n{extracted_text}"
+            if design_docs:
+                combined_description = f"User Context:\n{context_text}\n\n---\n\n{combined_description}"
+
+        AnalyzeRequest.validate_description(combined_description)
+
+        cache_key = _stable_cache_key(
+            combined_description,
+            project_name,
+            use_local_slm,
+            analysis_mode,
+            domain_profile,
+            tuple((doc["filename"], doc["type"], doc["characters"]) for doc in source_documents),
+        )
+        cached = _analysis_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        analyzer = get_shared_analyzer(request)
+        result = _analyze_text_payload(
+            analyzer,
+            combined_description,
+            project_name,
+            use_local_slm=use_local_slm,
+            analysis_mode=analysis_mode,
+            domain_profile=domain_profile,
+            source_documents=source_documents,
+        )
+        if reference_docs:
+            coverage = result.coverage or {}
+            coverage["reference_reports"] = reference_docs
+            result.coverage = coverage
+        _analysis_cache.set(cache_key, result)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Document analysis failed: {str(e)}")
 
 
 @app.post("/analyze-iac", response_model=AnalysisResult)
