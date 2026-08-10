@@ -8,6 +8,7 @@ backend_dir = Path(__file__).parent.parent
 sys.path.append(str(backend_dir))
 
 from app.engine.iac_parser import IaCParser
+from app.engine.analyzer import ThreatAnalyzer
 
 def test_docker_compose_parsing():
     compose_yaml = """
@@ -106,6 +107,97 @@ spec:
     
     # Linked via service selector implicitly
     assert api.properties.get('containerized') is True
+
+
+def test_terraform_security_findings_include_critical_aws_misconfigurations():
+    terraform = '''
+resource "aws_s3_bucket" "uploads" {
+  bucket = "customer-uploads"
+  acl    = "public-read"
+}
+
+resource "aws_iam_policy" "admin" {
+  policy = jsonencode({
+    Statement = [{ Effect = "Allow", Action = "*", Resource = "*" }]
+  })
+}
+
+resource "aws_lambda_permission" "public" {
+  action        = "lambda:InvokeFunction"
+  function_name = "processor"
+  principal     = "*"
+}
+
+resource "aws_security_group" "database" {
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_db_instance" "primary" {
+  publicly_accessible = true
+  storage_encrypted   = false
+}
+'''
+    architecture = IaCParser().parse(terraform, format_hint='terraform')
+    findings = architecture.metadata['iac_findings']
+    rule_ids = {finding['rule_id'] for finding in findings}
+
+    assert 'IAC-AWS-S3-PUBLIC-ACL' in rule_ids
+    assert 'IAC-AWS-IAM-ADMIN' in rule_ids
+    assert 'IAC-AWS-LAMBDA-PUBLIC-INVOKE' in rule_ids
+    assert 'IAC-AWS-EC2-OPEN-SECURITY-GROUP' in rule_ids
+    assert 'IAC-AWS-RDS-PUBLIC' in rule_ids
+
+    result = ThreatAnalyzer().analyze(architecture, 'Terraform Critical Findings')
+    assert any(threat.id.startswith('IAC-AWS-IAM-ADMIN') and threat.tier == 'Confirmed' for threat in result.threats)
+
+
+def test_cloudformation_and_kubernetes_critical_findings_are_preserved():
+    cloudformation = '''
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  PublicDatabase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      PubliclyAccessible: true
+      StorageEncrypted: false
+  PublicFunction:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: processor
+      Principal: '*'
+'''
+    cfn_architecture = IaCParser().parse(cloudformation, format_hint='cloudformation')
+    cfn_rules = {finding['rule_id'] for finding in cfn_architecture.metadata['iac_findings']}
+    assert {'IAC-AWS-RDS-PUBLIC', 'IAC-AWS-RDS-NO-ENCRYPTION', 'IAC-AWS-LAMBDA-PUBLIC-INVOKE'} <= cfn_rules
+
+    kubernetes = '''
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: processor
+spec:
+  template:
+    metadata:
+      labels:
+        app: processor
+    spec:
+      hostNetwork: true
+      containers:
+        - name: processor
+          image: example/processor:latest
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+'''
+    k8s_architecture = IaCParser().parse(kubernetes, format_hint='kubernetes')
+    k8s_rules = {finding['rule_id'] for finding in k8s_architecture.metadata['iac_findings']}
+    assert {'IAC-K8S-HOST-NAMESPACE', 'IAC-K8S-PRIVILEGED-CONTAINER', 'IAC-K8S-PRIV-ESCALATION'} <= k8s_rules
 
 if __name__ == '__main__':
     print("Running IaC parsing tests...")

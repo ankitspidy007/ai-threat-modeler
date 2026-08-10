@@ -1,0 +1,180 @@
+[
+  {
+    "threat_id": "DATA-001",
+    "threat_name": "Untrusted ETL Source Poisoning",
+    "component": ["Service", "Database", "Object Storage", "Data Warehouse"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Tampering",
+    "attack_vector": "An attacker modifies or injects upstream data so ETL jobs propagate poisoned records into analytics, ML training, reports, or operational decisions.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Integrity"],
+    "prerequisites": ["ETL pipeline ingests external or semi-trusted data", "No source validation", "Downstream consumers trust transformed data"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Validate source provenance and data quality",
+        "implementation": "Enforce source allowlists, schema validation, signed manifests, freshness checks, and anomaly detection before transformation.",
+        "tools": ["Great Expectations", "dbt Tests", "Data Catalog", "Checksum Validation"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Data quality anomaly detection",
+        "indicators": ["Unexpected distribution shift", "New source system appears", "Schema drift", "Record volume spike"],
+        "tools": ["Great Expectations", "Monte Carlo", "Datafold", "SIEM"]
+      }
+    ],
+    "references": {
+      "cwe": ["CWE-20", "CWE-345"],
+      "mitre_attack": ["T1565"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001", "SOX"],
+    "architecture_patterns": ["Event-driven", "Hybrid", "Microservices"],
+    "trust_boundaries": ["External Data Source -> ETL", "ETL -> Data Warehouse"],
+    "tags": ["data-pipeline", "etl", "poisoning", "data-quality"]
+  },
+  {
+    "threat_id": "DATA-002",
+    "threat_name": "Weak Row-Level Security in Analytics Warehouse",
+    "component": ["Database", "Data Warehouse", "Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "cloud_services": ["Snowflake", "BigQuery", "Redshift", "Azure Synapse"],
+    "stride_category": "Information Disclosure",
+    "attack_vector": "Users or BI tools can query records across teams, tenants, or jurisdictions because row-level security policies are missing or inconsistently applied.",
+    "likelihood": "High",
+    "impact": "High",
+    "affected_cia": ["Confidentiality"],
+    "prerequisites": ["Shared warehouse or semantic model", "Sensitive rows are mixed", "RLS policies are absent or bypassable"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Enforce row and column level security in the warehouse",
+        "implementation": "Bind every query to user and tenant context, apply RLS policies centrally, and test policy behavior for each role.",
+        "tools": ["BigQuery Row Access Policies", "Snowflake Row Access Policies", "Redshift RLS"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Warehouse access audit",
+        "indicators": ["Query returns rows outside user's tenant", "Direct table access bypasses secure view", "Broad BI service-account permissions"],
+        "tools": ["Warehouse Audit Logs", "BI Audit Logs", "Data Catalog"]
+      }
+    ],
+    "references": {
+      "cwe": ["CWE-200", "CWE-862", "CWE-863"],
+      "nist": ["AC-3", "AC-6"]
+    },
+    "compliance_relevance": ["GDPR", "HIPAA", "SOC2", "ISO27001"],
+    "architecture_patterns": ["Hybrid", "SaaS"],
+    "trust_boundaries": ["User -> Analytics Data", "Tenant -> Tenant"],
+    "tags": ["data-warehouse", "rls", "analytics", "data-leakage"]
+  },
+  {
+    "threat_id": "DATA-003",
+    "threat_name": "PII Leakage Through Analytics Events",
+    "component": ["WebClient", "API", "Service", "Data Warehouse"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Information Disclosure",
+    "attack_vector": "Client or server analytics events include raw PII, secrets, tokens, or sensitive business fields that are sent to third-party analytics or shared data stores.",
+    "likelihood": "High",
+    "impact": "High",
+    "affected_cia": ["Confidentiality"],
+    "prerequisites": ["Analytics instrumentation captures user input or payloads", "No event schema review", "Third-party analytics or broad internal access"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Classify and minimize analytics event fields",
+        "implementation": "Use approved event schemas, client-side redaction, server-side DLP, and denylisted sensitive field names.",
+        "tools": ["DLP", "Event Schema Registry", "Privacy Review"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Analytics payload scanning",
+        "indicators": ["Email, phone, token, SSN, or card patterns in event fields", "Free-form text fields sent to analytics", "Authentication headers in events"],
+        "tools": ["DLP Scanner", "SIEM", "Analytics Governance"]
+      }
+    ],
+    "references": {
+      "cwe": ["CWE-200", "CWE-359", "CWE-532"],
+      "owasp": ["A02:2021"]
+    },
+    "compliance_relevance": ["GDPR", "HIPAA", "PCI-DSS", "CCPA", "SOC2"],
+    "architecture_patterns": ["API-first", "Hybrid"],
+    "trust_boundaries": ["Application -> Analytics Provider", "User -> Event Pipeline"],
+    "tags": ["analytics", "pii", "privacy", "event-pipeline"]
+  },
+  {
+    "threat_id": "DATA-004",
+    "threat_name": "Orchestrator Credential Exposure",
+    "component": ["CI/CD", "Service", "Database", "Data Warehouse"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "cloud_services": ["Airflow", "Dagster", "Prefect", "dbt Cloud"],
+    "stride_category": "Information Disclosure",
+    "attack_vector": "Workflow orchestrator connections, variables, logs, or task metadata expose database credentials, cloud keys, API tokens, or customer data.",
+    "likelihood": "Medium",
+    "impact": "Critical",
+    "affected_cia": ["Confidentiality"],
+    "prerequisites": ["Orchestrator stores secrets or connection strings", "Logs include task parameters", "UI/API access is broad"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Use external secret backends and redact task logs",
+        "implementation": "Store credentials in a managed secret store, restrict orchestrator UI access, and configure log masking for sensitive variables.",
+        "tools": ["Vault", "AWS Secrets Manager", "Azure Key Vault", "GCP Secret Manager", "Airflow Secrets Backend"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Orchestrator secret exposure scan",
+        "indicators": ["Connection strings in variables", "Secrets in task logs", "Broad admin access to DAG UI"],
+        "tools": ["Secret Scanner", "Orchestrator Audit Logs", "SIEM"]
+      }
+    ],
+    "references": {
+      "cwe": ["CWE-798", "CWE-522", "CWE-532"],
+      "mitre_attack": ["T1552"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001", "PCI-DSS"],
+    "architecture_patterns": ["Event-driven", "Hybrid"],
+    "trust_boundaries": ["Orchestrator -> Data Stores", "Operator -> Orchestrator"],
+    "tags": ["data-pipeline", "orchestration", "secrets", "airflow"]
+  },
+  {
+    "threat_id": "DATA-005",
+    "threat_name": "Message Stream Replay or Tampering",
+    "component": ["MessageQueue", "Service", "Database"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "cloud_services": ["Kafka", "AWS Kinesis", "AWS SNS", "AWS SQS", "Azure Event Hubs", "GCP Pub/Sub"],
+    "stride_category": "Tampering",
+    "attack_vector": "Attackers replay, alter, or inject events in a stream, causing duplicate transactions, stale state, data corruption, or unauthorized workflow execution.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Integrity", "Availability"],
+    "prerequisites": ["Event consumers trust message contents", "No message signing or idempotency", "Producer authentication is weak"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Authenticate producers and make consumers idempotent",
+        "implementation": "Use producer identity, message signatures, schema validation, replay windows, and idempotency keys for state-changing consumers.",
+        "tools": ["Kafka ACLs", "mTLS", "Schema Registry", "HMAC", "Idempotency Store"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Stream integrity monitoring",
+        "indicators": ["Duplicate message IDs", "Unexpected producer identity", "Out-of-window event timestamps", "Schema validation failures"],
+        "tools": ["Kafka Audit Logs", "SIEM", "Stream Processor Metrics"]
+      }
+    ],
+    "references": {
+      "cwe": ["CWE-345", "CWE-294", "CWE-20"],
+      "mitre_attack": ["T1565"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001", "SOX"],
+    "architecture_patterns": ["Event-driven", "Microservices"],
+    "trust_boundaries": ["Producer -> Stream", "Stream -> Consumer"],
+    "tags": ["event-streaming", "replay", "tampering", "kafka"]
+  }
+]

@@ -4,6 +4,13 @@ setlocal enabledelayedexpansion
 REM Default ports
 set BACKEND_PORT=8000
 set FRONTEND_PORT=5173
+set PYTHONUTF8=1
+set PYTHON_CMD=python
+
+py -3 --version >nul 2>&1
+if not errorlevel 1 (
+    set PYTHON_CMD=py -3
+)
 
 REM Parse command line arguments
 :parse_args
@@ -36,8 +43,8 @@ if /i "%~1"=="--help" (
     echo Usage: start.bat [options]
     echo.
     echo Options:
-    echo   --backend-port, -b PORT    Backend server port (default: 8000)
-    echo   --frontend-port, -f PORT   Frontend server port (default: 5173)
+    echo   --backend-port, -b PORT    Backend server port [default 8000]
+    echo   --frontend-port, -f PORT   Frontend server port [default 5173]
     echo   --help                     Show this help message
     echo.
     echo Examples:
@@ -57,7 +64,7 @@ echo =====================================================
 echo.
 
 REM Check if Python is installed
-python --version >nul 2>&1
+%PYTHON_CMD% --version >nul 2>&1
 if errorlevel 1 (
     echo ERROR: Python is not installed or not in PATH
     echo Please install Python 3.8 or higher
@@ -84,12 +91,12 @@ if not exist "backend\app" (
     exit /b 1
 )
 
-REM Check if backend dependencies are installed (check for uvicorn)
-pip show uvicorn >nul 2>&1
+REM Check if backend dependencies are installed in the same Python used to run the backend
+%PYTHON_CMD% -c "import fastapi, uvicorn, networkx, pydantic, yaml" >nul 2>&1
 if errorlevel 1 (
     echo Installing backend dependencies...
     cd backend
-    pip install -r requirements.txt
+    %PYTHON_CMD% -m pip install -r requirements.txt
     if errorlevel 1 (
         echo ERROR: Failed to install backend dependencies
         cd ..
@@ -117,14 +124,14 @@ echo.
 
 echo [2/4] Starting Backend Server on port %BACKEND_PORT%...
 echo.
-start "Aegis Threat - Backend" cmd /k "cd backend && python -m uvicorn app.main:app --reload --port %BACKEND_PORT%"
+start "Aegis Threat - Backend" cmd /k "cd backend && set PYTHONUTF8=1&& %PYTHON_CMD% -m uvicorn app.main:app --reload --port %BACKEND_PORT%"
 
 REM Wait for backend to start
 timeout /t 3 /nobreak >nul
 
 echo [3/4] Starting Frontend Server on port %FRONTEND_PORT%...
 echo.
-start "Aegis Threat - Frontend" cmd /k "npm run dev -- --port %FRONTEND_PORT%"
+start "Aegis Threat - Frontend" cmd /k "set VITE_API_URL=http://127.0.0.1:%BACKEND_PORT%&& set VITE_WS_URL=ws://127.0.0.1:%BACKEND_PORT%&& npm run dev -- --port %FRONTEND_PORT%"
 
 REM Wait for frontend to start
 timeout /t 3 /nobreak >nul

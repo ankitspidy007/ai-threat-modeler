@@ -162,7 +162,7 @@ class ThreatKnowledgeBase:
     def get_by_stride_category(self, category: str) -> List[Dict]:
         """Get threats by STRIDE category"""
         return [t for t in self.threats 
-                if t.get('stride_category') == category]
+                if (t.get('stride_category') or t.get('category')) == category]
     
     def get_by_severity(self, min_severity: str = "Medium") -> List[Dict]:
         """Get threats above a certain severity"""

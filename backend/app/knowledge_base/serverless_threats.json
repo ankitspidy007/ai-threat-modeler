@@ -1,0 +1,184 @@
+[
+  {
+    "threat_id": "SRVLESS-001",
+    "threat_name": "Unauthenticated Serverless Function Invocation",
+    "component": ["Serverless", "API", "Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP"],
+    "cloud_services": ["AWS Lambda Function URL", "AWS API Gateway", "Azure Functions", "GCP Cloud Functions", "GCP Cloud Run"],
+    "stride_category": "Spoofing",
+    "attack_vector": "A serverless function is exposed through a public trigger or function URL without authentication, allowing arbitrary callers to execute application logic.",
+    "likelihood": "High",
+    "impact": "High",
+    "affected_cia": ["Confidentiality", "Integrity", "Availability"],
+    "prerequisites": ["Public trigger enabled", "No IAM/JWT/API key validation", "Function performs sensitive operation"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Require authentication and authorization for function triggers",
+        "implementation": "Place functions behind an API gateway or identity-aware proxy and validate caller identity before processing.",
+        "tools": ["AWS IAM", "API Gateway Authorizers", "Azure Easy Auth", "GCP IAM"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Cloud configuration audit",
+        "indicators": ["Function URL auth type NONE", "allUsers invocation binding", "anonymous function endpoint"],
+        "tools": ["AWS Config", "Azure Policy", "GCP Security Command Center", "Prowler"]
+      }
+    ],
+    "references": {
+      "owasp": ["Serverless:2021-A1", "API2:2023"],
+      "cwe": ["CWE-306", "CWE-862"],
+      "mitre_attack": ["T1190"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001", "PCI-DSS"],
+    "architecture_patterns": ["Serverless", "API-first", "Event-driven"],
+    "trust_boundaries": ["Internet -> Function"],
+    "tags": ["serverless", "authentication", "public-access"]
+  },
+  {
+    "threat_id": "SRVLESS-002",
+    "threat_name": "Overprivileged Serverless Execution Role",
+    "component": ["Serverless", "IAM", "Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP"],
+    "cloud_services": ["AWS Lambda", "Azure Functions", "GCP Cloud Functions", "GCP Cloud Run"],
+    "stride_category": "Elevation of Privilege",
+    "attack_vector": "A vulnerable function runs with broad IAM permissions, allowing attackers who exploit the function to access unrelated cloud services or sensitive data.",
+    "likelihood": "High",
+    "impact": "Critical",
+    "affected_cia": ["Confidentiality", "Integrity", "Availability"],
+    "prerequisites": ["Function vulnerability or code execution path", "Execution role has broad permissions", "No permission boundary or resource scoping"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Apply least privilege to function identities",
+        "implementation": "Scope permissions to exact resources and actions, separate roles per function, and use permission boundaries for deployment pipelines.",
+        "tools": ["IAM Access Analyzer", "Azure RBAC", "GCP IAM Recommender"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "IAM policy review",
+        "indicators": ["Wildcard actions", "Wildcard resources", "Shared execution roles across unrelated functions"],
+        "tools": ["Prowler", "ScoutSuite", "Cloudsplaining", "IAM Access Analyzer"]
+      }
+    ],
+    "references": {
+      "owasp": ["Serverless:2021-A2"],
+      "cwe": ["CWE-732", "CWE-266"],
+      "mitre_attack": ["T1098"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001", "PCI-DSS"],
+    "architecture_patterns": ["Serverless", "Event-driven"],
+    "trust_boundaries": ["Function -> Cloud Control Plane"],
+    "tags": ["serverless", "iam", "least-privilege"]
+  },
+  {
+    "threat_id": "SRVLESS-003",
+    "threat_name": "Event Injection Through Untrusted Trigger Payload",
+    "component": ["Serverless", "MessageQueue", "Storage", "API"],
+    "cloud_platform": ["AWS", "Azure", "GCP"],
+    "cloud_services": ["AWS SQS", "AWS SNS", "AWS EventBridge", "Azure Event Grid", "GCP Pub/Sub"],
+    "stride_category": "Tampering",
+    "attack_vector": "An attacker crafts a malicious event payload that triggers unintended function behavior, command injection, object access, or unsafe workflow transitions.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Integrity", "Confidentiality"],
+    "prerequisites": ["Function trusts event payload fields", "Input validation is missing", "Trigger accepts attacker-controlled events"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Validate and authenticate event payloads",
+        "implementation": "Use schemas, signatures, source allowlists, and strict parsing before using event fields in downstream operations.",
+        "tools": ["JSON Schema", "EventBridge Schema Registry", "CloudEvents", "HMAC Signatures"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Event anomaly monitoring",
+        "indicators": ["Unexpected event source", "Malformed payloads", "Event fields containing shell syntax or path traversal"],
+        "tools": ["CloudWatch Logs", "Azure Monitor", "Cloud Logging", "SIEM"]
+      }
+    ],
+    "references": {
+      "owasp": ["Serverless:2021-A1", "A03:2021"],
+      "cwe": ["CWE-20", "CWE-78", "CWE-74"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001"],
+    "architecture_patterns": ["Serverless", "Event-driven"],
+    "trust_boundaries": ["Event Source -> Function"],
+    "tags": ["serverless", "event-injection", "input-validation"]
+  },
+  {
+    "threat_id": "SRVLESS-004",
+    "threat_name": "Secrets Exposed in Function Environment Variables",
+    "component": ["Serverless", "IAM", "Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP"],
+    "cloud_services": ["AWS Lambda", "Azure Functions", "GCP Cloud Functions"],
+    "stride_category": "Information Disclosure",
+    "attack_vector": "Secrets stored in function environment variables are exposed through logs, crash dumps, overly broad read permissions, or function compromise.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Confidentiality"],
+    "prerequisites": ["Secrets stored directly in environment variables", "Function configuration readable by broad principals", "No runtime secret retrieval or rotation"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Use managed secrets with scoped runtime access",
+        "implementation": "Store secrets in a secret manager, grant read access only to the function identity, and rotate credentials automatically.",
+        "tools": ["AWS Secrets Manager", "Azure Key Vault", "GCP Secret Manager", "KMS"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Function configuration secret scan",
+        "indicators": ["Credential-like values in environment configuration", "Broad permission to read function config", "Secrets printed in logs"],
+        "tools": ["Secret Scanner", "Cloud Security Posture Management", "SIEM"]
+      }
+    ],
+    "references": {
+      "owasp": ["Serverless:2021-A3", "A02:2021"],
+      "cwe": ["CWE-798", "CWE-522", "CWE-532"]
+    },
+    "compliance_relevance": ["PCI-DSS", "HIPAA", "SOC2", "ISO27001"],
+    "architecture_patterns": ["Serverless", "Event-driven"],
+    "trust_boundaries": ["Function Runtime -> Secret Store"],
+    "tags": ["serverless", "secrets", "environment-variables"]
+  },
+  {
+    "threat_id": "SRVLESS-005",
+    "threat_name": "Serverless Concurrency Exhaustion",
+    "component": ["Serverless", "API", "MessageQueue"],
+    "cloud_platform": ["AWS", "Azure", "GCP"],
+    "cloud_services": ["AWS Lambda", "Azure Functions", "GCP Cloud Functions", "GCP Cloud Run"],
+    "stride_category": "Denial of Service",
+    "attack_vector": "Attackers trigger high function concurrency or long-running executions, exhausting account concurrency, downstream connections, queues, or cloud spend.",
+    "likelihood": "High",
+    "impact": "High",
+    "affected_cia": ["Availability"],
+    "prerequisites": ["Public or high-volume trigger", "No concurrency limits", "No rate limiting or queue backpressure"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Set function concurrency and request budgets",
+        "implementation": "Configure reserved concurrency, API throttling, queue backpressure, timeouts, and cost alerts.",
+        "tools": ["API Gateway Throttling", "Reserved Concurrency", "Budgets", "Circuit Breakers"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Concurrency and duration monitoring",
+        "indicators": ["Concurrency near account limit", "Function timeout spikes", "Queue backlog growth", "Unexpected cost increase"],
+        "tools": ["CloudWatch", "Azure Monitor", "Cloud Monitoring", "Billing Alerts"]
+      }
+    ],
+    "references": {
+      "owasp": ["Serverless:2021-A6"],
+      "cwe": ["CWE-400", "CWE-770"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001"],
+    "architecture_patterns": ["Serverless", "Event-driven", "API-first"],
+    "trust_boundaries": ["Internet -> Function", "Queue -> Function"],
+    "tags": ["serverless", "dos", "concurrency", "cost-exhaustion"]
+  }
+]

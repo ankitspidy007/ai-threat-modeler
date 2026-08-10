@@ -4,6 +4,28 @@ from typing import List, Dict, Set
 import json
 import os
 
+
+COMPACT_GRAPH_NODE_THRESHOLD = 16
+COMPACT_GRAPH_EDGE_THRESHOLD = 24
+COMPACT_LAYER_LIMITS = {
+    'external': 3,
+    'frontend': 2,
+    'api_layer': 3,
+    'services': 5,
+    'data_layer': 4,
+}
+COMPACT_LAYER_ANCHORS = {
+    'external': 'External interfaces',
+    'frontend': 'Web application',
+    'api_layer': 'API ingress',
+    'services': 'Internal services',
+    'data_layer': 'Trusted data stores',
+}
+LOW_SIGNAL_COMPONENT_LABELS = {
+    'api', 'cdn', 'database', 'frontend', 'identity provider', 'ml service',
+    'monitoring', 'queue', 'service', 'spa', 'webclient',
+}
+
 def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = True) -> str:
     """
     Converts a NetworkX graph to an enhanced Mermaid flowchart with:
@@ -27,6 +49,11 @@ def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = T
     
     # Load STRIDE colors
     stride_colors = _load_stride_colors()
+
+    # Natural-language extraction can infer a dense, many-to-many graph from a
+    # concise description. Render a readable threat-model overview in that case.
+    if _should_use_compact_layout(graph):
+        return _generate_compact_mermaid(graph, threats, stride_colors)
     
     # Categorize nodes by layer and assign DFD numbering
     layers = {
@@ -69,11 +96,11 @@ def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = T
     
     # Generate subgraphs for each layer with trust boundary styling
     layer_configs = [
-        ('external', 'External / Untrusted Zone', 'fill:#ffebee,stroke:#b71c1c,stroke-width:3px,stroke-dasharray: 5 5'),
-        ('frontend', 'Frontend Layer / DMZ', 'fill:#e1f5ff,stroke:#01579b,stroke-width:2px'),
-        ('api_layer', 'API Layer / DMZ', 'fill:#fff9c4,stroke:#f57f17,stroke-width:2px'),
-        ('services', 'Service Layer / Internal', 'fill:#f3e5f5,stroke:#4a148c,stroke-width:2px'),
-        ('data_layer', 'Data Layer / Trusted', 'fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px'),
+        ('external', 'Trust Boundary: External / Untrusted', 'fill:#ffebee,stroke:#b71c1c,stroke-width:3px,stroke-dasharray: 8 4'),
+        ('frontend', 'Trust Boundary: Frontend / DMZ', 'fill:#e1f5ff,stroke:#01579b,stroke-width:3px,stroke-dasharray: 8 4'),
+        ('api_layer', 'Trust Boundary: API / DMZ', 'fill:#fff9c4,stroke:#f57f17,stroke-width:3px,stroke-dasharray: 8 4'),
+        ('services', 'Trust Boundary: Service / Internal', 'fill:#f3e5f5,stroke:#4a148c,stroke-width:3px,stroke-dasharray: 8 4'),
+        ('data_layer', 'Trust Boundary: Data / Trusted', 'fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px,stroke-dasharray: 8 4'),
     ]
     
     for layer_key, layer_name, style in layer_configs:
@@ -83,7 +110,8 @@ def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = T
         
         # Create subgraph with trust boundary annotation
         mermaid_lines.append(f"    subgraph zone_{layer_key}[\"{layer_name}\"]")
-        
+        mermaid_lines.append("        direction TB")
+
         for node, data in nodes:
             node_id = _sanitize_id(node)
             label = data.get('label', node)
@@ -102,8 +130,10 @@ def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = T
         mermaid_lines.append(f"    style zone_{layer_key} {style}")
     
     
-    # Add edges with enhanced labels including protocol, auth, and data type
-    for u, v, data in graph.edges(data=True):
+    # Add edges with enhanced labels including protocol, auth, and data type.
+    # Boundary-crossing flows are explicitly labeled and styled after the graph.
+    boundary_edge_indexes = []
+    for edge_index, (u, v, data) in enumerate(graph.edges(data=True)):
         u_id = _sanitize_id(u)
         v_id = _sanitize_id(v)
         
@@ -125,6 +155,9 @@ def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = T
             label_parts.append(data_type)
         
         flow_label = " / ".join(label_parts) if len(label_parts) > 1 else protocol
+        if crosses_boundary:
+            flow_label = f"TB crossing: {flow_label}"
+            boundary_edge_indexes.append(edge_index)
         flow_label = _sanitize_edge_label(flow_label)
         
         # Style edges differently for trust boundary crossings
@@ -134,6 +167,11 @@ def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = T
             arrow = f"-->|{flow_label}|" if flow_label else "-->"
 
         mermaid_lines.append(f"    {u_id} {arrow} {v_id}")
+
+    for edge_index in boundary_edge_indexes:
+        mermaid_lines.append(
+            f"    linkStyle {edge_index} stroke:#c2410c,stroke-width:3px,stroke-dasharray: 8 4"
+        )
     
     
     # Add classDef styling for component types
@@ -167,6 +205,191 @@ def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = T
     mermaid_lines.extend(_generate_legend(stride_colors))
     
     return "\n".join(mermaid_lines)
+
+
+def _should_use_compact_layout(graph: nx.DiGraph) -> bool:
+    """Use an overview diagram when the full graph cannot stay legible."""
+    return (
+        graph.number_of_nodes() > COMPACT_GRAPH_NODE_THRESHOLD
+        or graph.number_of_edges() > COMPACT_GRAPH_EDGE_THRESHOLD
+    )
+
+
+def _categorize_nodes(graph: nx.DiGraph) -> Dict[str, List[tuple]]:
+    """Group graph nodes into the trust zones used by the diagram."""
+    layers = {
+        'external': [],
+        'frontend': [],
+        'api_layer': [],
+        'services': [],
+        'data_layer': [],
+    }
+
+    for node, data in graph.nodes(data=True):
+        node_type = data.get('type', 'Service')
+        if data.get('external', False):
+            layers['external'].append((node, data))
+        elif node_type in ['Database', 'Object Storage', 'Queue', 'Data Warehouse']:
+            layers['data_layer'].append((node, data))
+        elif node_type in ['WebClient', 'Mobile App']:
+            layers['frontend'].append((node, data))
+        elif node_type in ['API Gateway', 'Load Balancer', 'CDN', 'API']:
+            layers['api_layer'].append((node, data))
+        else:
+            layers['services'].append((node, data))
+
+    return layers
+
+
+def _compact_node_priority(graph: nx.DiGraph, node: str, data: Dict) -> tuple:
+    """Prefer explicit, short component names over parser-generated aliases."""
+    label = _sanitize_label(data.get('label', node))
+    normalized_label = label.lower()
+    score = graph.in_degree(node) + graph.out_degree(node)
+
+    if normalized_label in LOW_SIGNAL_COMPONENT_LABELS:
+        score -= 100
+    if len(label) > 48:
+        score -= 40
+    if any(token in normalized_label for token in ('service', 'gateway', 'postgres', 'redis', 'elastic', 'rabbit', 'auth0', 'stripe', 'sendgrid', 'cloudfront')):
+        score += 20
+
+    return (-score, normalized_label)
+
+
+def _compact_visible_nodes(graph: nx.DiGraph, nodes: List[tuple], layer_key: str) -> List[tuple]:
+    limit = COMPACT_LAYER_LIMITS[layer_key]
+    return sorted(nodes, key=lambda item: _compact_node_priority(graph, item[0], item[1]))[:limit]
+
+
+def _node_class_name(data: Dict) -> str:
+    node_type = data.get('type', 'Service')
+    if data.get('external', False):
+        return 'externalClass'
+    if node_type in ['Database', 'Object Storage', 'Queue', 'Data Warehouse']:
+        return 'datastoreClass'
+    if node_type in ['WebClient', 'Mobile App']:
+        return 'clientClass'
+    if node_type in ['API Gateway', 'Load Balancer']:
+        return 'gatewayClass'
+    return 'processClass'
+
+
+def _boundary_flow_summary(graph: nx.DiGraph, layers: Dict, source_layer: str, target_layer: str) -> tuple:
+    """Summarize all direct flows between two adjacent trust zones."""
+    source_nodes = {node for node, _ in layers[source_layer]}
+    target_nodes = {node for node, _ in layers[target_layer]}
+    protocols = []
+    flow_count = 0
+
+    for source, target, data in graph.edges(data=True):
+        if (
+            (source in source_nodes and target in target_nodes)
+            or (source in target_nodes and target in source_nodes)
+        ):
+            flow_count += 1
+            protocol = str(data.get('protocol', '')).upper()
+            if protocol and protocol not in protocols:
+                protocols.append(protocol)
+
+    if not flow_count:
+        return 'Trust boundary', False
+
+    protocol_label = ', '.join(protocols[:2]) or 'modeled data flow'
+    return f'TB crossing: {protocol_label} / {flow_count} flows', True
+
+
+def _generate_compact_mermaid(graph: nx.DiGraph, threats: List, stride_colors: Dict) -> str:
+    """Render a compact, vertically layered overview for dense architecture graphs."""
+    layers = _categorize_nodes(graph)
+    layer_configs = [
+        ('external', 'Trust Boundary: External / Untrusted', 'fill:#ffebee,stroke:#b71c1c,stroke-width:3px,stroke-dasharray: 8 4'),
+        ('frontend', 'Trust Boundary: Frontend / DMZ', 'fill:#e1f5ff,stroke:#01579b,stroke-width:3px,stroke-dasharray: 8 4'),
+        ('api_layer', 'Trust Boundary: API / DMZ', 'fill:#fff9c4,stroke:#f57f17,stroke-width:3px,stroke-dasharray: 8 4'),
+        ('services', 'Trust Boundary: Service / Internal', 'fill:#f3e5f5,stroke:#4a148c,stroke-width:3px,stroke-dasharray: 8 4'),
+        ('data_layer', 'Trust Boundary: Data / Trusted', 'fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px,stroke-dasharray: 8 4'),
+    ]
+    mermaid_lines = [
+        "%%{init: {'flowchart': {'nodeSpacing': 36, 'rankSpacing': 60, 'curve': 'basis'}} }%%",
+        'flowchart LR',
+        f'    %% Compact overview: {graph.number_of_nodes()} components and {graph.number_of_edges()} inferred flows',
+    ]
+    active_layers = []
+    rendered_nodes = set()
+    anchors = {}
+    invisible_link_count = 0
+
+    for layer_key, layer_name, style in layer_configs:
+        nodes = layers[layer_key]
+        if not nodes:
+            continue
+
+        active_layers.append(layer_key)
+        anchor_id = f'{layer_key}_anchor'
+        anchors[layer_key] = anchor_id
+        visible_nodes = _compact_visible_nodes(graph, nodes, layer_key)
+        hidden_count = len(nodes) - len(visible_nodes)
+        layout_nodes = [anchor_id]
+
+        mermaid_lines.append(f'    subgraph zone_{layer_key}["{layer_name}"]')
+        mermaid_lines.append('        direction TB')
+        mermaid_lines.append(f'        {anchor_id}("{COMPACT_LAYER_ANCHORS[layer_key]}")')
+
+        for node, data in visible_nodes:
+            node_id = _sanitize_id(node)
+            label = _sanitize_label(data.get('label', node))
+            mermaid_lines.append(f'        {_format_node(node_id, label, _get_dfd_shape(data.get("type", "Service"), data))}')
+            layout_nodes.append(node_id)
+            rendered_nodes.add(node_id)
+
+        if hidden_count:
+            summary_id = f'{layer_key}_summary'
+            plural = 'component' if hidden_count == 1 else 'components'
+            mermaid_lines.append(f'        {summary_id}["+ {hidden_count} additional {plural}"]')
+            mermaid_lines.append(f'        class {summary_id} summaryClass')
+            layout_nodes.append(summary_id)
+
+        # Invisible links keep components in an intentional vertical stack inside
+        # their trust zone without adding misleading implementation flows.
+        for current, next_node in zip(layout_nodes, layout_nodes[1:]):
+            mermaid_lines.append(f'        {current} ~~~ {next_node}')
+            invisible_link_count += 1
+
+        mermaid_lines.append('    end')
+        mermaid_lines.append(f'    style zone_{layer_key} {style}')
+
+    boundary_edge_indexes = []
+    for boundary_number, (source_layer, target_layer) in enumerate(zip(active_layers, active_layers[1:])):
+        label, observed = _boundary_flow_summary(graph, layers, source_layer, target_layer)
+        arrow = '==>' if observed else '-.->'
+        mermaid_lines.append(
+            f'    {anchors[source_layer]} {arrow}|{_sanitize_edge_label(label)}| {anchors[target_layer]}'
+        )
+        boundary_edge_indexes.append(invisible_link_count + boundary_number)
+
+    mermaid_lines.extend(_generate_class_definitions())
+    mermaid_lines.append('    classDef boundaryAnchor fill:#ffffff,stroke:#475569,stroke-width:2px,color:#0f172a')
+    mermaid_lines.append('    classDef summaryClass fill:#f8fafc,stroke:#94a3b8,stroke-width:1px,color:#334155,stroke-dasharray: 4 3')
+    for anchor_id in anchors.values():
+        mermaid_lines.append(f'    class {anchor_id} boundaryAnchor')
+
+    for layer_key in active_layers:
+        for node, data in _compact_visible_nodes(graph, layers[layer_key], layer_key):
+            mermaid_lines.append(f'    class {_sanitize_id(node)} {_node_class_name(data)}')
+
+    if threats:
+        for node_id, color in _apply_stride_colors(graph, threats, stride_colors).items():
+            sanitized_id = _sanitize_id(node_id)
+            if sanitized_id in rendered_nodes:
+                mermaid_lines.append(f'    style {sanitized_id} fill:{color},stroke:#333,stroke-width:4px')
+
+    for edge_index in boundary_edge_indexes:
+        mermaid_lines.append(
+            f'    linkStyle {edge_index} stroke:#c2410c,stroke-width:3px,stroke-dasharray: 8 4'
+        )
+
+    mermaid_lines.extend(_generate_legend(stride_colors))
+    return '\n'.join(mermaid_lines)
 
 def _generate_basic_mermaid(graph: nx.DiGraph) -> str:
     """
@@ -251,7 +474,7 @@ def _load_stride_colors() -> Dict:
     try:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         file_path = os.path.join(base_dir, 'data', 'stride_colors.json')
-        with open(file_path, 'r') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
         print(f"Warning: Could not load STRIDE colors: {e}")

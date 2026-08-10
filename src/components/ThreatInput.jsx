@@ -137,18 +137,18 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
     };
 
     return (
-        <div className="w-full max-w-4xl mx-auto mb-10">
-            <div className="glass-panel p-7 sm:p-8">
-                <div className="flex items-start justify-between gap-4 mb-6">
+        <div className="mx-auto mb-10 w-full max-w-6xl">
+            <div className="glass-panel p-6">
+                <div className="mb-6 flex flex-col gap-4 border-b border-brand-200 pb-5 dark:border-brand-700 md:flex-row md:items-start md:justify-between">
                     <div>
-                        <div className="inline-flex items-center gap-2 rounded-full bg-brand-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-brand-primary mb-3">
+                        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-brand-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-primary">
                             Architecture Intake
                         </div>
-                        <h2 className="text-2xl font-bold flex items-center gap-2 text-brand-950 dark:text-white">
-                        <Cpu className="w-6 h-6" />
-                        System Architecture And Design Intake
+                        <h2 className="flex items-center gap-2 text-2xl font-semibold text-brand-950 dark:text-white">
+                            <Cpu className="h-5 w-5" />
+                            System Architecture and Design Intake
                         </h2>
-                        <p className="text-brand-600 dark:text-brand-400 text-sm mt-2 max-w-2xl">
+                        <p className="mt-2 max-w-3xl text-sm leading-6 text-brand-600 dark:text-brand-400">
                             Paste architecture notes, or upload requirement docs, design specs, architecture writeups, Markdown, or PDFs. Keep the content focused on components, trust boundaries, data flows, and known issues.
                         </p>
                     </div>
@@ -156,18 +156,18 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                         <button
                             type="button"
                             onClick={() => setShowTemplates(!showTemplates)}
-                            className="text-sm flex items-center gap-1 px-3 py-2 border border-brand-200 dark:border-brand-600 rounded-xl hover:bg-white dark:hover:bg-brand-700 transition-colors text-brand-600 dark:text-brand-300 shadow-sm"
+                            className="ui-button-secondary whitespace-nowrap"
                         >
                             Use Template
                             <ChevronDown className={`w-4 h-4 transition-transform ${showTemplates ? 'rotate-180' : ''}`} />
                         </button>
                         {showTemplates && (
-                            <div className="absolute right-0 top-full mt-2 w-64 bg-white/95 dark:bg-brand-800/95 border border-brand-200 dark:border-brand-600 rounded-2xl shadow-2xl backdrop-blur-xl z-20 p-1">
+                            <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-lg border border-brand-200 bg-white p-1 shadow-lg dark:border-brand-600 dark:bg-brand-800">
                                 {Object.entries(TEMPLATES).map(([key, tmpl]) => (
                                     <button
                                         key={key}
                                         onClick={() => applyTemplate(key)}
-                                        className="block w-full text-left px-4 py-3 text-sm hover:bg-brand-50 dark:hover:bg-brand-700 rounded-xl text-brand-700 dark:text-brand-300"
+                                        className="block w-full rounded-md px-4 py-3 text-left text-sm text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-700"
                                     >
                                         {tmpl.name}
                                     </button>
@@ -176,9 +176,9 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                         )}
                     </div>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-[1.1fr_0.7fr_0.8fr] mb-5">
+                <div className="mb-5 grid gap-4 lg:grid-cols-[1.1fr_0.75fr_1fr]">
                     <div>
-                    <label className="block text-xs font-mono text-brand-500 mb-1.5 uppercase tracking-[0.2em]">Project Name</label>
+                    <label className="ui-label">Project Name</label>
                     <input
                         type="text"
                         value={projectName}
@@ -188,7 +188,7 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                     />
                     </div>
                     <div>
-                        <label className="block text-xs font-mono text-brand-500 mb-1.5 uppercase tracking-[0.2em]">Domain Profile</label>
+                        <label className="ui-label">Domain Profile</label>
                         <select
                             value={domainProfile}
                             onChange={(e) => setDomainProfile(e.target.value)}
@@ -199,23 +199,23 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                             ))}
                         </select>
                     </div>
-                    <div className="rounded-2xl bg-brand-50/80 dark:bg-brand-900/30 border border-brand-200/80 dark:border-brand-700/60 px-4 py-3">
-                        <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-brand-500 mb-1">Best Inputs</div>
-                        <p className="text-sm text-brand-700 dark:text-brand-300 leading-6">
+                    <div className="ui-subpanel px-4 py-3">
+                        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-brand-500">Best Inputs</div>
+                        <p className="text-sm leading-6 text-brand-700 dark:text-brand-300">
                             Requirements, architecture design, auth, data stores, external APIs, trust boundaries, deployment, and known weaknesses.
                         </p>
                     </div>
                 </div>
                 <form onSubmit={handleSubmit} className="relative">
-                    <div className="mb-4 rounded-2xl border border-brand-200/80 bg-white/70 p-4 dark:border-brand-700/60 dark:bg-brand-900/20">
+                    <div className="ui-subpanel mb-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <p className="text-xs font-mono uppercase tracking-[0.18em] text-brand-500">Design Documents</p>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-brand-500">Design Documents</p>
                                 <p className="mt-1 text-sm text-brand-600 dark:text-brand-400">
                                     Upload one or more `.txt`, `.md`, `.pdf`, `.docx`, `.json`, or `.yaml` files.
                                 </p>
                             </div>
-                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-brand-200 px-4 py-2 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50 dark:border-brand-600 dark:text-brand-300 dark:hover:bg-brand-800">
+                            <label className="ui-button-secondary cursor-pointer">
                                 <Upload className="h-4 w-4" />
                                 Add Files
                                 <input
@@ -233,7 +233,7 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                                 {uploadedFiles.map((file) => (
                                     <span
                                         key={`${file.name}-${file.size}`}
-                                        className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700 dark:bg-brand-800 dark:text-brand-300"
+                                        className="ui-chip"
                                     >
                                         <FileText className="h-3.5 w-3.5" />
                                         {file.name}
@@ -243,7 +243,7 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                         )}
                     </div>
                     <textarea
-                        className="input-brand w-full h-52 resize-none font-mono text-sm leading-relaxed"
+                        className="input-brand h-56 w-full resize-none font-mono text-sm leading-relaxed"
                         placeholder="// Optional: add extra context, assumptions, or questions for the uploaded design documents... (Ctrl+Enter to submit)"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
@@ -252,7 +252,7 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                     />
 
                     {/* Local AI Engine Toggle */}
-                    <div className="flex items-start gap-3 mt-5 p-4 bg-brand-50/80 dark:bg-brand-900/30 border border-brand-200/80 dark:border-brand-700/50 rounded-2xl">
+                    <div className="ui-subpanel mt-5 flex items-start gap-3">
                         <input
                             type="checkbox"
                             id="useLocalSlm"
@@ -261,7 +261,7 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                             className="w-4 h-4 text-brand-primary bg-white border-brand-300 rounded focus:ring-brand-primary dark:focus:ring-brand-primary dark:ring-offset-brand-800 dark:bg-brand-700 dark:border-brand-600"
                         />
                         <div className="flex flex-col">
-                            <label htmlFor="useLocalSlm" className="text-sm font-bold text-brand-800 dark:text-brand-200 cursor-pointer">
+                            <label htmlFor="useLocalSlm" className="cursor-pointer text-sm font-semibold text-brand-800 dark:text-brand-200">
                                 Enable Local Semantic AI Engine (Small LLM)
                             </label>
                             <span className="text-xs text-brand-500 dark:text-brand-400 mt-1 leading-5">
@@ -270,12 +270,12 @@ const ThreatInput = ({ onAnalyze, isAnalyzing }) => {
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-between mt-5">
-                        <span className="text-xs text-brand-400 font-mono uppercase tracking-[0.18em]">Ctrl+Enter to submit</span>
+                    <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span className="text-xs font-medium uppercase tracking-wide text-brand-400">Ctrl+Enter to submit</span>
                         <button
                             type="submit"
                             disabled={isAnalyzing || !canSubmit}
-                            className={`btn-brand flex items-center gap-2 ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className="btn-brand gap-2"
                         >
                             {isAnalyzing ? (
                                 <>Analyzing...</>

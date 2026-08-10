@@ -1,0 +1,179 @@
+[
+  {
+    "threat_id": "RAG-001",
+    "threat_name": "Vector Store Poisoning",
+    "component": ["Database", "Object Storage", "ML Service", "Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Tampering",
+    "attack_vector": "An attacker inserts or modifies documents in the retrieval corpus so poisoned embeddings cause the system to retrieve misleading, malicious, or policy-bypassing content.",
+    "likelihood": "High",
+    "impact": "High",
+    "affected_cia": ["Integrity", "Confidentiality"],
+    "prerequisites": ["Untrusted content can enter the corpus", "No document provenance or approval workflow", "Retrieved content is treated as trusted context"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Gate corpus ingestion with provenance and approval controls",
+        "implementation": "Require source allowlists, document signatures, ingestion review, and trust labels before content is embedded or retrieved.",
+        "tools": ["Document Pipeline", "Provenance Store", "Content Moderation"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Corpus integrity monitoring",
+        "indicators": ["Large number of new documents from untrusted source", "Documents containing prompt-like imperative language", "Unexpected changes in top-k retrieval for sensitive queries"],
+        "tools": ["Vector Index Audit", "DLP", "Prompt Injection Scanner"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0020", "AML.T0051"],
+      "owasp": ["LLM03", "LLM01"],
+      "cwe": ["CWE-20", "CWE-345"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001"],
+    "architecture_patterns": ["Microservices", "API-first", "Hybrid"],
+    "trust_boundaries": ["Untrusted Content -> Corpus", "Corpus -> LLM Context"],
+    "tags": ["rag", "vector-store", "poisoning", "retrieval"]
+  },
+  {
+    "threat_id": "RAG-002",
+    "threat_name": "Cross-Tenant Retrieval Leakage",
+    "component": ["Database", "ML Service", "Service", "API"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Information Disclosure",
+    "attack_vector": "A retrieval query returns documents, chunks, embeddings, or metadata belonging to another tenant because namespace, ACL, or metadata filtering is missing or bypassed.",
+    "likelihood": "Medium",
+    "impact": "Critical",
+    "affected_cia": ["Confidentiality"],
+    "prerequisites": ["Multi-tenant vector index", "Tenant filters applied outside the search primitive or not enforced", "Retrieved content is returned to model/user"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Enforce tenant isolation at retrieval time",
+        "implementation": "Use separate tenant indexes or mandatory tenant allowlists inside retrieval, with authorization checks before returning chunks.",
+        "tools": ["Vector DB ACLs", "Namespace Isolation", "Policy Engine"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Retrieval authorization audit",
+        "indicators": ["Returned chunk tenant_id differs from requester tenant_id", "Missing tenant filter in vector queries", "Shared global namespace for sensitive corpora"],
+        "tools": ["Retrieval Logs", "SIEM", "Unit Tests"]
+      }
+    ],
+    "references": {
+      "owasp": ["LLM02"],
+      "cwe": ["CWE-200", "CWE-284", "CWE-639"]
+    },
+    "compliance_relevance": ["GDPR", "HIPAA", "SOC2", "ISO27001"],
+    "architecture_patterns": ["Microservices", "API-first", "Hybrid"],
+    "trust_boundaries": ["Tenant -> Tenant", "Vector Store -> LLM Context"],
+    "tags": ["rag", "multi-tenant", "data-leakage", "authorization"]
+  },
+  {
+    "threat_id": "RAG-003",
+    "threat_name": "Retrieval Prompt Smuggling",
+    "component": ["ML Service", "Object Storage", "Database", "WebClient"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Tampering",
+    "attack_vector": "A document contains hidden or explicit instructions that are retrieved as context and interpreted by the LLM as higher-priority instructions.",
+    "likelihood": "High",
+    "impact": "High",
+    "affected_cia": ["Integrity", "Confidentiality"],
+    "prerequisites": ["RAG pipeline retrieves untrusted content", "Prompt does not clearly delimit quoted source content", "No instruction/content separation"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Treat retrieved content as quoted data, not instructions",
+        "implementation": "Wrap retrieved chunks in structured fields, include source trust labels, and require the model to ignore instructions inside retrieved documents.",
+        "tools": ["Prompt Templates", "Content Filters", "Guardrails"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Retrieved-content instruction scan",
+        "indicators": ["Ignore previous instructions", "System prompt extraction requests", "Tool invocation instructions inside documents"],
+        "tools": ["Prompt Injection Scanner", "RAG Evaluator"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0051"],
+      "owasp": ["LLM01"],
+      "cwe": ["CWE-74"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001"],
+    "architecture_patterns": ["API-first", "Hybrid"],
+    "trust_boundaries": ["Document -> Retriever", "Retriever -> LLM Prompt"],
+    "tags": ["rag", "prompt-injection", "retrieval", "content-boundary"]
+  },
+  {
+    "threat_id": "RAG-004",
+    "threat_name": "Embedding Metadata Leakage",
+    "component": ["Database", "ML Service", "Object Storage"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Information Disclosure",
+    "attack_vector": "Vector index metadata, document IDs, chunk text, source paths, tenant labels, or embedding cache files expose sensitive business, code, or personal data.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Confidentiality"],
+    "prerequisites": ["Metadata is stored with embeddings", "Index files or retrieval APIs are accessible", "Sensitive fields are not redacted"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Minimize and protect vector metadata",
+        "implementation": "Store opaque IDs in the vector index and fetch authorized metadata from a protected source after retrieval.",
+        "tools": ["KMS", "DLP", "Vector DB ACLs"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Vector metadata review",
+        "indicators": ["PII in metadata fields", "Secret-like strings in chunk payloads", "World-readable vector index files"],
+        "tools": ["DLP Scanner", "Secret Scanner", "Storage IAM Audit"]
+      }
+    ],
+    "references": {
+      "owasp": ["LLM02"],
+      "cwe": ["CWE-200", "CWE-312"]
+    },
+    "compliance_relevance": ["GDPR", "HIPAA", "PCI-DSS", "SOC2"],
+    "architecture_patterns": ["Microservices", "Hybrid"],
+    "trust_boundaries": ["Vector Store -> Application", "Tenant -> Operator"],
+    "tags": ["rag", "metadata", "privacy", "embedding-cache"]
+  },
+  {
+    "threat_id": "RAG-005",
+    "threat_name": "Vector Search Cost or Latency Exhaustion",
+    "component": ["Database", "ML Service", "API"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Denial of Service",
+    "attack_vector": "Attackers issue high-volume, broad, or adversarial retrieval queries that trigger expensive embedding generation, large top-k searches, re-ranking, or index scans.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Availability"],
+    "prerequisites": ["Public retrieval endpoint", "No per-user quotas", "High top-k or expensive reranking enabled"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Bound retrieval work per request",
+        "implementation": "Limit query length, top-k, rerank candidates, embedding calls, and requests per tenant. Cache repeated embeddings and apply circuit breakers.",
+        "tools": ["Rate Limiter", "Quota Manager", "Cache", "Circuit Breaker"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Retrieval resource monitoring",
+        "indicators": ["High embedding requests per user", "Repeated broad queries", "Increased p95 vector search latency", "Reranker queue saturation"],
+        "tools": ["Metrics", "APM", "Vector DB Logs"]
+      }
+    ],
+    "references": {
+      "owasp": ["LLM04"],
+      "cwe": ["CWE-400", "CWE-770"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001"],
+    "architecture_patterns": ["API-first", "Microservices", "Hybrid"],
+    "trust_boundaries": ["Internet -> Retrieval API"],
+    "tags": ["rag", "dos", "vector-search", "cost-exhaustion"]
+  }
+]

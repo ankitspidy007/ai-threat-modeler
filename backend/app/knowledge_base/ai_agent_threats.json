@@ -1,0 +1,188 @@
+[
+  {
+    "threat_id": "AGENT-001",
+    "threat_name": "Unauthorized Tool Invocation by AI Agent",
+    "component": ["API", "Service", "ML Service", "External"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Elevation of Privilege",
+    "attack_vector": "An attacker manipulates the agent prompt or intermediate context so the agent invokes privileged tools, APIs, or workflow actions beyond the user's authorization.",
+    "likelihood": "High",
+    "impact": "Critical",
+    "affected_cia": ["Confidentiality", "Integrity", "Availability"],
+    "prerequisites": ["Agent has access to external tools", "Tool permissions are broader than user permissions", "No deterministic authorization check before execution"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Enforce authorization outside the model before every tool call",
+        "implementation": "Map each tool to required scopes and verify user, tenant, resource, and action permissions server-side before execution.",
+        "tools": ["Policy Engine", "RBAC", "ABAC", "OPA"]
+      },
+      {
+        "control_type": "Detective",
+        "description": "Monitor unexpected tool usage",
+        "implementation": "Log tool name, caller, user intent, arguments, target resource, and authorization decision for each invocation.",
+        "tools": ["SIEM", "Agent Tracing", "Audit Logs"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Tool-call audit anomaly detection",
+        "indicators": ["Tool call not supported by user intent", "High-risk tool used after untrusted content ingestion", "Cross-tenant resource identifier in tool arguments"],
+        "tools": ["SIEM", "OpenTelemetry", "Agent Observability"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0051"],
+      "owasp": ["LLM06", "LLM08"],
+      "cwe": ["CWE-862", "CWE-863"],
+      "mitre_attack": ["T1078"],
+      "capec": ["CAPEC-233"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001", "PCI-DSS"],
+    "architecture_patterns": ["Microservices", "API-first", "Event-driven", "Hybrid"],
+    "trust_boundaries": ["User -> Agent", "Agent -> Tool", "Tenant -> Tenant"],
+    "tags": ["ai-agent", "tool-use", "authorization", "privilege-escalation"]
+  },
+  {
+    "threat_id": "AGENT-002",
+    "threat_name": "Persistent Malicious Instructions in Agent Memory",
+    "component": ["ML Service", "Database", "Object Storage"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Tampering",
+    "attack_vector": "A malicious instruction is stored in long-term memory, notes, task state, or retrieved context and later influences unrelated agent actions.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Integrity", "Confidentiality"],
+    "prerequisites": ["Agent persists memory or task state", "Untrusted content can be written to memory", "Memory is reused without classification or sanitization"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Separate trusted memories from untrusted observations",
+        "implementation": "Store memory with provenance, trust level, expiry, and user approval status. Exclude untrusted memory from control prompts.",
+        "tools": ["Memory Store", "Provenance Labels", "Policy Engine"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Memory content inspection",
+        "indicators": ["Imperative instructions in retrieved memory", "Memory entries asking the model to ignore policies", "Unexpected tool names in memory text"],
+        "tools": ["Content Classifier", "Prompt Injection Scanner"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0061"],
+      "owasp": ["LLM01", "LLM06"],
+      "cwe": ["CWE-20", "CWE-74"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001"],
+    "architecture_patterns": ["Microservices", "Event-driven", "Hybrid"],
+    "trust_boundaries": ["Untrusted Content -> Agent Memory", "Agent Memory -> Agent Prompt"],
+    "tags": ["ai-agent", "memory", "prompt-injection", "persistence"]
+  },
+  {
+    "threat_id": "AGENT-003",
+    "threat_name": "Agent Plan Drift from User Intent",
+    "component": ["ML Service", "Service", "API"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Tampering",
+    "attack_vector": "The agent transforms a limited user request into a broader or riskier execution plan, causing unintended data access, code changes, purchases, messages, or administrative actions.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Integrity", "Confidentiality"],
+    "prerequisites": ["Agent can decompose tasks", "Execution plan is not validated against original intent", "High-risk actions do not require confirmation"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Validate plans against structured user intent",
+        "implementation": "Extract user intent into a signed task specification and require plan-action alignment checks before execution.",
+        "tools": ["Intent Verifier", "Policy Engine", "Human Approval"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Plan-action diff review",
+        "indicators": ["Action writes or deletes data when request was read-only", "Plan targets resources not mentioned by user", "Privilege level increases during execution"],
+        "tools": ["Agent Tracing", "Workflow Guardrails"]
+      }
+    ],
+    "references": {
+      "owasp": ["LLM08"],
+      "cwe": ["CWE-285", "CWE-841"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001", "SOX"],
+    "architecture_patterns": ["API-first", "Event-driven", "Hybrid"],
+    "trust_boundaries": ["User -> Agent", "Agent -> External System"],
+    "tags": ["ai-agent", "intent-verification", "workflow-risk"]
+  },
+  {
+    "threat_id": "AGENT-004",
+    "threat_name": "Sensitive Data Leakage Through Agent Reasoning Trace or Logs",
+    "component": ["ML Service", "Service", "Database", "External"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Information Disclosure",
+    "attack_vector": "Agent traces, prompts, tool arguments, retrieved documents, or intermediate observations are logged or exported with secrets, PII, credentials, or proprietary data.",
+    "likelihood": "High",
+    "impact": "High",
+    "affected_cia": ["Confidentiality"],
+    "prerequisites": ["Agent tracing or debug logs are enabled", "Sensitive content is included in prompts or tool outputs", "Logs are accessible to operators or third-party telemetry"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Redact sensitive values before logging agent traces",
+        "implementation": "Apply DLP and secret detection to prompts, tool arguments, retrieved context, and model outputs before persistence.",
+        "tools": ["DLP", "Secret Scanner", "Log Redaction"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Trace and log scanning",
+        "indicators": ["API key patterns in traces", "PII fields in model prompts", "Customer document excerpts in shared telemetry"],
+        "tools": ["Gitleaks", "TruffleHog", "DLP Scanner", "SIEM"]
+      }
+    ],
+    "references": {
+      "owasp": ["LLM02", "LLM07"],
+      "cwe": ["CWE-200", "CWE-532", "CWE-359"]
+    },
+    "compliance_relevance": ["GDPR", "HIPAA", "PCI-DSS", "SOC2", "ISO27001"],
+    "architecture_patterns": ["Microservices", "API-first", "Hybrid"],
+    "trust_boundaries": ["Agent Runtime -> Observability Backend", "Tenant -> Operator"],
+    "tags": ["ai-agent", "logging", "pii", "secrets", "trace-leakage"]
+  },
+  {
+    "threat_id": "AGENT-005",
+    "threat_name": "Unbounded Autonomous Agent Loop",
+    "component": ["ML Service", "Service", "API", "External"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Denial of Service",
+    "attack_vector": "The agent repeatedly plans, calls tools, retries failed actions, or expands subtasks without bounded budgets, exhausting tokens, compute, API quotas, or downstream services.",
+    "likelihood": "High",
+    "impact": "High",
+    "affected_cia": ["Availability"],
+    "prerequisites": ["Agent has autonomous retry or planning loop", "No per-task budget", "Tool failures can trigger repeated retries"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Bound agent execution budgets",
+        "implementation": "Set maximum steps, wall-clock time, token budget, retry count, tool-call count, and downstream spend per task.",
+        "tools": ["Quota Manager", "Workflow Engine", "Circuit Breaker"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Agent execution budget monitoring",
+        "indicators": ["Repeated identical tool calls", "Rapid retry loops", "Task exceeds step or token budget", "High downstream API error rate"],
+        "tools": ["Metrics", "OpenTelemetry", "Rate Limiter"]
+      }
+    ],
+    "references": {
+      "atlas": ["AML.T0029"],
+      "owasp": ["LLM04"],
+      "cwe": ["CWE-400", "CWE-770"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001"],
+    "architecture_patterns": ["Event-driven", "Microservices", "Hybrid"],
+    "trust_boundaries": ["Agent -> Tool", "Agent -> External API"],
+    "tags": ["ai-agent", "dos", "token-exhaustion", "quota"]
+  }
+]

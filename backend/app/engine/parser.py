@@ -432,6 +432,18 @@ class ArchitectureParser:
             if re.search(pattern, text_lower):
                 negations['admin_separation'] = False
                 break
+
+        waf_patterns = [
+            r'no waf',
+            r'without waf',
+            r'missing waf',
+            r'no web application firewall',
+            r'without web application firewall',
+        ]
+        for pattern in waf_patterns:
+            if re.search(pattern, text_lower):
+                negations['waf_enabled'] = False
+                break
         
         return negations
     
@@ -545,8 +557,6 @@ class ArchitectureParser:
         # 5. Detect other standard components using synonym detection (original regex)
         found_types = set()
         for component_type, synonyms in COMPONENT_SYNONYMS.items():
-            if component_type in ['Database', 'Service']:
-                continue
             for synonym in synonyms:
                 if synonym in text_lower:
                     found_types.add(component_type)
@@ -603,6 +613,10 @@ class ArchitectureParser:
                 scoped_security_props = nlp.extract_security_properties(component_context) if nlp else nlp_security_props
                 comp.properties = self._apply_security_properties(comp.properties, scoped_security_props)
 
+        for comp in components.values():
+            for control, value in negations.items():
+                comp.properties[control] = value
+
         # 9.5. Normalize trust levels and enrich flow metadata for architecture modeling
         for comp in components.values():
             comp.trust_level = self._infer_trust_level(comp.type, comp.properties or {})
@@ -610,6 +624,7 @@ class ArchitectureParser:
 
         component_map = components
         for flow in flows:
+            flow.protocol = (flow.protocol or "").lower()
             source = component_map.get(flow.source_id)
             target = component_map.get(flow.target_id)
             if source and target:
@@ -1104,7 +1119,9 @@ class ArchitectureParser:
             props['logging_enabled'] = True
         
         # Security controls
-        if 'waf' in text_lower or 'web application firewall' in text_lower:
+        if any(phrase in text_lower for phrase in ['no waf', 'without waf', 'missing waf', 'no web application firewall', 'without web application firewall']):
+            props['waf_enabled'] = False
+        elif 'waf' in text_lower or 'web application firewall' in text_lower:
             props['waf_enabled'] = True
         if 'rate limit' in text_lower or 'throttling' in text_lower:
             props['rate_limiting'] = True

@@ -52,11 +52,11 @@ const StrideChart = ({ threats }) => {
     });
 
     return (
-        <div className="bg-white dark:bg-brand-800 p-4 rounded-lg shadow border border-gray-200 dark:border-brand-700 mb-6 w-full max-w-md mx-auto">
-            <h3 className="text-lg font-bold mb-4 text-center dark:text-white">STRIDE Distribution</h3>
+        <div className="mb-6 w-full max-w-md rounded-lg border border-brand-200 bg-white p-4 shadow-sm dark:border-brand-700 dark:bg-brand-800">
+            <h3 className="mb-4 text-center text-lg font-semibold dark:text-white">STRIDE Distribution</h3>
             <div className="flex flex-col items-center gap-4">
                 <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-                    {segments.map((seg, i) => (
+                    {segments.map((seg) => (
                         <circle
                             key={seg.key}
                             cx={cx}

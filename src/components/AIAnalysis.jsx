@@ -1,74 +1,149 @@
-import React, { useState } from 'react';
-import { Sparkles, Key, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle2, Key, Loader2, RefreshCw, Sparkles, X } from 'lucide-react';
 import { useToast } from './Toast';
 import { API_BASE_URL } from '../config';
 
-const MODEL_OPTIONS = {
-    openai: [
-        { value: 'gpt-5.2', label: 'GPT-5.2 (Latest)' },
-        { value: 'gpt-5', label: 'GPT-5' },
-        { value: 'gpt-5-mini', label: 'GPT-5 Mini' },
-        { value: 'gpt-4o', label: 'GPT-4o' },
-        { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-    ],
-    claude: [
-        { value: 'claude-opus-4.6-20260205', label: 'Claude Opus 4.6 (Latest)' },
-        { value: 'claude-sonnet-4.6-20260217', label: 'Claude Sonnet 4.6' },
-        { value: 'claude-haiku-4.5-20251015', label: 'Claude Haiku 4.5' },
-        { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
-    ],
-    gemini: [
-        { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro (Latest)' },
-        { value: 'gemini-3-flash', label: 'Gemini 3 Flash' },
-        { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-        { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-        { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-    ],
+const DEFAULT_PROVIDERS = [
+    {
+        id: 'openai',
+        label: 'OpenAI',
+        description: 'GPT models',
+        key_hint: 'sk-...',
+        default_model: 'gpt-4o-mini',
+        fallback_models: [{ id: 'gpt-4o-mini', label: 'GPT-4o Mini', recommended: true }],
+    },
+    {
+        id: 'claude',
+        label: 'Claude',
+        description: 'Anthropic models',
+        key_hint: 'sk-ant-...',
+        default_model: 'claude-sonnet-4-20250514',
+        fallback_models: [{ id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', recommended: true }],
+    },
+    {
+        id: 'gemini',
+        label: 'Gemini',
+        description: 'Google models',
+        key_hint: 'AIza...',
+        default_model: 'gemini-2.0-flash',
+        fallback_models: [{ id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', recommended: true }],
+    },
+    {
+        id: 'nvidia',
+        label: 'NVIDIA',
+        description: 'NIM models',
+        key_hint: 'nvapi-...',
+        default_model: 'meta/llama-3.1-70b-instruct',
+        fallback_models: [{ id: 'meta/llama-3.1-70b-instruct', label: 'Llama 3.1 70B Instruct', recommended: true }],
+    },
+];
+
+const providerTone = {
+    openai: 'border-brand-primary bg-brand-primary/5 text-brand-primary',
+    claude: 'border-brand-primary bg-brand-primary/5 text-brand-primary',
+    gemini: 'border-brand-primary bg-brand-primary/5 text-brand-primary',
+    nvidia: 'border-brand-primary bg-brand-primary/5 text-brand-primary',
 };
 
 const AIAnalysis = ({ onAnalysisComplete }) => {
-    const [provider, setProvider] = useState('openai');
-    const [model, setModel] = useState(MODEL_OPTIONS.openai[0].value);
+    const [providers, setProviders] = useState(DEFAULT_PROVIDERS);
+    const [provider, setProvider] = useState(DEFAULT_PROVIDERS[0].id);
+    const [models, setModels] = useState(DEFAULT_PROVIDERS[0].fallback_models);
+    const [model, setModel] = useState(DEFAULT_PROVIDERS[0].default_model);
     const [apiKey, setApiKey] = useState('');
     const [description, setDescription] = useState('');
     const [projectName, setProjectName] = useState('');
+    const [isLoadingProviders, setIsLoadingProviders] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [keyValid, setKeyValid] = useState(null);
     const toast = useToast();
 
-    const handleProviderChange = (newProvider) => {
-        setProvider(newProvider);
-        setModel(MODEL_OPTIONS[newProvider][0].value);
+    const selectedProvider = useMemo(
+        () => providers.find((item) => item.id === provider) || providers[0],
+        [providers, provider]
+    );
+
+    useEffect(() => {
+        const loadProviders = async () => {
+            setIsLoadingProviders(true);
+            try {
+                const response = await fetch(`${API_BASE_URL}/llm/providers`);
+                if (!response.ok) throw new Error('Provider loading failed');
+                const payload = await response.json();
+                if (Array.isArray(payload.providers) && payload.providers.length) {
+                    setProviders(payload.providers);
+                    const current = payload.providers[0];
+                    setProvider(current.id);
+                    setModels(current.fallback_models || []);
+                    setModel(current.default_model || current.fallback_models?.[0]?.id || '');
+                }
+            } catch {
+                setProviders(DEFAULT_PROVIDERS);
+            } finally {
+                setIsLoadingProviders(false);
+            }
+        };
+
+        loadProviders();
+    }, []);
+
+    const setFallbackModels = (nextProvider) => {
+        const fallback = nextProvider.fallback_models || [];
+        setModels(fallback);
+        setModel(nextProvider.default_model || fallback[0]?.id || '');
+    };
+
+    const handleProviderChange = (nextProviderId) => {
+        const nextProvider = providers.find((item) => item.id === nextProviderId);
+        if (!nextProvider) return;
+        setProvider(nextProvider.id);
+        setFallbackModels(nextProvider);
         setKeyValid(null);
     };
 
-    const validateApiKey = async () => {
+    const clearApiKey = () => {
+        setApiKey('');
+        setKeyValid(null);
+        setFallbackModels(selectedProvider);
+    };
+
+    const validateAndLoadModels = async () => {
         if (!apiKey || apiKey.length < 10) {
-            toast.error('Please enter a valid API key');
+            toast.error('Enter a valid API key first');
             return;
         }
 
         setIsValidating(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/validate-api-key`, {
+            const response = await fetch(`${API_BASE_URL}/llm/models`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ provider, api_key: apiKey })
+                body: JSON.stringify({ provider, api_key: apiKey }),
             });
 
             const result = await response.json();
+            if (!response.ok) {
+                throw new Error('Model loading failed');
+            }
 
             if (result.valid) {
+                const loadedModels = Array.isArray(result.models) && result.models.length
+                    ? result.models
+                    : selectedProvider.fallback_models || [];
+                const recommended = loadedModels.find((item) => item.recommended) || loadedModels[0];
+                setModels(loadedModels);
+                setModel(recommended?.id || '');
                 setKeyValid(true);
-                toast.success(`${provider.toUpperCase()} API key validated successfully!`);
+                toast.success(`${selectedProvider.label} key validated and models loaded`);
             } else {
                 setKeyValid(false);
-                toast.error(`Invalid ${provider.toUpperCase()} API key`);
+                setFallbackModels(selectedProvider);
+                toast.error(`Invalid ${selectedProvider.label} API key`);
             }
         } catch (error) {
             setKeyValid(false);
-            toast.error('Failed to validate API key');
+            toast.error(error.message || 'Failed to validate API key');
         } finally {
             setIsValidating(false);
         }
@@ -76,12 +151,12 @@ const AIAnalysis = ({ onAnalysisComplete }) => {
 
     const handleAnalyze = async () => {
         if (!projectName || !description) {
-            toast.error('Please fill in all fields');
+            toast.error('Fill in project name and architecture description');
             return;
         }
 
-        if (!apiKey) {
-            toast.error('Please enter your API key');
+        if (!apiKey || keyValid !== true || !model) {
+            toast.error('Validate the API key and select a model first');
             return;
         }
 
@@ -92,22 +167,26 @@ const AIAnalysis = ({ onAnalysisComplete }) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     project_name: projectName,
-                    description: description,
+                    description,
                     llm_provider: provider,
                     api_key: apiKey,
-                    model: model,
-                    analysis_mode: 'standard'
-                })
+                    model,
+                    analysis_mode: 'standard',
+                }),
             });
 
             if (!response.ok) {
                 const errData = await response.json();
-                const msg = typeof errData.detail === 'string' ? errData.detail : Array.isArray(errData.detail) ? errData.detail.map(e => e.msg).join(', ') : 'Analysis failed';
+                const msg = typeof errData.detail === 'string'
+                    ? errData.detail
+                    : Array.isArray(errData.detail)
+                        ? errData.detail.map((item) => item.msg).join(', ')
+                        : 'Analysis failed';
                 throw new Error(msg);
             }
 
             const result = await response.json();
-            toast.success(`AI analysis complete! Found ${result.threats?.length || 0} threats`);
+            toast.success(`AI analysis complete. Found ${result.threats?.length || 0} threats`);
             onAnalysisComplete(result, projectName);
         } catch (error) {
             toast.error(error.message || 'AI analysis failed');
@@ -117,140 +196,135 @@ const AIAnalysis = ({ onAnalysisComplete }) => {
     };
 
     return (
-        <div className="w-full max-w-4xl mx-auto p-6 space-y-6">
-            {/* Header */}
-            <div className="text-center mb-8">
-                <div className="flex items-center justify-center gap-3 mb-2">
-                    <Sparkles className="w-8 h-8 text-purple-600 dark:text-purple-400" />
-                    <h2 className="text-3xl font-bold text-brand-900 dark:text-white">AI-Powered Threat Analysis</h2>
+        <div className="mx-auto w-full max-w-6xl space-y-5">
+            <div className="panel-soft px-6 py-5">
+                <div className="mb-2 flex items-center gap-3">
+                    <Sparkles className="h-5 w-5 text-brand-secondary" />
+                    <h2 className="text-2xl font-semibold text-brand-950 dark:text-white">AI-Powered Threat Analysis</h2>
                 </div>
-                <p className="text-brand-600 dark:text-brand-400">
-                    Enhance your threat detection with OpenAI GPT-5.2, Claude Opus 4.6, or Google Gemini 3.1
+                <p className="max-w-3xl text-sm leading-6 text-brand-600 dark:text-brand-400">
+                    Select a provider, validate your key, choose a loaded model, then run the analysis.
                 </p>
             </div>
 
-            {/* Provider Selection */}
-            <div className="bg-white dark:bg-brand-800 border border-brand-200 dark:border-brand-700 rounded-lg p-6 shadow-sm">
-                <label className="block text-sm font-bold text-brand-900 dark:text-white mb-3">
-                    Select AI Provider
-                </label>
-                <div className="grid grid-cols-3 gap-4">
-                    <button
-                        onClick={() => handleProviderChange('openai')}
-                        className={`p-4 border-2 rounded-lg transition-all ${provider === 'openai'
-                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                            : 'border-brand-200 dark:border-brand-600 hover:border-brand-300 dark:hover:border-brand-500'}`}
-                    >
-                        <div className="font-bold text-lg mb-1 dark:text-white">OpenAI</div>
-                        <div className="text-sm text-brand-600 dark:text-brand-400">GPT-5.2 / GPT-5</div>
-                    </button>
-                    <button
-                        onClick={() => handleProviderChange('claude')}
-                        className={`p-4 border-2 rounded-lg transition-all ${provider === 'claude'
-                            ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                            : 'border-brand-200 dark:border-brand-600 hover:border-brand-300 dark:hover:border-brand-500'}`}
-                    >
-                        <div className="font-bold text-lg mb-1 dark:text-white">Claude</div>
-                        <div className="text-sm text-brand-600 dark:text-brand-400">Opus 4.6 / Sonnet 4.6</div>
-                    </button>
-                    <button
-                        onClick={() => handleProviderChange('gemini')}
-                        className={`p-4 border-2 rounded-lg transition-all ${provider === 'gemini'
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                            : 'border-brand-200 dark:border-brand-600 hover:border-brand-300 dark:hover:border-brand-500'}`}
-                    >
-                        <div className="font-bold text-lg mb-1 dark:text-white">Gemini</div>
-                        <div className="text-sm text-brand-600 dark:text-brand-400">3.1 Pro / 3 Flash</div>
-                    </button>
+            <div className="ui-panel p-6">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                    <label className="text-sm font-semibold text-brand-950 dark:text-white">
+                        AI Provider
+                    </label>
+                    {isLoadingProviders && (
+                        <span className="flex items-center gap-2 text-xs text-brand-500 dark:text-brand-400">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Loading providers
+                        </span>
+                    )}
                 </div>
-            </div>
-
-            {/* Model Selection */}
-            <div className="bg-white dark:bg-brand-800 border border-brand-200 dark:border-brand-700 rounded-lg p-6 shadow-sm">
-                <label className="block text-sm font-bold text-brand-900 dark:text-white mb-2">
-                    Select Model
-                </label>
-                <select
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    className="w-full px-4 py-2 border border-brand-300 dark:border-brand-600 dark:bg-brand-700 dark:text-white rounded focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                >
-                    {MODEL_OPTIONS[provider].map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {providers.map((item) => (
+                        <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => handleProviderChange(item.id)}
+                            className={`min-h-[84px] rounded-lg border p-4 text-left transition-colors ${
+                                provider === item.id
+                                    ? providerTone[item.id] || 'border-brand-primary bg-brand-primary/10'
+                                    : 'border-brand-200 bg-brand-50 hover:border-brand-300 dark:border-brand-700 dark:bg-brand-900/35 dark:hover:border-brand-500'
+                            }`}
+                        >
+                            <div className="text-base font-semibold dark:text-white">{item.label}</div>
+                            <div className="mt-1 text-sm text-brand-600 dark:text-brand-400">{item.description}</div>
+                        </button>
                     ))}
-                </select>
-                <p className="mt-2 text-xs text-brand-500 dark:text-brand-400">
-                    Make sure your API key has access to the selected model.
-                </p>
+                </div>
             </div>
 
-            {/* API Key Input */}
-            <div className="bg-white dark:bg-brand-800 border border-brand-200 dark:border-brand-700 rounded-lg p-6 shadow-sm">
-                <label className="block text-sm font-bold text-brand-900 dark:text-white mb-2">
+            <div className="ui-panel p-6">
+                <label className="mb-2 block text-sm font-semibold text-brand-950 dark:text-white">
                     <Key className="inline w-4 h-4 mr-1" />
                     API Key
                 </label>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                     <input
                         type="password"
                         value={apiKey}
-                        onChange={(e) => {
-                            setApiKey(e.target.value);
+                        onChange={(event) => {
+                            setApiKey(event.target.value);
                             setKeyValid(null);
                         }}
-                        placeholder={provider === 'openai' ? 'sk-...' : provider === 'claude' ? 'sk-ant-...' : 'AIza...'}
-                        className="flex-1 px-4 py-2 border border-brand-300 dark:border-brand-600 dark:bg-brand-700 dark:text-white rounded focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                        placeholder={selectedProvider.key_hint}
+                        className="input-brand min-w-0 flex-1"
                     />
-                    <button
-                        onClick={validateApiKey}
-                        disabled={isValidating || !apiKey}
-                        className="px-4 py-2 bg-brand-primary text-white rounded hover:bg-brand-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                        {isValidating ? (
-                            <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Validating...
-                            </>
-                        ) : (
-                            'Validate'
-                        )}
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={validateAndLoadModels}
+                            disabled={isValidating || !apiKey}
+                            className="btn-brand gap-2"
+                        >
+                            {isValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                            OK
+                        </button>
+                        <button
+                            type="button"
+                            onClick={clearApiKey}
+                            disabled={!apiKey && keyValid === null}
+                            className="ui-button-secondary px-3"
+                            title="Clear API key"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
                 {keyValid === true && (
-                    <div className="mt-2 flex items-center gap-2 text-green-600 dark:text-green-400 text-sm">
-                        <CheckCircle2 className="w-4 h-4" />
-                        API key is valid
+                    <div className="mt-2 flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Key validated. {models.length} model{models.length === 1 ? '' : 's'} loaded.
                     </div>
                 )}
                 {keyValid === false && (
-                    <div className="mt-2 flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
-                        <AlertCircle className="w-4 h-4" />
-                        Invalid API key
+                    <div className="mt-2 flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                        <AlertCircle className="h-4 w-4" />
+                        Key validation failed.
                     </div>
                 )}
-                <p className="mt-2 text-xs text-brand-500 dark:text-brand-400">
-                    Your API key is sent directly to {provider === 'openai' ? 'OpenAI' : provider === 'claude' ? 'Anthropic' : 'Google'} and never stored on our servers.
-                </p>
             </div>
 
-            {/* Project Name */}
-            <div className="bg-white dark:bg-brand-800 border border-brand-200 dark:border-brand-700 rounded-lg p-6 shadow-sm">
-                <label className="block text-sm font-bold text-brand-900 dark:text-white mb-2">Project Name</label>
+            <div className="grid gap-5 lg:grid-cols-[0.8fr_1fr]">
+            <div className="ui-panel p-6">
+                <label className="mb-2 block text-sm font-semibold text-brand-950 dark:text-white">
+                    Model
+                </label>
+                <select
+                    value={model}
+                    onChange={(event) => setModel(event.target.value)}
+                    disabled={!models.length || isValidating}
+                    className="input-brand w-full disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                    {models.map((option) => (
+                        <option key={option.id} value={option.id}>
+                            {option.label || option.id}{option.recommended ? ' (Recommended)' : ''}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            <div className="ui-panel p-6">
+                <label className="mb-2 block text-sm font-semibold text-brand-950 dark:text-white">Project Name</label>
                 <input
                     type="text"
                     value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
+                    onChange={(event) => setProjectName(event.target.value)}
                     placeholder="e.g., E-Commerce Platform"
-                    className="w-full px-4 py-2 border border-brand-300 dark:border-brand-600 dark:bg-brand-700 dark:text-white rounded focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                    className="input-brand w-full"
                 />
             </div>
+            </div>
 
-            {/* Architecture Description */}
-            <div className="bg-white dark:bg-brand-800 border border-brand-200 dark:border-brand-700 rounded-lg p-6 shadow-sm">
-                <label className="block text-sm font-bold text-brand-900 dark:text-white mb-2">System Architecture Description</label>
+            <div className="ui-panel p-6">
+                <label className="mb-2 block text-sm font-semibold text-brand-950 dark:text-white">System Architecture Description</label>
                 <textarea
                     value={description}
-                    onChange={(e) => setDescription(e.target.value)}
+                    onChange={(event) => setDescription(event.target.value)}
                     placeholder={`Describe your system architecture in detail. Include:
 - Microservices and their tech stacks
 - Databases and data stores
@@ -258,47 +332,28 @@ const AIAnalysis = ({ onAnalysisComplete }) => {
 - Security controls
 - Known issues or concerns`}
                     rows={12}
-                    className="w-full px-4 py-2 border border-brand-300 dark:border-brand-600 dark:bg-brand-700 dark:text-white rounded focus:outline-none focus:ring-2 focus:ring-brand-primary font-mono text-sm"
+                    className="input-brand w-full font-mono text-sm leading-6"
                 />
-                <p className="mt-2 text-xs text-brand-500 dark:text-brand-400">
-                    The more detailed your description, the better the AI analysis will be.
-                </p>
             </div>
 
-            {/* Analyze Button */}
             <button
+                type="button"
                 onClick={handleAnalyze}
-                disabled={isAnalyzing || !projectName || !description || !apiKey}
-                className="w-full py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-bold text-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg"
+                disabled={isAnalyzing || !projectName || !description || !apiKey || keyValid !== true || !model}
+                className="btn-brand w-full gap-2 py-3 text-base"
             >
                 {isAnalyzing ? (
                     <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Analyzing with {provider === 'openai' ? 'OpenAI' : provider === 'claude' ? 'Claude' : 'Gemini'}...
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Analyzing with {selectedProvider.label}
                     </>
                 ) : (
                     <>
-                        <Sparkles className="w-5 h-5" />
+                        <Sparkles className="h-5 w-5" />
                         Analyze with AI
                     </>
                 )}
             </button>
-
-            {/* Info Box */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <div className="flex items-start gap-2">
-                    <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-                    <div className="text-sm text-blue-800 dark:text-blue-300">
-                        <p className="font-bold mb-1">How it works:</p>
-                        <ul className="list-disc list-inside space-y-1">
-                            <li>AI analyzes your architecture using the STRIDE framework</li>
-                            <li>Combines rule-based detection with AI insights</li>
-                            <li>Identifies threats with OWASP Top 10 and CWE mappings</li>
-                            <li>AI-detected threats are marked with [AI] prefix</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
         </div>
     );
 };

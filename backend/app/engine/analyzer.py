@@ -232,8 +232,11 @@ class ThreatAnalyzer:
         result.ml_enhanced = {
             "analysis_mode": analysis_flags["mode"],
             "local_intelligence": analysis_flags["local_intelligence"],
+            "semantic_matching": analysis_flags["local_intelligence"],
+            "stride_classifier": analysis_flags["local_intelligence"],
             "architecture_modeled": True,
             "attack_paths": True,
+            "attack_chains": True,
             "contextual_threat_engine": True,
         }
         result.coverage = self._build_coverage(architecture, threats, analysis_flags, missing_information)
@@ -245,8 +248,44 @@ class ThreatAnalyzer:
         result.report_markdown = self._generate_report_markdown(result)
         return result
 
+    def refresh_result_artifacts(
+        self,
+        result: AnalysisResult,
+        domain_profile: str = "general",
+        analysis_mode: str = "standard",
+        use_local_slm: bool = True,
+    ) -> AnalysisResult:
+        """Rebuild report fields after threats have been externally updated."""
+        analysis_flags = self._analysis_flags(analysis_mode, use_local_slm)
+        architecture = result.architecture
+        threats = self._normalize_stride(result.threats)
+        threats = self._ensure_architecture_links(threats, architecture)
+        threats = self._classify_tiers(threats)
+        threats = self._enrich_threat_explanations(threats, architecture)
+        result.threats = threats
+
+        missing_information = detect_missing_elements(architecture)
+        confirmed = [threat for threat in threats if threat.tier == "Confirmed"]
+        potential = [threat for threat in threats if threat.tier == "Potential"]
+
+        result.score = self._calculate_score(threats)
+        result.summary = (
+            f"Context-aware analysis complete. "
+            f"{len(confirmed)} confirmed risks, {len(potential)} assumption-sensitive risks, "
+            f"and {len((result.attack_chains or {}).get('paths', []))} modeled attack paths."
+        )
+        result.coverage = self._build_coverage(architecture, threats, analysis_flags, missing_information)
+        result.follow_up_questions = self._build_follow_up_questions(architecture, threats, missing_information)
+        result.review_summary = self._build_review_summary(threats)
+        result.domain_context = self._build_domain_context(domain_profile, architecture, threats)
+        result.ai_security_lens = self._build_ai_security_lens(architecture, threats)
+        result.priority_actions = self._build_priority_actions(threats)
+        result.report_markdown = self._generate_report_markdown(result)
+        return result
+
     def _process_known_issues(self, architecture: SystemArchitecture, threats: List[Threat]) -> List[Threat]:
-        known_issues = architecture.metadata.get("known_issues", [])
+        metadata = architecture.metadata or {}
+        known_issues = metadata.get("known_issues", [])
         for issue in known_issues:
             description = issue.get("description", "Known security issue identified in source material.")
             severity = issue.get("severity", "medium").title()
@@ -276,6 +315,36 @@ class ThreatAnalyzer:
                 status="Identified",
             )
             threats.append(threat)
+
+        # Static findings are explicit source or configuration evidence, not
+        # assumptions. Keep them separate from generic architecture rules.
+        for finding in metadata.get("iac_findings", []) + metadata.get("security_findings", []):
+            severity = str(finding.get("severity", "Medium")).title()
+            severity_score = {"Critical": 95, "High": 80, "Medium": 55, "Low": 30}.get(severity, 55)
+            threats.append(Threat(
+                id=finding.get("id") or f"IAC-{len(threats) + 1}",
+                category=finding.get("category", "Tampering"),
+                title=finding.get("title", "Security finding"),
+                description=finding.get("description", "An insecure source or configuration pattern was detected."),
+                severity=severity,
+                likelihood="High" if severity in {"Critical", "High"} else "Medium",
+                impact="Critical" if severity == "Critical" else "High" if severity == "High" else "Medium",
+                risk_score=severity_score,
+                confidence="High",
+                mitigation=finding.get("mitigation", "Correct the insecure source or configuration pattern."),
+                component_id=finding.get("resource_id"),
+                component=finding.get("resource_id"),
+                root_cause=f"Security rule {finding.get('rule_id', 'unknown')} matched {finding.get('resource_id', 'unknown')}.",
+                realistic_attack_scenario=finding.get("description", "An attacker exploits the insecure source or infrastructure configuration."),
+                attack_scenario=finding.get("description", "An attacker exploits the insecure source or infrastructure configuration."),
+                business_impact=map_business_impact({"title": finding.get("title", "Security finding"), "severity": severity}),
+                evidence=finding.get("evidence", []),
+                cwe=finding.get("cwe", []),
+                owasp_top_10=["A05:2021 Security Misconfiguration"],
+                affected_components=[finding.get("resource_id")] if finding.get("resource_id") else [],
+                tier="Confirmed",
+                status="Identified",
+            ))
         return threats
 
     def _normalize_stride(self, threats: List[Threat]) -> List[Threat]:

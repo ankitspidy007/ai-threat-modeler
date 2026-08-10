@@ -107,6 +107,39 @@ THREAT_LIBRARY = {
         "mitre_attack": ["T1537"],
         "nist_800_53": ["AC-4", "SC-7"],
     },
+    "missing_waf": {
+        "id": "CTX-API-003",
+        "category": "Denial of Service",
+        "title": "Missing Web Application Firewall on public entry point",
+        "description": "A public API or gateway is exposed without an explicit WAF or edge filtering layer.",
+        "root_cause": "Internet-facing request handling lacks a dedicated application-layer filtering control.",
+        "owasp_top_10": ["A05:2021 Security Misconfiguration"],
+        "cwe": ["CWE-693"],
+        "mitre_attack": ["T1190"],
+        "nist_800_53": ["SC-7", "SI-4"],
+    },
+    "missing_input_validation": {
+        "id": "CTX-API-004",
+        "category": "Tampering",
+        "title": "Missing input validation on request handling path",
+        "description": "The design identifies request handling without clear validation or sanitization controls.",
+        "root_cause": "User-controlled input can reach business logic without a defined validation boundary.",
+        "owasp_top_10": ["A03:2021 Injection", "API8:2023 Security Misconfiguration"],
+        "cwe": ["CWE-20", "CWE-74"],
+        "mitre_attack": ["T1190"],
+        "nist_800_53": ["SI-10"],
+    },
+    "redis_missing_auth": {
+        "id": "CTX-DATA-003",
+        "category": "Information Disclosure",
+        "title": "Redis cache lacks authentication controls",
+        "description": "A Redis cache is present without explicit authentication, allowing unauthorized cache access if the network boundary is crossed.",
+        "root_cause": "Cache authentication is missing or not documented for a session or application data store.",
+        "owasp_top_10": ["A05:2021 Security Misconfiguration"],
+        "cwe": ["CWE-306", "CWE-200"],
+        "mitre_attack": ["T1552"],
+        "nist_800_53": ["AC-3", "IA-2"],
+    },
 }
 
 
@@ -154,6 +187,50 @@ class ContextualThreatEngine:
                 data_sensitivity=props.get("data_sensitivity") or "internal",
                 exploit_complexity="low",
                 privilege_required="none",
+            ))
+
+        if component.type in {"API", "API Gateway", "WebClient", "Service"} and (
+            component.trust_level in {"public", "external"} or props.get("public_access")
+        ) and not props.get("waf_enabled"):
+            findings.append(self._build_threat(
+                "missing_waf",
+                component=component,
+                asset=self._match_asset_for_component(component),
+                flow_ref=None,
+                generated_keys=generated_keys,
+                realistic_attack_scenario=f"An attacker sends malicious HTTP traffic directly to {component.name}; without WAF filtering, common exploit and abuse traffic reaches application handlers.",
+                exposure="public",
+                data_sensitivity=props.get("data_sensitivity") or "internal",
+                exploit_complexity="low",
+                privilege_required="none",
+            ))
+
+        if component.type in {"API", "API Gateway", "Service", "WebClient"} and not props.get("input_validation"):
+            findings.append(self._build_threat(
+                "missing_input_validation",
+                component=component,
+                asset=self._match_asset_for_component(component),
+                flow_ref=None,
+                generated_keys=generated_keys,
+                realistic_attack_scenario=f"An attacker submits crafted input to {component.name}; without a validation boundary the payload can alter queries, workflow state, or downstream service behavior.",
+                exposure="public" if component.trust_level in {"public", "external"} else "internal",
+                data_sensitivity=props.get("data_sensitivity") or "internal",
+                exploit_complexity="low",
+                privilege_required="none",
+            ))
+
+        if component.type == "Database" and props.get("db_type") == "redis" and props.get("auth_type") in {None, "", "none"}:
+            findings.append(self._build_threat(
+                "redis_missing_auth",
+                component=component,
+                asset=self._match_asset_for_component(component),
+                flow_ref=None,
+                generated_keys=generated_keys,
+                realistic_attack_scenario=f"An attacker who reaches {component.name} can read session or cache data and tamper with cached authorization state because Redis authentication is not enforced.",
+                exposure="internal",
+                data_sensitivity=props.get("data_sensitivity") or "internal",
+                exploit_complexity="low",
+                privilege_required="low",
             ))
 
         if component.type in {"Database", "Object Storage", "Data Warehouse"} and props.get("data_sensitivity") in {"pii", "financial", "credentials", "phi", "secrets"} and not props.get("encryption_at_rest"):

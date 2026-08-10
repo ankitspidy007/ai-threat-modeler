@@ -1,24 +1,23 @@
-import React, { useState } from 'react';
-import { Shield, Zap, Sparkles, Clock, Moon, Sun, ChevronLeft, ChevronRight } from 'lucide-react';
+import React from 'react';
+import { Shield, Zap, Sparkles, Clock, Moon, Sun, ChevronLeft, ChevronRight, FileCode2 } from 'lucide-react';
 
 const navItems = [
-  { id: 'static', label: 'Static Analysis', icon: Zap, color: 'text-brand-primary', activeColor: 'bg-brand-primary' },
-  { id: 'iac', label: 'IaC Analysis', icon: Shield, color: 'text-brand-success', activeColor: 'bg-brand-success' },
-  { id: 'ai', label: 'AI Analysis', icon: Sparkles, color: 'text-sky-500', activeColor: 'bg-sky-500' },
-  { id: 'history', label: 'History', icon: Clock, color: 'text-brand-secondary', activeColor: 'bg-brand-secondary' },
+  { id: 'static', label: 'Static Analysis', icon: Zap },
+  { id: 'code', label: 'Code Security', icon: FileCode2 },
+  { id: 'iac', label: 'IaC Analysis', icon: Shield },
+  { id: 'ai', label: 'AI Analysis', icon: Sparkles },
+  { id: 'history', label: 'History', icon: Clock },
 ];
 
-export default function Sidebar({ activeTab, onTabChange, darkMode, onToggleDarkMode }) {
-  const [collapsed, setCollapsed] = useState(true);
-
+export default function Sidebar({ activeTab, onTabChange, darkMode, onToggleDarkMode, collapsed, onCollapsedChange }) {
   return (
     <aside
       className={`
         fixed left-0 top-0 z-50 flex h-screen flex-col items-center
         transition-all duration-300 ease-in-out
         ${collapsed ? 'w-[68px]' : 'w-[220px]'}
-        border-r border-white/70 bg-white/82 shadow-[8px_0_32px_-18px_rgba(15,23,42,0.24)] backdrop-blur-xl
-        dark:border-brand-700/60 dark:bg-brand-900/88 dark:shadow-[8px_0_32px_-18px_rgba(2,6,23,0.45)]
+        border-r border-brand-200 bg-white shadow-sm
+        dark:border-brand-700 dark:bg-brand-900
       `}
     >
       <div
@@ -28,20 +27,19 @@ export default function Sidebar({ activeTab, onTabChange, darkMode, onToggleDark
         `}
       >
         <div className="relative flex-shrink-0 cursor-pointer">
-          <div className="absolute inset-0 rounded-full bg-brand-primary/20 blur-lg" />
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-primary to-brand-accent shadow-lg shadow-brand-primary/20">
+          <div className="relative flex h-10 w-10 items-center justify-center rounded-lg bg-brand-primary shadow-sm">
             <Shield className="h-5 w-5 text-white" />
           </div>
         </div>
         {!collapsed && (
           <div className="overflow-hidden animate-fade-in-up">
-            <h1 className="whitespace-nowrap text-lg font-bold tracking-tight text-brand-900 dark:text-white">Aegis Threat</h1>
-            <p className="mt-0.5 text-[10px] font-mono text-brand-500 dark:text-brand-400">Modern Threat Modeling</p>
+            <h1 className="whitespace-nowrap text-lg font-semibold tracking-tight text-brand-950 dark:text-white">Aegis Threat</h1>
+            <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-brand-500 dark:text-brand-400">Threat Modeling</p>
           </div>
         )}
       </div>
 
-      <div className={`mb-3 h-px bg-gradient-to-r from-transparent via-brand-200 to-transparent dark:via-brand-700 ${collapsed ? 'w-8' : 'w-[calc(100%-2rem)]'}`} />
+      <div className={`mb-3 h-px bg-brand-200 dark:bg-brand-700 ${collapsed ? 'w-8' : 'w-[calc(100%-2rem)]'}`} />
 
       <nav className="flex w-full flex-1 flex-col gap-1 px-2">
         {navItems.map((item) => {
@@ -54,27 +52,24 @@ export default function Sidebar({ activeTab, onTabChange, darkMode, onToggleDark
               onClick={() => onTabChange(item.id)}
               title={collapsed ? item.label : undefined}
               className={`
-                group relative flex w-full items-center gap-3 rounded-2xl transition-all duration-200 ease-out
+                group relative flex w-full items-center gap-3 rounded-lg transition-colors duration-150
                 ${collapsed ? 'justify-center px-0 py-3' : 'px-3.5 py-2.5'}
                 ${isActive
-                  ? 'bg-white shadow-[0_10px_30px_-20px_rgba(15,23,42,0.55)] dark:bg-brand-800/90'
-                  : 'hover:bg-white/70 dark:hover:bg-brand-800/45'
+                  ? 'bg-brand-100 text-brand-primary dark:bg-brand-800 dark:text-brand-100'
+                  : 'text-brand-500 hover:bg-brand-50 hover:text-brand-800 dark:text-brand-400 dark:hover:bg-brand-800/60 dark:hover:text-brand-100'
                 }
               `}
             >
               {isActive && (
                 <div
-                  className={`
-                    absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full
-                    ${item.activeColor}
-                  `}
+                  className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-primary"
                 />
               )}
 
               <div
                 className={`
                   relative flex-shrink-0 transition-colors duration-200
-                  ${isActive ? item.color : 'text-brand-500 group-hover:text-brand-700 dark:text-brand-400 dark:group-hover:text-brand-200'}
+                  ${isActive ? 'text-brand-primary dark:text-brand-100' : ''}
                 `}
               >
                 <Icon className="h-5 w-5" />
@@ -84,7 +79,7 @@ export default function Sidebar({ activeTab, onTabChange, darkMode, onToggleDark
                 <span
                   className={`
                     whitespace-nowrap text-sm font-medium transition-colors duration-200
-                    ${isActive ? 'text-brand-900 dark:text-white' : 'text-brand-600 group-hover:text-brand-900 dark:text-brand-400 dark:group-hover:text-white'}
+                    ${isActive ? 'text-brand-950 dark:text-white' : 'text-brand-600 group-hover:text-brand-900 dark:text-brand-400 dark:group-hover:text-white'}
                   `}
                 >
                   {item.label}
@@ -103,15 +98,15 @@ export default function Sidebar({ activeTab, onTabChange, darkMode, onToggleDark
       </nav>
 
       <div className="w-full space-y-1 px-2 pb-4">
-        <div className={`mx-auto mb-2 h-px bg-gradient-to-r from-transparent via-brand-200 to-transparent dark:via-brand-700 ${collapsed ? 'w-8' : 'w-[calc(100%-1rem)]'}`} />
+        <div className={`mx-auto mb-2 h-px bg-brand-200 dark:bg-brand-700 ${collapsed ? 'w-8' : 'w-[calc(100%-1rem)]'}`} />
 
         <button
           onClick={onToggleDarkMode}
           title={collapsed ? (darkMode ? 'Light mode' : 'Dark mode') : undefined}
           className={`
-            group relative flex w-full items-center gap-3 rounded-2xl transition-all duration-200
+            group relative flex w-full items-center gap-3 rounded-lg transition-colors duration-150
             ${collapsed ? 'justify-center px-0 py-3' : 'px-3.5 py-2.5'}
-            hover:bg-white/70 dark:hover:bg-brand-800/45
+            hover:bg-brand-50 dark:hover:bg-brand-800/60
           `}
         >
           {darkMode
@@ -125,12 +120,12 @@ export default function Sidebar({ activeTab, onTabChange, darkMode, onToggleDark
         </button>
 
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={() => onCollapsedChange(!collapsed)}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={`
-            group relative flex w-full items-center gap-3 rounded-2xl transition-all duration-200
+            group relative flex w-full items-center gap-3 rounded-lg transition-colors duration-150
             ${collapsed ? 'justify-center px-0 py-3' : 'px-3.5 py-2.5'}
-            hover:bg-white/70 dark:hover:bg-brand-800/45
+            hover:bg-brand-50 dark:hover:bg-brand-800/60
           `}
         >
           {collapsed

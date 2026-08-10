@@ -26,6 +26,7 @@ export function useStreamingAnalysis() {
     const [error, setError] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const wsRef = useRef(null);
+    const completedRef = useRef(false);
 
     const cancel = useCallback(() => {
         if (wsRef.current) {
@@ -47,6 +48,7 @@ export function useStreamingAnalysis() {
             setResult(null);
             setError(null);
             setIsAnalyzing(true);
+            completedRef.current = false;
 
             const ws = new WebSocket(WS_URL);
             wsRef.current = ws;
@@ -72,6 +74,7 @@ export function useStreamingAnalysis() {
                         setPhase(data.phase || '');
                         setMessage(data.message || '');
                     } else if (data.type === 'result') {
+                        completedRef.current = true;
                         setProgress(100);
                         setPhase('complete');
                         setMessage('Analysis complete!');
@@ -92,6 +95,7 @@ export function useStreamingAnalysis() {
             };
 
             ws.onerror = () => {
+                if (completedRef.current) return;
                 setError('WebSocket connection failed. Falling back to REST API...');
                 setIsAnalyzing(false);
                 reject(new Error('WebSocket connection failed'));
@@ -99,7 +103,7 @@ export function useStreamingAnalysis() {
 
             ws.onclose = (event) => {
                 wsRef.current = null;
-                if (event.code !== 1000 && !result) {
+                if (event.code !== 1000 && !completedRef.current) {
                     // Abnormal close without result
                     setIsAnalyzing(false);
                 }

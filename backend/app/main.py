@@ -2,6 +2,7 @@ import os
 import json
 import time
 import hashlib
+import logging
 from contextlib import asynccontextmanager
 from collections import OrderedDict
 from typing import Dict, Optional, Tuple
@@ -10,9 +11,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from .engine.analyzer import ThreatAnalyzer
-from .models import AnalysisResult
+from .models import AnalysisResult, Component, SystemArchitecture
 from .services.document_ingestion import extract_documents
 from .services.llm_analyzer import LLMAnalyzer
+from .services.llm_providers import provider_public_info, supported_provider_ids
+
+logger = logging.getLogger(__name__)
 
 # Environment-based configuration
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
@@ -93,8 +97,8 @@ class AnalyzeRequest(BaseModel):
 
 class IaCAnalyzeRequest(BaseModel):
     project_name: str = Field(..., min_length=1, max_length=200, description="Name of the project")
-    iac_content: str = Field(..., min_length=10, description="Raw Content of Docker Compose or Kubernetes YAML")
-    format_hint: str = Field(default='auto', description="Hint for parser: 'auto', 'docker-compose', 'kubernetes'")
+    iac_content: str = Field(..., min_length=10, description="Raw content of Docker Compose, Kubernetes, Terraform, or CloudFormation")
+    format_hint: str = Field(default='auto', description="Hint for parser: auto, docker-compose, kubernetes, terraform, or cloudformation")
     analysis_mode: str = Field(default="standard", description="Analysis mode: fast, standard, or deep")
     
     @field_validator('project_name')
@@ -107,7 +111,7 @@ class IaCAnalyzeRequest(BaseModel):
     @field_validator('format_hint')
     @classmethod
     def validate_format_hint(cls, v):
-        if v not in ['auto', 'docker-compose', 'kubernetes']:
+        if v not in ['auto', 'docker-compose', 'kubernetes', 'terraform', 'cloudformation']:
             return 'auto'
         return v
 
@@ -119,10 +123,27 @@ class IaCAnalyzeRequest(BaseModel):
         return v
 
 
+class CodeAnalyzeRequest(BaseModel):
+    project_name: str = Field(..., min_length=1, max_length=200)
+    code_content: str = Field(..., min_length=1, max_length=500000)
+    language: str = Field(default='auto', max_length=40)
+    analysis_mode: str = Field(default="standard", description="Analysis mode: fast, standard, or deep")
+
+    @field_validator('project_name')
+    @classmethod
+    def sanitize_project_name(cls, v):
+        return _sanitize_project_name(v)
+
+    @field_validator('analysis_mode')
+    @classmethod
+    def validate_analysis_mode(cls, v):
+        return _normalize_analysis_mode(v)
+
+
 class LLMAnalyzeRequest(BaseModel):
     project_name: str = Field(..., min_length=1, max_length=200)
     description: str = Field(..., min_length=10, max_length=10000)
-    llm_provider: str = Field(..., description="LLM provider: 'openai' or 'claude'")
+    llm_provider: str = Field(..., description="LLM provider")
     api_key: str = Field(..., min_length=10, description="API key for the LLM provider")
     model: Optional[str] = Field(default=None, description="Optional specific model to use")
     analysis_mode: str = Field(default="standard", description="Analysis mode: fast, standard, or deep")
@@ -130,9 +151,10 @@ class LLMAnalyzeRequest(BaseModel):
     @field_validator('llm_provider')
     @classmethod
     def validate_provider(cls, v):
-        if v.lower() not in ['openai', 'claude', 'gemini']:
-            raise ValueError('Provider must be "openai", "claude", or "gemini"')
-        return v.lower()
+        provider = v.lower()
+        if provider not in supported_provider_ids():
+            raise ValueError(f"Provider must be one of: {', '.join(supported_provider_ids())}")
+        return provider
 
     @field_validator('analysis_mode')
     @classmethod
@@ -143,15 +165,20 @@ class LLMAnalyzeRequest(BaseModel):
 
 
 class APIKeyValidationRequest(BaseModel):
-    provider: str = Field(..., description="LLM provider: 'openai' or 'claude'")
+    provider: str = Field(..., description="LLM provider")
     api_key: str = Field(..., min_length=10)
     
     @field_validator('provider')
     @classmethod
     def validate_provider(cls, v):
-        if v.lower() not in ['openai', 'claude', 'gemini']:
-            raise ValueError('Provider must be "openai", "claude", or "gemini"')
-        return v.lower()
+        provider = v.lower()
+        if provider not in supported_provider_ids():
+            raise ValueError(f"Provider must be one of: {', '.join(supported_provider_ids())}")
+        return provider
+
+
+class LLMModelsRequest(APIKeyValidationRequest):
+    pass
 
 
 class RetrainLocalModelsResponse(BaseModel):
@@ -449,7 +476,7 @@ async def analyze_documents(
 @app.post("/analyze-iac", response_model=AnalysisResult)
 async def analyze_iac(request: Request, payload: IaCAnalyzeRequest):
     """
-    Analyze Infrastructure-as-Code (Docker Compose or Kubernetes).
+    Analyze Infrastructure-as-Code (Docker Compose, Kubernetes, Terraform, or CloudFormation).
     """
     try:
         from .engine.iac_parser import IaCParser
@@ -458,8 +485,8 @@ async def analyze_iac(request: Request, payload: IaCAnalyzeRequest):
         parser = IaCParser()
         system_architecture = parser.parse(payload.iac_content, payload.format_hint)
         
-        if not system_architecture.components:
-            raise ValueError("No valid components or services found in the provided IaC file.")
+        if not system_architecture.components and not (system_architecture.metadata or {}).get("iac_findings"):
+            raise ValueError("No supported resources or services found in the provided IaC file.")
             
         # 2. Run analysis
         analyzer = get_shared_analyzer(request)
@@ -478,6 +505,41 @@ async def analyze_iac(request: Request, payload: IaCAnalyzeRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"IaC Analysis failed: {str(e)}")
+
+
+@app.post("/analyze-code", response_model=AnalysisResult)
+async def analyze_code(request: Request, payload: CodeAnalyzeRequest):
+    """Run evidence-backed checks for common source-code vulnerability patterns."""
+    try:
+        from .engine.code_security import CodeSecurityAnalyzer
+
+        findings = CodeSecurityAnalyzer().analyze(payload.code_content)
+        architecture = SystemArchitecture(
+            components=[Component(
+                id="source",
+                name="Uploaded Source",
+                type="Service",
+                properties={"language": payload.language, "source_analysis": True},
+            )],
+            flows=[],
+            metadata={
+                "source": "code",
+                "security_findings": findings,
+                "security_findings_count": len(findings),
+            },
+        )
+        analyzer = get_shared_analyzer(request)
+        previous_result = _latest_analysis_by_project.get(payload.project_name)
+        result = analyzer.analyze(
+            architecture,
+            payload.project_name,
+            analysis_mode=payload.analysis_mode,
+        )
+        result.diff_summary = _build_diff_summary(previous_result, result)
+        _latest_analysis_by_project[payload.project_name] = result
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Code analysis failed: {str(e)}")
 
 
 @app.get("/health")
@@ -658,26 +720,64 @@ async def analyze_with_llm(request: Request, payload: LLMAnalyzeRequest):
         except Exception:
             pass  # RAG is optional
         
-        # Run LLM analysis with RAG context
-        llm_threats = LLMAnalyzer.analyze_with_llm(
-            architecture_description=payload.description,
-            project_name=payload.project_name,
-            provider=payload.llm_provider,
-            api_key=payload.api_key,
-            model=payload.model,
-            kb_context=kb_context
-        )
-        
-        # Merge threats with semantic deduplication
-        merged_threats = LLMAnalyzer.merge_threats(rule_based_result.threats, llm_threats)
-        
-        # Update result with merged threats
-        rule_based_result.threats = merged_threats
-        rule_based_result.summary = (
-            f"Analysis complete with {payload.llm_provider.upper()} enhancement. "
-            f"{len(merged_threats)} threats identified "
-            f"(RAG context: {len(kb_context) if kb_context else 0} KB threats)."
-        )
+        ai_error = None
+        try:
+            llm_threats = LLMAnalyzer.analyze_with_llm(
+                architecture_description=payload.description,
+                project_name=payload.project_name,
+                provider=payload.llm_provider,
+                api_key=payload.api_key,
+                model=payload.model,
+                kb_context=kb_context
+            )
+
+            merged_threats = LLMAnalyzer.merge_threats(rule_based_result.threats, llm_threats)
+            rule_based_result.threats = merged_threats
+            rule_based_result = analyzer.refresh_result_artifacts(
+                rule_based_result,
+                domain_profile="general",
+                analysis_mode=payload.analysis_mode,
+                use_local_slm=True,
+            )
+            rule_based_result.summary = (
+                f"Analysis complete with {payload.llm_provider.upper()} enhancement. "
+                f"{len(merged_threats)} threats identified "
+                f"(RAG context: {len(kb_context) if kb_context else 0} KB threats)."
+            )
+            rule_based_result.ml_enhanced = {
+                **(rule_based_result.ml_enhanced or {}),
+                "llm_provider": payload.llm_provider,
+                "llm_model": payload.model,
+                "llm_enhancement_applied": True,
+                "llm_threats_detected": len(llm_threats),
+                "rag_context_threats": len(kb_context) if kb_context else 0,
+            }
+        except Exception as llm_exc:
+            ai_error = str(llm_exc)
+            logger.exception(
+                "AI enhancement failed; returning local analysis only for provider=%s model=%s project=%s",
+                payload.llm_provider,
+                payload.model,
+                payload.project_name,
+            )
+            rule_based_result = analyzer.refresh_result_artifacts(
+                rule_based_result,
+                domain_profile="general",
+                analysis_mode=payload.analysis_mode,
+                use_local_slm=True,
+            )
+            rule_based_result.summary = (
+                f"Local analysis completed. AI enhancement via {payload.llm_provider.upper()} "
+                f"could not be applied for model {payload.model or 'default'}."
+            )
+            rule_based_result.ml_enhanced = {
+                **(rule_based_result.ml_enhanced or {}),
+                "llm_provider": payload.llm_provider,
+                "llm_model": payload.model,
+                "llm_enhancement_applied": False,
+                "llm_error": ai_error,
+            }
+
         rule_based_result.diff_summary = _build_diff_summary(previous_result, rule_based_result)
         _latest_analysis_by_project[payload.project_name] = rule_based_result
         
@@ -686,7 +786,38 @@ async def analyze_with_llm(request: Request, payload: LLMAnalyzeRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.exception(
+            "LLM analysis failed for provider=%s model=%s project=%s",
+            payload.llm_provider,
+            payload.model,
+            payload.project_name,
+        )
         raise HTTPException(status_code=500, detail=f"LLM analysis failed: {str(e)}")
+
+
+@app.get("/llm/providers")
+async def get_llm_providers():
+    """Return supported external LLM providers and fallback model metadata."""
+    return {"providers": provider_public_info()}
+
+
+@app.post("/llm/models")
+async def get_llm_models(payload: LLMModelsRequest):
+    """Validate an API key and return available models for the selected provider."""
+    try:
+        is_valid = LLMAnalyzer.validate_api_key(payload.provider, payload.api_key)
+        models = LLMAnalyzer.list_models(payload.provider, payload.api_key) if is_valid else []
+        return {
+            "valid": is_valid,
+            "provider": payload.provider,
+            "models": models,
+        }
+    except Exception:
+        return {
+            "valid": False,
+            "provider": payload.provider,
+            "models": [],
+        }
 
 
 @app.post("/validate-api-key")
@@ -699,13 +830,16 @@ async def validate_api_key(payload: APIKeyValidationRequest):
     """
     try:
         is_valid = LLMAnalyzer.validate_api_key(payload.provider, payload.api_key)
+        models = LLMAnalyzer.list_models(payload.provider, payload.api_key) if is_valid else []
         return {
             "valid": is_valid,
-            "provider": payload.provider
+            "provider": payload.provider,
+            "models": models,
         }
     except Exception as e:
         return {
             "valid": False,
             "provider": payload.provider,
-            "error": str(e)
+            "models": [],
+            "error": "API key validation failed"
         }

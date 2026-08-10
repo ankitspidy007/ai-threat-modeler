@@ -10,9 +10,7 @@ Improvements over original:
 import logging
 from typing import List, Optional, Dict
 from ..models import Threat
-from .openai_service import OpenAIService
-from .claude_service import ClaudeService
-from .gemini_service import GeminiService
+from .llm_providers import create_service, list_provider_models, validate_provider_key
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +48,7 @@ class LLMAnalyzer:
         Returns:
             List of threats detected by LLM
         """
-        if provider.lower() == "openai":
-            service = OpenAIService(api_key, model or "gpt-4o-mini")
-        elif provider.lower() == "claude":
-            service = ClaudeService(api_key, model or "claude-opus-4.6-20260205")
-        elif provider.lower() == "gemini":
-            service = GeminiService(api_key, model or "gemini-3.1-pro")
-        else:
-            raise ValueError(f"Unsupported LLM provider: {provider}")
+        service = create_service(provider, api_key, model)
         
         # RAG: Enrich the description with relevant KB threats
         enriched_description = LLMAnalyzer._enrich_with_rag(
@@ -117,19 +108,15 @@ class LLMAnalyzer:
     def validate_api_key(provider: str, api_key: str) -> bool:
         """Validate API key for specified provider."""
         try:
-            if provider.lower() == "openai":
-                service = OpenAIService(api_key)
-            elif provider.lower() == "claude":
-                service = ClaudeService(api_key)
-            elif provider.lower() == "gemini":
-                service = GeminiService(api_key)
-            else:
-                return False
-            
-            return service.validate_api_key()
+            return validate_provider_key(provider, api_key)
         except Exception as e:
             logger.error(f"API key validation error: {e}")
             return False
+
+    @staticmethod
+    def list_models(provider: str, api_key: str) -> List[dict]:
+        """List available models for a provider/API key pair."""
+        return list_provider_models(provider, api_key)
     
     @staticmethod
     def merge_threats(
@@ -166,9 +153,34 @@ class LLMAnalyzer:
                 best_match.description += f"\n\n**AI Insight:** {llm_threat.description}"
                 if llm_threat.mitigation and llm_threat.mitigation not in best_match.mitigation:
                     best_match.mitigation += f"\n\n**AI Recommendation:** {llm_threat.mitigation}"
+
+                for field in (
+                    "root_cause",
+                    "realistic_attack_scenario",
+                    "attack_scenario",
+                    "business_impact",
+                    "specific_control",
+                    "implementation_detail",
+                    "optional_config_example",
+                    "component",
+                    "data_flow",
+                    "asset",
+                    "affected_component",
+                    "related_data_flow",
+                ):
+                    if not getattr(best_match, field, None) and getattr(llm_threat, field, None):
+                        setattr(best_match, field, getattr(llm_threat, field))
+
+                for field in ("evidence", "affected_components", "affected_data_flows", "affected_assets"):
+                    existing_vals = getattr(best_match, field, []) or []
+                    new_vals = getattr(llm_threat, field, []) or []
+                    for value in new_vals:
+                        if value and value not in existing_vals:
+                            existing_vals.append(value)
+                    setattr(best_match, field, existing_vals)
                 
                 # Merge compliance data
-                for field in ('owasp_top_10', 'cwe', 'mitre_attack', 'nist_800_53'):
+                for field in ('owasp_top_10', 'cwe', 'mitre_attack', 'mitre_atlas', 'nist_800_53'):
                     existing_vals = getattr(best_match, field, []) or []
                     new_vals = getattr(llm_threat, field, []) or []
                     for v in new_vals:

@@ -1,7 +1,11 @@
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from app.main import app
+import app.main as main_module
 
+
+def api_client():
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 @pytest.mark.asyncio
 class TestAPI:
@@ -9,7 +13,7 @@ class TestAPI:
     
     async def test_health_check(self):
         """Test health check endpoint."""
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             response = await ac.get("/health")
         
         assert response.status_code == 200
@@ -19,7 +23,7 @@ class TestAPI:
     
     async def test_analyze_endpoint_success(self):
         """Test successful analysis."""
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             response = await ac.post("/analyze", json={
                 "project_name": "Test Project",
                 "description": "A web application with React frontend, Node.js API with JWT authentication, and PostgreSQL database storing user data"
@@ -39,7 +43,7 @@ class TestAPI:
     
     async def test_analyze_endpoint_validation_short_description(self):
         """Test validation for too short description."""
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             response = await ac.post("/analyze", json={
                 "project_name": "Test",
                 "description": "Short"
@@ -50,7 +54,7 @@ class TestAPI:
     
     async def test_analyze_endpoint_validation_missing_fields(self):
         """Test validation for missing required fields."""
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             response = await ac.post("/analyze", json={
                 "project_name": "Test"
                 # Missing description
@@ -60,7 +64,7 @@ class TestAPI:
     
     async def test_analyze_endpoint_sanitization(self):
         """Test that input is sanitized."""
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             response = await ac.post("/analyze", json={
                 "project_name": "Test<script>alert('xss')</script>",
                 "description": "A web application with database and API"
@@ -79,7 +83,7 @@ class TestAPI:
             "description": "A unique web application for cache testing with database"
         }
         
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             # First request
             response1 = await ac.post("/analyze", json=request_data)
             assert response1.status_code == 200
@@ -104,7 +108,7 @@ class TestAPI:
             "context_text": "Known issue: audit logging is incomplete.",
         }
 
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             response = await ac.post("/analyze-documents", data=data, files=files)
 
         assert response.status_code == 200
@@ -124,7 +128,7 @@ class TestAPI:
             "context_text": "Architecture context",
         }
 
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             response = await ac.post("/analyze-documents", data=data, files=files)
 
         assert response.status_code == 400
@@ -132,7 +136,7 @@ class TestAPI:
     
     async def test_clear_cache_endpoint(self):
         """Test cache clearing endpoint."""
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             response = await ac.delete("/cache")
         
         assert response.status_code == 200
@@ -141,7 +145,7 @@ class TestAPI:
     
     async def test_analyze_with_complex_architecture(self):
         """Test analysis with complex architecture."""
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             response = await ac.post("/analyze", json={
                 "project_name": "Complex E-Commerce",
                 "description": """
@@ -170,7 +174,7 @@ class TestAPI:
     
     async def test_analyze_threat_structure(self):
         """Test that threats have proper structure."""
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             response = await ac.post("/analyze", json={
                 "project_name": "Test",
                 "description": "A public API with no authentication and no logging"
@@ -192,7 +196,7 @@ class TestAPI:
     
     async def test_analyze_score_calculation(self):
         """Test that security score is calculated."""
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             response = await ac.post("/analyze", json={
                 "project_name": "Test",
                 "description": "A secure web application with HTTPS, JWT auth, encryption, and logging"
@@ -209,9 +213,62 @@ class TestAPI:
     
     async def test_cors_headers(self):
         """Test that CORS headers are present."""
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with api_client() as ac:
             response = await ac.options("/analyze")
         
         # CORS should be configured
         # Note: Actual CORS testing requires browser, this is basic check
         assert response.status_code in [200, 405]  # OPTIONS may or may not be allowed
+
+    async def test_llm_providers_endpoint_includes_nvidia(self):
+        async with api_client() as ac:
+            response = await ac.get("/llm/providers")
+
+        assert response.status_code == 200
+        providers = response.json()["providers"]
+        provider_ids = {provider["id"] for provider in providers}
+        assert {"openai", "claude", "gemini", "nvidia"}.issubset(provider_ids)
+        assert all(provider.get("fallback_models") for provider in providers)
+
+    async def test_llm_models_rejects_short_key(self):
+        async with api_client() as ac:
+            response = await ac.post("/llm/models", json={
+                "provider": "openai",
+                "api_key": "short",
+            })
+
+        assert response.status_code == 422
+
+    async def test_llm_models_rejects_unknown_provider(self):
+        async with api_client() as ac:
+            response = await ac.post("/llm/models", json={
+                "provider": "unknown",
+                "api_key": "valid-length-key",
+            })
+
+        assert response.status_code == 422
+
+    async def test_analyze_with_llm_falls_back_to_local_report_when_llm_fails(self, monkeypatch):
+        def fake_llm_failure(*args, **kwargs):
+            raise RuntimeError("provider failed")
+
+        monkeypatch.setattr(main_module.LLMAnalyzer, "analyze_with_llm", staticmethod(fake_llm_failure))
+
+        async with api_client() as ac:
+            response = await ac.post("/analyze-with-llm", json={
+                "project_name": "LLM Fallback",
+                "description": "A web application with React frontend, FastAPI API, JWT authentication, and PostgreSQL storing user data.",
+                "llm_provider": "nvidia",
+                "api_key": "nvapi-valid-length-placeholder",
+                "model": "minimaxai/minimax-m3",
+                "analysis_mode": "standard",
+            })
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "threats" in data
+        assert "report_markdown" in data
+        assert data["ml_enhanced"]["llm_enhancement_applied"] is False
+        assert "Local analysis completed" in data["summary"]
+
+

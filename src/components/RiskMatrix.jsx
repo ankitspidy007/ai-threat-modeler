@@ -46,8 +46,8 @@ const RiskMatrix = ({ threats, onCellClick }) => {
     };
 
     return (
-        <div className="bg-white dark:bg-brand-800 p-4 rounded-lg shadow border border-gray-200 dark:border-brand-700 mb-6 text-black dark:text-white w-full max-w-md mx-auto">
-            <h3 className="text-lg font-bold mb-4 text-center">Risk Assessment Matrix</h3>
+        <div className="mb-6 w-full max-w-md rounded-lg border border-brand-200 bg-white p-4 text-black shadow-sm dark:border-brand-700 dark:bg-brand-800 dark:text-white">
+            <h3 className="mb-4 text-center text-lg font-semibold">Risk Assessment Matrix</h3>
             <div className="relative">
                 {/* Y-Axis Label */}
                 <div className="absolute -left-8 top-1/2 -translate-y-1/2 -rotate-90 text-xs font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400">
@@ -57,14 +57,14 @@ const RiskMatrix = ({ threats, onCellClick }) => {
                 <div className="grid grid-cols-4 gap-1 text-sm">
                     {/* Header Row */}
                     <div className="font-bold"></div>
-                    <div className="text-center font-bold bg-gray-100 dark:bg-brand-700 p-1 rounded-sm">Low</div>
-                    <div className="text-center font-bold bg-gray-100 dark:bg-brand-700 p-1 rounded-sm">Medium</div>
-                    <div className="text-center font-bold bg-gray-100 dark:bg-brand-700 p-1 rounded-sm">High</div>
+                    <div className="rounded-sm bg-brand-100 p-1 text-center font-semibold dark:bg-brand-700">Low</div>
+                    <div className="rounded-sm bg-brand-100 p-1 text-center font-semibold dark:bg-brand-700">Medium</div>
+                    <div className="rounded-sm bg-brand-100 p-1 text-center font-semibold dark:bg-brand-700">High</div>
 
                     {/* Rows */}
                     {['High', 'Medium', 'Low'].map((impact) => (
                         <React.Fragment key={impact}>
-                            <div className="flex items-center justify-end pr-2 font-bold bg-gray-100 dark:bg-brand-700 rounded-sm">{impact}</div>
+                            <div className="flex items-center justify-end rounded-sm bg-brand-100 pr-2 font-semibold dark:bg-brand-700">{impact}</div>
                             {['Low', 'Medium', 'High'].map((likelihood) => {
                                 const displayCount = matrix[impact]?.[likelihood] || 0;
                                 const cellKey = `${impact}-${likelihood}`;

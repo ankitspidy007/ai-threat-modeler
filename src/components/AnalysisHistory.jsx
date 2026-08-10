@@ -72,25 +72,25 @@ const AnalysisHistory = ({ onLoadAnalysis }) => {
 
     if (comparison) {
         return (
-            <div className="w-full max-w-4xl mx-auto animate-fade-in-up">
+            <div className="mx-auto w-full max-w-6xl animate-fade-in-up">
                 <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-2xl font-bold dark:text-white">Analysis Comparison</h2>
+                    <h2 className="text-2xl font-semibold text-brand-950 dark:text-white">Analysis Comparison</h2>
                     <button onClick={() => { setComparison(null); setSelectedForCompare([]); setCompareMode(false); }}
-                        className="text-brand-500 hover:text-brand-700 dark:hover:text-brand-300 flex items-center gap-1">
+                        className="ui-button-secondary">
                         <X className="w-4 h-4" /> Close
                     </button>
                 </div>
 
                 {/* Score comparison */}
                 <div className="grid grid-cols-2 gap-4 mb-6">
-                    <div className="bg-white dark:bg-brand-800 border border-brand-200 dark:border-brand-700 rounded-lg p-4">
+                    <div className="ui-panel p-4">
                         <div className="text-xs text-brand-500 font-mono mb-1">OLDER</div>
                         <div className="font-bold dark:text-white">{comparison.older.name}</div>
                         <div className="text-sm text-brand-500">{formatDate(comparison.older.date)}</div>
                         <div className="mt-2 text-2xl font-bold text-brand-primary">{comparison.older.score}/100</div>
                         <div className="text-sm text-brand-600 dark:text-brand-400">{comparison.older.threatCount} threats</div>
                     </div>
-                    <div className="bg-white dark:bg-brand-800 border border-brand-200 dark:border-brand-700 rounded-lg p-4">
+                    <div className="ui-panel p-4">
                         <div className="text-xs text-brand-500 font-mono mb-1">NEWER</div>
                         <div className="font-bold dark:text-white">{comparison.newer.name}</div>
                         <div className="text-sm text-brand-500">{formatDate(comparison.newer.date)}</div>
@@ -158,10 +158,10 @@ const AnalysisHistory = ({ onLoadAnalysis }) => {
     }
 
     return (
-        <div className="w-full max-w-4xl mx-auto">
-            <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold text-brand-900 dark:text-white mb-2">Analysis History</h2>
-                <p className="text-brand-600 dark:text-brand-400">Browse, load, or compare your past threat analyses</p>
+        <div className="mx-auto w-full max-w-6xl">
+            <div className="panel-soft mb-6 px-6 py-5">
+                <h2 className="mb-2 text-2xl font-semibold text-brand-950 dark:text-white">Analysis History</h2>
+                <p className="text-sm leading-6 text-brand-600 dark:text-brand-400">Browse, load, or compare your past threat analyses.</p>
             </div>
 
             {analyses.length === 0 ? (
@@ -177,8 +177,8 @@ const AnalysisHistory = ({ onLoadAnalysis }) => {
                         <div className="flex gap-2">
                             <button
                                 onClick={() => { setCompareMode(!compareMode); setSelectedForCompare([]); }}
-                                className={`text-sm px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1 ${compareMode
-                                    ? 'bg-purple-50 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400'
+                                className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm transition-colors ${compareMode
+                                    ? 'border-brand-primary bg-brand-primary/10 text-brand-primary'
                                     : 'border-brand-300 dark:border-brand-600 text-brand-600 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-700'}`}
                             >
                                 <GitCompare className="w-3.5 h-3.5" />
@@ -192,11 +192,11 @@ const AnalysisHistory = ({ onLoadAnalysis }) => {
                     </div>
 
                     {compareMode && (
-                        <div className="mb-4 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg text-sm text-purple-700 dark:text-purple-300 flex items-center justify-between">
+                        <div className="mb-4 flex items-center justify-between rounded-lg border border-brand-primary/25 bg-brand-primary/10 p-3 text-sm text-brand-primary">
                             <span>Select 2 analyses to compare ({selectedForCompare.length}/2 selected)</span>
                             {selectedForCompare.length === 2 && (
                                 <button onClick={runComparison}
-                                    className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-bold">
+                                    className="rounded-lg bg-brand-primary px-3 py-1 font-semibold text-white hover:bg-brand-primary/90">
                                     Compare Now
                                 </button>
                             )}
@@ -209,10 +209,10 @@ const AnalysisHistory = ({ onLoadAnalysis }) => {
                             return (
                                 <div
                                     key={analysis.id}
-                                    className={`bg-white dark:bg-brand-800 border rounded-lg p-4 shadow-sm transition-all ${compareMode
+                                    className={`ui-panel border p-4 shadow-sm transition-colors ${compareMode
                                         ? isSelected
-                                            ? 'border-purple-400 dark:border-purple-600 ring-2 ring-purple-200 dark:ring-purple-800'
-                                            : 'border-brand-200 dark:border-brand-700 cursor-pointer hover:border-purple-300 dark:hover:border-purple-600'
+                                            ? 'border-brand-primary ring-2 ring-brand-primary/15'
+                                            : 'cursor-pointer hover:border-brand-primary/60'
                                         : 'border-brand-200 dark:border-brand-700 hover:shadow-md'}`}
                                     onClick={compareMode ? () => toggleCompareSelect(analysis) : undefined}
                                 >
@@ -245,7 +245,7 @@ const AnalysisHistory = ({ onLoadAnalysis }) => {
                                             </div>
                                         )}
                                         {compareMode && (
-                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-purple-600 border-purple-600' : 'border-brand-300 dark:border-brand-600'}`}>
+                                            <div className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${isSelected ? 'border-brand-primary bg-brand-primary' : 'border-brand-300 dark:border-brand-600'}`}>
                                                 {isSelected && <span className="text-white text-xs">✓</span>}
                                             </div>
                                         )}

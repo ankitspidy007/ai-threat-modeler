@@ -79,7 +79,7 @@ const reviewStateMeta = {
     },
 };
 
-const insightCardBase = 'rounded-[28px] border shadow-[0_24px_70px_-40px_rgba(15,23,42,0.28)]';
+const insightCardBase = 'rounded-lg border border-brand-200 bg-white shadow-sm dark:border-brand-700 dark:bg-brand-800';
 
 const SeverityBadge = ({ severity }) => {
     const theme = severityTheme[severity] || severityTheme.Low;
@@ -90,10 +90,10 @@ const SeverityBadge = ({ severity }) => {
     );
 };
 
-const EmptyInsight = ({ icon: Icon, title, description }) => (
-    <div className="rounded-[24px] border border-dashed border-brand-200 bg-white/55 px-5 py-8 text-center shadow-[0_20px_50px_-42px_rgba(15,23,42,0.32)] dark:border-brand-700 dark:bg-brand-900/20">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-100 text-brand-600 dark:bg-brand-800 dark:text-brand-300">
-            <Icon className="h-5 w-5" />
+const EmptyInsight = ({ icon, title, description }) => (
+    <div className="rounded-lg border border-dashed border-brand-300 bg-brand-50 px-5 py-8 text-center dark:border-brand-700 dark:bg-brand-900/35">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-white text-brand-600 dark:bg-brand-800 dark:text-brand-300">
+            {React.createElement(icon, { className: 'h-5 w-5' })}
         </div>
         <h4 className="text-base font-semibold text-brand-900 dark:text-white">{title}</h4>
         <p className="mt-2 text-sm leading-6 text-brand-600 dark:text-brand-400">{description}</p>
@@ -102,16 +102,16 @@ const EmptyInsight = ({ icon: Icon, title, description }) => (
 
 const MetricCard = ({ label, value, tone = 'default', detail }) => {
     const toneMap = {
-        default: 'from-white to-brand-50/80 dark:from-brand-800 dark:to-brand-800/70',
-        danger: 'from-red-50 to-rose-50 dark:from-red-950/20 dark:to-rose-950/10',
-        warning: 'from-amber-50 to-yellow-50 dark:from-amber-950/20 dark:to-yellow-950/10',
-        success: 'from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/10',
-        accent: 'from-brand-50 to-sky-50 dark:from-brand-900/40 dark:to-sky-950/10',
+        default: 'bg-white dark:bg-brand-800',
+        danger: 'bg-red-50 dark:bg-red-950/20',
+        warning: 'bg-amber-50 dark:bg-amber-950/20',
+        success: 'bg-emerald-50 dark:bg-emerald-950/20',
+        accent: 'bg-sky-50 dark:bg-sky-950/15',
     };
 
     return (
-        <div className={clsx('rounded-[24px] border border-white/70 bg-gradient-to-br p-5 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.28)] dark:border-brand-700/60', toneMap[tone] || toneMap.default)}>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-500 dark:text-brand-400">{label}</p>
+        <div className={clsx('rounded-lg border border-brand-200 p-5 dark:border-brand-700', toneMap[tone] || toneMap.default)}>
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-500 dark:text-brand-400">{label}</p>
             <div className="mt-3 flex items-end justify-between gap-3">
                 <div className="text-3xl font-black tracking-tight text-brand-950 dark:text-white">{value}</div>
                 {detail && <div className="max-w-[8rem] text-right text-xs leading-5 text-brand-500 dark:text-brand-400">{detail}</div>}
@@ -127,13 +127,13 @@ const aiLensTone = {
 };
 
 const AISecurityLensCard = ({ item }) => (
-    <div className={clsx('rounded-[22px] border p-4 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.28)]', aiLensTone[item.level] || aiLensTone.low)}>
-        <div className="flex items-center justify-between gap-3">
-            <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-70">{item.label}</p>
-                <p className="mt-2 text-2xl font-black tracking-tight">{item.count}</p>
+    <div className={clsx('rounded-lg border p-4', aiLensTone[item.level] || aiLensTone.low)}>
+        <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+                <p className="text-base font-semibold leading-6">{item.label}</p>
+                <p className="mt-2 text-2xl font-bold tracking-tight">{item.count}</p>
             </div>
-            <span className="rounded-full bg-white/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-current dark:bg-black/10">
+            <span className="shrink-0 rounded-full bg-white/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-current dark:bg-black/10">
                 {item.level}
             </span>
         </div>
@@ -142,10 +142,10 @@ const AISecurityLensCard = ({ item }) => (
 );
 
 const PriorityActionCard = ({ action, index }) => (
-    <div className="rounded-[24px] border border-brand-100 bg-brand-50/80 p-5 shadow-[0_18px_45px_-36px_rgba(15,23,42,0.28)] dark:border-brand-700 dark:bg-brand-900/25">
+    <div className="rounded-lg border border-brand-200 bg-brand-50 p-5 dark:border-brand-700 dark:bg-brand-900/35">
         <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-primary text-sm font-black text-white">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-primary text-sm font-bold text-white">
                     {index + 1}
                 </div>
                 <div>
@@ -156,7 +156,7 @@ const PriorityActionCard = ({ action, index }) => (
             <SeverityBadge severity={action.priority} />
         </div>
         <p className="mt-4 text-sm leading-6 text-brand-700 dark:text-brand-300">{action.why_now}</p>
-        <div className="mt-4 rounded-2xl bg-white/80 px-4 py-3 text-sm font-medium leading-6 text-brand-800 dark:bg-brand-800/60 dark:text-brand-200">
+        <div className="mt-4 rounded-lg border border-brand-200 bg-white px-4 py-3 text-sm font-medium leading-6 text-brand-800 dark:border-brand-700 dark:bg-brand-800/60 dark:text-brand-200">
             {action.action}
         </div>
         {action.focus_area?.length > 0 && (
@@ -174,8 +174,8 @@ const ThreatCard = ({ threat, reviewState = 'open', onReviewStateChange }) => {
         : (threat.evidence || []).slice(0, 2);
 
     return (
-        <article className={clsx('relative overflow-hidden rounded-[30px] border bg-white/82 p-6 shadow-[0_28px_80px_-42px_rgba(15,23,42,0.34)] backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 dark:bg-brand-800/72', theme.border)}>
-            <div className={clsx('absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r', theme.accent)} />
+        <article className={clsx('relative overflow-hidden rounded-lg border bg-white p-6 shadow-sm transition-colors dark:bg-brand-800', theme.border)}>
+            <div className={clsx('absolute inset-x-0 top-0 h-1', theme.accent.replace('from-', 'bg-').split(' ')[0])} />
 
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div className="max-w-3xl">
@@ -203,7 +203,7 @@ const ThreatCard = ({ threat, reviewState = 'open', onReviewStateChange }) => {
                     <p className="mt-4 max-w-3xl text-[15px] leading-7 text-brand-700 dark:text-brand-300">{threat.description}</p>
                 </div>
 
-                <div className={clsx('min-w-[220px] rounded-[24px] border p-4', theme.surface, theme.border)}>
+                <div className={clsx('min-w-[220px] rounded-lg border p-4', theme.surface, theme.border)}>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-500 dark:text-brand-400">Narrative</p>
                     <p className="mt-3 text-sm leading-6 text-brand-700 dark:text-brand-300">
                         {threat.explanation?.why_flagged || 'This finding was raised from the current architecture signals and rule matches.'}
@@ -218,7 +218,7 @@ const ThreatCard = ({ threat, reviewState = 'open', onReviewStateChange }) => {
             </div>
 
             <div className="mt-5 grid gap-4 lg:grid-cols-[1.3fr_0.9fr]">
-                <div className="rounded-[24px] border border-brand-100 bg-brand-50/75 p-4 dark:border-brand-700 dark:bg-brand-900/25">
+                <div className="rounded-lg border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-900/35">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Signals</p>
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                         <div>
@@ -226,7 +226,7 @@ const ThreatCard = ({ threat, reviewState = 'open', onReviewStateChange }) => {
                             {evidencePreview.length > 0 ? (
                                 <ul className="mt-2 space-y-2 text-sm leading-6 text-brand-700 dark:text-brand-300">
                                     {evidencePreview.map((ev, i) => (
-                                        <li key={i} className="rounded-2xl bg-white/80 px-3 py-2 dark:bg-brand-800/60">{ev}</li>
+                                        <li key={i} className="rounded-lg border border-brand-200 bg-white px-3 py-2 dark:border-brand-700 dark:bg-brand-800/60">{ev}</li>
                                     ))}
                                 </ul>
                             ) : (
@@ -252,7 +252,7 @@ const ThreatCard = ({ threat, reviewState = 'open', onReviewStateChange }) => {
                     </div>
                 </div>
 
-                <div className="rounded-[24px] border border-emerald-100 bg-emerald-50/80 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">Recommended next move</p>
                     <p className="mt-3 text-sm leading-6 text-emerald-900 dark:text-emerald-300">{threat.mitigation}</p>
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -339,6 +339,14 @@ export default function ThreatDashboard({ data, projectName }) {
                 const diagramId = `mermaid-diagram-${Date.now()}`;
                 const { svg } = await mermaid.render(diagramId, data.diagram);
                 mermaidRef.current.innerHTML = svg;
+
+                const svgElement = mermaidRef.current.querySelector('svg');
+                if (svgElement) {
+                    svgElement.setAttribute('width', '100%');
+                    svgElement.removeAttribute('height');
+                    svgElement.style.height = 'auto';
+                    svgElement.style.maxWidth = 'none';
+                }
             } catch (error) {
                 console.error('Mermaid rendering error:', error);
                 mermaidRef.current.innerHTML = `
@@ -358,7 +366,7 @@ export default function ThreatDashboard({ data, projectName }) {
         (data?.threats || []).forEach((threat) => {
             nextStates[threat.id] = threat.review_state || 'open';
         });
-        setReviewStates(nextStates);
+        queueMicrotask(() => setReviewStates(nextStates));
     }, [data]);
 
     const severities = ['all', ...new Set(data?.threats?.map((t) => t.severity) || [])];
@@ -388,6 +396,11 @@ export default function ThreatDashboard({ data, projectName }) {
     const diffSummary = data.diff_summary;
     const followUpQuestions = data.follow_up_questions || [];
     const aiSecurityLens = data.ai_security_lens || { enabled: false, overview: '', items: [] };
+    const aiLensGridClass = aiSecurityLens.items?.length === 1
+        ? 'grid-cols-1'
+        : aiSecurityLens.items?.length === 2
+            ? 'md:grid-cols-2'
+            : 'md:grid-cols-2 xl:grid-cols-3';
     const priorityActions = data.priority_actions || [];
 
     const allThreatsSorted = [...(data.threats || [])].sort((a, b) => {
@@ -520,21 +533,20 @@ export default function ThreatDashboard({ data, projectName }) {
     };
 
     return (
-        <div className="mx-auto w-full max-w-[1180px] animate-fade-in-up pb-24">
-            <section className={clsx(insightCardBase, 'relative overflow-hidden bg-white/82 p-8 backdrop-blur-xl dark:bg-brand-800/72')}>
-                <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-brand-primary via-sky-400 to-emerald-400" />
-                <div className="absolute right-0 top-0 h-44 w-44 rounded-full bg-brand-primary/10 blur-3xl dark:bg-brand-primary/20" />
+        <div className="mx-auto w-full max-w-6xl animate-fade-in-up pb-24">
+            <section className={clsx(insightCardBase, 'relative overflow-hidden p-6')}>
+                <div className="absolute inset-x-0 top-0 h-1 bg-brand-primary" />
 
-                <div className="relative flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+                <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                     <div className="max-w-3xl">
-                        <div className="inline-flex items-center gap-2 rounded-full bg-brand-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-700 dark:bg-brand-700/60 dark:text-brand-200">
+                        <div className="inline-flex items-center gap-2 rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-700/60 dark:text-brand-200">
                             <Sparkles className="h-3.5 w-3.5" />
                             Security narrative
                         </div>
-                        <h1 className="mt-5 text-4xl font-black tracking-tight text-brand-950 dark:text-white md:text-5xl">
+                        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-brand-950 dark:text-white md:text-4xl">
                             {projectName}
                         </h1>
-                        <p className="mt-4 max-w-2xl text-base leading-8 text-brand-600 dark:text-brand-300">
+                        <p className="mt-3 max-w-3xl text-sm leading-7 text-brand-600 dark:text-brand-300">
                             {data.summary}
                         </p>
                         <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-brand-500 dark:text-brand-400">
@@ -549,25 +561,25 @@ export default function ThreatDashboard({ data, projectName }) {
                     <div className="flex flex-wrap gap-2 lg:justify-end">
                         <button
                             onClick={() => setShowFilters(!showFilters)}
-                            className="rounded-xl border border-brand-200 bg-white/90 px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition-colors hover:bg-brand-50 dark:border-brand-700 dark:bg-brand-800 dark:text-brand-200 dark:hover:bg-brand-700"
+                            className="ui-button-secondary"
                         >
                             <span className="inline-flex items-center gap-2">
                                 <Filter className="h-4 w-4" />
                                 Filters {hasActiveFilters && `(${filteredThreats.length})`}
                             </span>
                         </button>
-                        <button onClick={downloadJSON} className="rounded-xl border border-brand-200 bg-white/90 px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition-colors hover:bg-brand-50 dark:border-brand-700 dark:bg-brand-800 dark:text-brand-200 dark:hover:bg-brand-700">
+                        <button onClick={downloadJSON} className="ui-button-secondary">
                             <span className="inline-flex items-center gap-2"><Code className="h-4 w-4" /> JSON</span>
                         </button>
-                        <button onClick={downloadCSV} className="rounded-xl border border-brand-200 bg-white/90 px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition-colors hover:bg-brand-50 dark:border-brand-700 dark:bg-brand-800 dark:text-brand-200 dark:hover:bg-brand-700">
+                        <button onClick={downloadCSV} className="ui-button-secondary">
                             <span className="inline-flex items-center gap-2"><Share2 className="h-4 w-4" /> CSV</span>
                         </button>
                         {data.report_markdown && (
-                            <button onClick={downloadMarkdown} className="rounded-xl border border-brand-200 bg-white/90 px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition-colors hover:bg-brand-50 dark:border-brand-700 dark:bg-brand-800 dark:text-brand-200 dark:hover:bg-brand-700">
+                            <button onClick={downloadMarkdown} className="ui-button-secondary">
                                 <span className="inline-flex items-center gap-2"><FileText className="h-4 w-4" /> Markdown</span>
                             </button>
                         )}
-                        <button onClick={handlePDFExport} className="rounded-xl bg-brand-primary px-4 py-2 text-sm font-semibold text-white shadow-[0_18px_40px_-24px_rgba(79,70,229,0.8)] transition-all hover:-translate-y-0.5 hover:bg-brand-primary/90">
+                        <button onClick={handlePDFExport} className="btn-brand">
                             <span className="inline-flex items-center gap-2"><Download className="h-4 w-4" /> Export PDF</span>
                         </button>
                     </div>
@@ -582,7 +594,7 @@ export default function ThreatDashboard({ data, projectName }) {
             </section>
 
             {showFilters && (
-                <section className={clsx(insightCardBase, 'mt-6 bg-white/78 p-5 backdrop-blur-xl dark:bg-brand-800/70')}>
+                <section className={clsx(insightCardBase, 'mt-6 p-5')}>
                     <div className="flex items-center justify-between gap-4">
                         <div>
                             <h3 className="text-lg font-bold text-brand-950 dark:text-white">Focus the story</h3>
@@ -632,7 +644,7 @@ export default function ThreatDashboard({ data, projectName }) {
             )}
 
             <section className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
-                <div className={clsx(insightCardBase, 'bg-white/80 p-6 backdrop-blur-xl dark:bg-brand-800/70')}>
+                <div className={clsx(insightCardBase, 'p-6')}>
                     <div className="flex items-center gap-2">
                         <TrendingUp className="h-5 w-5 text-brand-primary" />
                         <h3 className="text-lg font-bold text-brand-950 dark:text-white">Executive readout</h3>
@@ -640,8 +652,8 @@ export default function ThreatDashboard({ data, projectName }) {
 
                     {topStory ? (
                         <div className="mt-5 space-y-5">
-                            <div className={clsx('rounded-[26px] border p-5', severityTheme[topStory.severity]?.surface, severityTheme[topStory.severity]?.border)}>
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-500 dark:text-brand-400">What matters most</p>
+                            <div className={clsx('rounded-lg border p-5', severityTheme[topStory.severity]?.surface, severityTheme[topStory.severity]?.border)}>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-brand-500 dark:text-brand-400">What matters most</p>
                                 <div className="mt-3 flex flex-wrap items-center gap-3">
                                     <SeverityBadge severity={topStory.severity} />
                                     <span className="text-sm font-semibold text-brand-700 dark:text-brand-300">{topStory.tier}</span>
@@ -653,7 +665,7 @@ export default function ThreatDashboard({ data, projectName }) {
                             </div>
 
                             <div className="grid gap-4 md:grid-cols-2">
-                                <div className="rounded-[24px] border border-brand-100 bg-brand-50/75 p-5 dark:border-brand-700 dark:bg-brand-900/25">
+                                <div className="rounded-lg border border-brand-200 bg-brand-50 p-5 dark:border-brand-700 dark:bg-brand-900/35">
                                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Severity story</p>
                                     <div className="mt-4 space-y-3">
                                         {['Critical', 'High', 'Medium', 'Low'].map((severity) => {
@@ -661,7 +673,7 @@ export default function ThreatDashboard({ data, projectName }) {
                                             return (
                                                 <div key={severity} className="flex items-center justify-between gap-3">
                                                     <div className="flex items-center gap-2">
-                                                        <div className={clsx('h-2.5 w-10 rounded-full bg-gradient-to-r', severityTheme[severity].accent)} />
+                                                        <div className={clsx('h-2.5 w-10 rounded-full', severityTheme[severity].accent.replace('from-', 'bg-').split(' ')[0])} />
                                                         <span className="text-sm font-medium text-brand-700 dark:text-brand-300">{severityTheme[severity].label}</span>
                                                     </div>
                                                     <span className="text-sm font-bold text-brand-950 dark:text-white">{count}</span>
@@ -671,11 +683,11 @@ export default function ThreatDashboard({ data, projectName }) {
                                     </div>
                                 </div>
 
-                                <div className="rounded-[24px] border border-brand-100 bg-brand-50/75 p-5 dark:border-brand-700 dark:bg-brand-900/25">
+                                <div className="rounded-lg border border-brand-200 bg-brand-50 p-5 dark:border-brand-700 dark:bg-brand-900/35">
                                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Review posture</p>
                                     <div className="mt-4 grid grid-cols-2 gap-3">
                                         {Object.entries(reviewStateMeta).map(([state, meta]) => (
-                                            <div key={state} className="rounded-2xl bg-white/80 px-4 py-3 dark:bg-brand-800/60">
+                                            <div key={state} className="rounded-lg border border-brand-200 bg-white px-4 py-3 dark:border-brand-700 dark:bg-brand-800/60">
                                                 <div className={clsx('inline-flex rounded-full px-2 py-1 text-[10px] font-semibold', meta.className)}>{meta.label}</div>
                                                 <div className="mt-2 text-2xl font-black text-brand-950 dark:text-white">{reviewSummary[state] || 0}</div>
                                             </div>
@@ -694,7 +706,7 @@ export default function ThreatDashboard({ data, projectName }) {
                 </div>
 
                 <div className="space-y-6">
-                    <div className={clsx(insightCardBase, 'bg-white/80 p-6 backdrop-blur-xl dark:bg-brand-800/70')}>
+                    <div className={clsx(insightCardBase, 'p-6')}>
                         <div className="flex items-center gap-2">
                             <HelpCircle className="h-5 w-5 text-brand-primary" />
                             <h3 className="text-lg font-bold text-brand-950 dark:text-white">Questions to tighten confidence</h3>
@@ -702,7 +714,7 @@ export default function ThreatDashboard({ data, projectName }) {
                         {followUpQuestions.length ? (
                             <div className="mt-4 space-y-3">
                                 {followUpQuestions.slice(0, 4).map((item) => (
-                                    <div key={item.id} className="rounded-[22px] border border-brand-100 bg-brand-50/70 p-4 dark:border-brand-700 dark:bg-brand-900/25">
+                                    <div key={item.id} className="rounded-lg border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-900/35">
                                         <div className="flex items-center gap-2">
                                             <span className={clsx(
                                                 'rounded-full px-2 py-1 text-[10px] font-bold uppercase',
@@ -730,24 +742,24 @@ export default function ThreatDashboard({ data, projectName }) {
                         )}
                     </div>
 
-                    <div className={clsx(insightCardBase, 'bg-white/80 p-6 backdrop-blur-xl dark:bg-brand-800/70')}>
+                    <div className={clsx(insightCardBase, 'p-6')}>
                         <div className="flex items-center gap-2">
                             <ListChecks className="h-5 w-5 text-brand-primary" />
                             <h3 className="text-lg font-bold text-brand-950 dark:text-white">Change and review signal</h3>
                         </div>
                         <div className="mt-4 space-y-3">
-                            <div className="rounded-[22px] border border-brand-100 bg-brand-50/70 p-4 dark:border-brand-700 dark:bg-brand-900/25">
+                            <div className="rounded-lg border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-900/35">
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Diff summary</p>
                                 {diffSummary ? (
                                     diffSummary.changed ? (
                                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                            <div className="rounded-2xl bg-white/85 px-4 py-3 dark:bg-brand-800/60">
+                                            <div className="rounded-lg border border-brand-200 bg-white px-4 py-3 dark:border-brand-700 dark:bg-brand-800/60">
                                                 <p className="text-xs text-brand-500 dark:text-brand-400">Score movement</p>
                                                 <p className="mt-1 text-2xl font-black text-brand-950 dark:text-white">
                                                     {diffSummary.score_delta > 0 ? '+' : ''}{diffSummary.score_delta || 0}
                                                 </p>
                                             </div>
-                                            <div className="rounded-2xl bg-white/85 px-4 py-3 dark:bg-brand-800/60">
+                                            <div className="rounded-lg border border-brand-200 bg-white px-4 py-3 dark:border-brand-700 dark:bg-brand-800/60">
                                                 <p className="text-xs text-brand-500 dark:text-brand-400">Architecture delta</p>
                                                 <p className="mt-1 text-sm font-semibold text-brand-950 dark:text-white">
                                                     {diffSummary.component_delta > 0 ? '+' : ''}{diffSummary.component_delta || 0} components, {diffSummary.flow_delta > 0 ? '+' : ''}{diffSummary.flow_delta || 0} flows
@@ -762,14 +774,14 @@ export default function ThreatDashboard({ data, projectName }) {
                                 )}
                             </div>
 
-                            <div className="rounded-[22px] border border-brand-100 bg-brand-50/70 p-4 dark:border-brand-700 dark:bg-brand-900/25">
+                            <div className="rounded-lg border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-900/35">
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Coverage</p>
                                 <div className="mt-3 grid grid-cols-2 gap-3">
-                                    <div className="rounded-2xl bg-white/85 px-4 py-3 dark:bg-brand-800/60">
+                                    <div className="rounded-lg border border-brand-200 bg-white px-4 py-3 dark:border-brand-700 dark:bg-brand-800/60">
                                         <p className="text-xs text-brand-500 dark:text-brand-400">Components</p>
                                         <p className="mt-1 text-2xl font-black text-brand-950 dark:text-white">{data.coverage?.components_analyzed ?? 0}</p>
                                     </div>
-                                    <div className="rounded-2xl bg-white/85 px-4 py-3 dark:bg-brand-800/60">
+                                    <div className="rounded-lg border border-brand-200 bg-white px-4 py-3 dark:border-brand-700 dark:bg-brand-800/60">
                                         <p className="text-xs text-brand-500 dark:text-brand-400">Trust boundaries</p>
                                         <p className="mt-1 text-2xl font-black text-brand-950 dark:text-white">{data.coverage?.trust_boundary_count ?? 0}</p>
                                     </div>
@@ -781,7 +793,7 @@ export default function ThreatDashboard({ data, projectName }) {
             </section>
 
             <section className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-                <div className={clsx(insightCardBase, 'bg-white/80 p-6 backdrop-blur-xl dark:bg-brand-800/70')}>
+                <div className={clsx(insightCardBase, 'p-6')}>
                     <div className="flex items-center gap-2">
                         <Sparkles className="h-5 w-5 text-brand-primary" />
                         <h3 className="text-lg font-bold text-brand-950 dark:text-white">AI security lens</h3>
@@ -790,7 +802,7 @@ export default function ThreatDashboard({ data, projectName }) {
                         {aiSecurityLens.overview || 'A focused readout on prompt, data, model, and agent-specific AI risk themes.'}
                     </p>
                     {aiSecurityLens.items?.length ? (
-                        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        <div className={clsx('mt-5 grid gap-4', aiLensGridClass)}>
                             {aiSecurityLens.items.map((item) => (
                                 <AISecurityLensCard key={item.id} item={item} />
                             ))}
@@ -804,7 +816,7 @@ export default function ThreatDashboard({ data, projectName }) {
                     )}
                 </div>
 
-                <div className={clsx(insightCardBase, 'bg-white/80 p-6 backdrop-blur-xl dark:bg-brand-800/70')}>
+                <div className={clsx(insightCardBase, 'p-6')}>
                     <div className="flex items-center gap-2">
                         <ShieldAlert className="h-5 w-5 text-brand-primary" />
                         <h3 className="text-lg font-bold text-brand-950 dark:text-white">Top 3 things to fix first</h3>
@@ -828,8 +840,39 @@ export default function ThreatDashboard({ data, projectName }) {
                 </div>
             </section>
 
-            <section className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-                <div className={clsx(insightCardBase, 'bg-white/80 p-6 backdrop-blur-xl dark:bg-brand-800/70')}>
+            <section className="mt-6">
+                <div className={clsx(insightCardBase, 'mx-auto w-full max-w-6xl p-6')}>
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="text-center lg:text-left">
+                            <h3 className="text-lg font-bold text-brand-950 dark:text-white">Architecture view</h3>
+                            <p className="mt-1 text-sm text-brand-600 dark:text-brand-400">Trust boundaries and boundary-crossing flows are highlighted directly on the modeled system map.</p>
+                        </div>
+                        <div className="flex items-center justify-center gap-2">
+                            <button
+                                onClick={copyDiagramCode}
+                                className="ui-button-secondary px-3 py-2 text-xs"
+                            >
+                                <span className="inline-flex items-center gap-1.5">
+                                    {copiedDiagram ? <ClipboardCheck className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                                    {copiedDiagram ? 'Copied' : 'Code'}
+                                </span>
+                            </button>
+                            <button
+                                onClick={exportDiagramAsPNG}
+                                className="ui-button-secondary px-3 py-2 text-xs"
+                            >
+                                <span className="inline-flex items-center gap-1.5"><Download className="h-3.5 w-3.5" /> PNG</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div className="mt-5 flex min-h-[440px] w-full items-center justify-center overflow-auto rounded-lg border border-brand-200 bg-brand-50 p-5 sm:min-h-[560px] sm:p-8 dark:border-brand-700 dark:bg-brand-900/35">
+                        <div ref={mermaidRef} className="flex h-full w-full items-center justify-center [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-none" />
+                    </div>
+                </div>
+            </section>
+
+            <section className="mt-6">
+                <div className={clsx(insightCardBase, 'p-6')}>
                     <div className="flex items-center justify-between gap-4">
                         <div>
                             <h3 className="text-lg font-bold text-brand-950 dark:text-white">Risk landscape</h3>
@@ -839,35 +882,6 @@ export default function ThreatDashboard({ data, projectName }) {
                     <div className="mt-5 grid gap-6 lg:grid-cols-2">
                         <RiskMatrix threats={data.threats} onCellClick={handleRiskMatrixClick} />
                         <StrideChart threats={data.threats || []} />
-                    </div>
-                </div>
-
-                <div className={clsx(insightCardBase, 'bg-white/80 p-6 backdrop-blur-xl dark:bg-brand-800/70')}>
-                    <div className="flex items-center justify-between gap-3">
-                        <div>
-                            <h3 className="text-lg font-bold text-brand-950 dark:text-white">Architecture view</h3>
-                            <p className="mt-1 text-sm text-brand-600 dark:text-brand-400">A fast visual map of the modeled system and the flows the engine reasoned about.</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={copyDiagramCode}
-                                className="rounded-xl border border-brand-200 bg-white px-3 py-2 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-50 dark:border-brand-700 dark:bg-brand-800 dark:text-brand-300 dark:hover:bg-brand-700"
-                            >
-                                <span className="inline-flex items-center gap-1.5">
-                                    {copiedDiagram ? <ClipboardCheck className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-                                    {copiedDiagram ? 'Copied' : 'Code'}
-                                </span>
-                            </button>
-                            <button
-                                onClick={exportDiagramAsPNG}
-                                className="rounded-xl border border-brand-200 bg-white px-3 py-2 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-50 dark:border-brand-700 dark:bg-brand-800 dark:text-brand-300 dark:hover:bg-brand-700"
-                            >
-                                <span className="inline-flex items-center gap-1.5"><Download className="h-3.5 w-3.5" /> PNG</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div className="mt-5 rounded-[26px] border border-brand-100 bg-brand-50/70 p-4 dark:border-brand-700 dark:bg-brand-900/25">
-                        <div ref={mermaidRef} className="flex min-h-[280px] items-center justify-center overflow-x-auto" />
                     </div>
                 </div>
             </section>
@@ -910,7 +924,7 @@ export default function ThreatDashboard({ data, projectName }) {
                         description="Try widening the severity or tier filter, or clear the search term to bring the full narrative back."
                     />
                     <div className="mt-4 text-center">
-                        <button onClick={clearFilters} className="rounded-xl bg-brand-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-primary/90">
+                        <button onClick={clearFilters} className="btn-brand">
                             Reset filters
                         </button>
                     </div>
@@ -918,14 +932,14 @@ export default function ThreatDashboard({ data, projectName }) {
             )}
 
             {assumptions.length > 0 && (
-                <section className={clsx(insightCardBase, 'mt-8 bg-white/78 p-6 backdrop-blur-xl dark:bg-brand-800/68')}>
+                <section className={clsx(insightCardBase, 'mt-8 p-6')}>
                     <div className="flex items-center gap-2">
                         <Sparkles className="h-5 w-5 text-brand-primary" />
                         <h3 className="text-lg font-bold text-brand-950 dark:text-white">Assumptions still shaping the model</h3>
                     </div>
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
                         {assumptions.slice(0, 4).map((assumption, index) => (
-                            <div key={`${assumption.scope}-${index}`} className="rounded-[22px] border border-yellow-200 bg-yellow-50/80 px-4 py-3 dark:border-yellow-900/40 dark:bg-yellow-950/18">
+                            <div key={`${assumption.scope}-${index}`} className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 dark:border-yellow-900/40 dark:bg-yellow-950/20">
                                 <p className="text-sm leading-6 text-yellow-900 dark:text-yellow-300">{assumption.message}</p>
                             </div>
                         ))}

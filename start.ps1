@@ -6,6 +6,12 @@ param(
     [int]$FrontendPort = 5173
 )
 
+$env:PYTHONUTF8 = "1"
+$PythonLaunch = "python"
+if (Get-Command py -ErrorAction SilentlyContinue) {
+    $PythonLaunch = "py -3"
+}
+
 Write-Host "=====================================================" -ForegroundColor Cyan
 Write-Host "  Aegis Threat v2.0" -ForegroundColor Cyan
 Write-Host "  NLP | Semantic Search | Attack Chains | Multi-LLM" -ForegroundColor Cyan
@@ -14,7 +20,7 @@ Write-Host ""
 
 # Check if Python is installed
 try {
-    $pythonVersion = python --version 2>&1
+    $pythonVersion = Invoke-Expression "$PythonLaunch --version 2>&1"
     Write-Host "[✓] Python found: $pythonVersion" -ForegroundColor Green
 } catch {
     Write-Host "[✗] ERROR: Python is not installed or not in PATH" -ForegroundColor Red
@@ -48,12 +54,12 @@ if (-not (Test-Path "node_modules")) {
     }
 }
 
-# Check if backend dependencies are installed (check for uvicorn)
-$uvicornInstalled = pip show uvicorn 2>&1
+# Check if backend dependencies are installed in the same Python used to run the backend
+Invoke-Expression "$PythonLaunch -c `"import fastapi, uvicorn, networkx, pydantic, yaml`"" > $null 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "    Installing backend dependencies..." -ForegroundColor Yellow
     Set-Location backend
-    pip install -r requirements.txt
+    Invoke-Expression "$PythonLaunch -m pip install -r requirements.txt"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[✗] Failed to install backend dependencies" -ForegroundColor Red
         Set-Location ..
@@ -74,13 +80,15 @@ Write-Host ""
 
 # Start Backend Server
 Write-Host "[2/4] Starting Backend Server on port $BackendPort..." -ForegroundColor Yellow
-$backendJob = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\backend'; python -m uvicorn app.main:app --reload --port $BackendPort" -PassThru -WindowStyle Normal
+$backendJob = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\backend'; `$env:PYTHONUTF8='1'; $PythonLaunch -m uvicorn app.main:app --reload --port $BackendPort" -PassThru -WindowStyle Normal
 Start-Sleep -Seconds 3
 
 # Start Frontend Server with custom port
 Write-Host "[3/4] Starting Frontend Server on port $FrontendPort..." -ForegroundColor Yellow
 $env:VITE_PORT = $FrontendPort
 $env:VITE_BACKEND_URL = "http://127.0.0.1:$BackendPort"
+$env:VITE_API_URL = "http://127.0.0.1:$BackendPort"
+$env:VITE_WS_URL = "ws://127.0.0.1:$BackendPort"
 $frontendJob = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; `$env:PORT=$FrontendPort; npm run dev -- --port $FrontendPort" -PassThru -WindowStyle Normal
 Start-Sleep -Seconds 3
 

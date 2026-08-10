@@ -20,6 +20,12 @@ This document outlines the modular structure for the comprehensive threat knowle
 12. **supply_chain_threats.json** - Supply chain and CI/CD threats
 13. **emerging_threats.json** - Recent and emerging threat patterns
 14. **mitre_attack_mapping.json** - MITRE ATT&CK technique mappings
+15. **ai_agent_threats.json** - AI agent tool-use, memory, autonomy, and trace leakage threats
+16. **rag_vector_store_threats.json** - RAG, vector store, retrieval, and embedding-corpus threats
+17. **serverless_threats.json** - Serverless function trigger, IAM, event, secret, and concurrency threats
+18. **identity_zero_trust_threats.json** - Workload identity, OAuth scope, step-up auth, and tenant isolation threats
+19. **data_pipeline_threats.json** - ETL, analytics, stream, warehouse, and orchestration threats
+20. **secrets_management_threats.json** - Source, CI/CD, cloud key, vector index, and rotation secret risks
 
 ## Loading Strategy
 
@@ -53,6 +59,7 @@ def load_comprehensive_knowledge_base():
 ## Statistics (Target)
 
 - **Total Threats**: 800-1000+
+- **Current Threats**: 161
 - **Cloud Platform Coverage**: 200+ (AWS: 80, Azure: 60, GCP: 60)
 - **OWASP Coverage**: 30+ (Web: 10, API: 10, Serverless: 10)
 - **Container/K8s**: 50+
@@ -61,6 +68,9 @@ def load_comprehensive_knowledge_base():
 - **Database**: 50+
 - **Supply Chain**: 30+
 - **Emerging**: 20+
+- **AI/Agent/RAG**: 50+
+- **Data Pipeline and Analytics**: 40+
+- **Secrets Management**: 40+
 - **MITRE ATT&CK**: 100+ technique mappings
 
 ## Implementation Progress
@@ -76,9 +86,15 @@ def load_comprehensive_knowledge_base():
 - [ ] Database threats
 - [ ] Supply chain threats
 - [ ] Emerging threats
+- [x] AI agent threats
+- [x] RAG and vector store threats
+- [x] Serverless threats
+- [x] Identity and zero-trust threats
+- [x] Data pipeline threats
+- [x] Secrets management threats
 - [ ] MITRE ATT&CK mappings
-- [ ] Loader implementation
-- [ ] Integration with existing system
+- [x] Loader implementation
+- [x] Integration with existing system
 
 ## Next Steps
 

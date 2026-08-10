@@ -1,201 +1,134 @@
 """
-OpenAI Service for LLM-enhanced threat detection.
+OpenAI-compatible service for LLM-enhanced threat detection.
 """
-from typing import List, Dict, Optional
+from typing import Any, Dict, List, Optional
+
 from openai import OpenAI
+
 from ..models import Threat
-import json
+from .llm_threat_contract import (
+    build_system_prompt,
+    build_user_prompt,
+    calculate_risk_score,
+    parse_response_json,
+    parse_threats,
+)
+
 
 class OpenAIService:
-    """Service for analyzing architecture using OpenAI GPT models."""
-    
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
-        """
-        Initialize OpenAI service.
-        
-        Args:
-            api_key: OpenAI API key
-            model: Model to use (default: gpt-4)
-        """
-        self.client = OpenAI(api_key=api_key)
+    """Service for analyzing architecture using OpenAI-compatible chat models."""
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "gpt-4o-mini",
+        base_url: Optional[str] = None,
+        supports_response_format: bool = True,
+        timeout: float = 15.0,
+    ):
+        client_kwargs = {
+            "api_key": api_key,
+            "timeout": timeout,
+            "max_retries": 0,
+        }
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        self.client = OpenAI(**client_kwargs)
         self.model = model
-    
+        self.supports_response_format = supports_response_format
+
     def validate_api_key(self) -> bool:
-        """
-        Validate if the API key is valid.
-        
-        Returns:
-            True if valid, False otherwise
-        """
         try:
-            # Make a minimal API call to test the key
             self.client.models.list()
             return True
-        except Exception as e:
-            print(f"API key validation failed: {e}")
+        except Exception as exc:
+            print(f"API key validation failed: {exc}")
             return False
-    
+
+    def list_models(self) -> List[str]:
+        """Return model IDs available to the API key."""
+        models = self.client.models.list()
+        return sorted([model.id for model in models.data if getattr(model, "id", None)])
+
     def analyze_architecture(self, description: str, project_name: str = "System") -> List[Threat]:
-        """
-        Analyze architecture description using OpenAI.
-        
-        Args:
-            description: Architecture description text
-            project_name: Name of the project
-            
-        Returns:
-            List of detected threats
-        """
         prompt = self._build_prompt(description, project_name)
-        
+
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            request = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": self._get_system_prompt()},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
-                temperature=0.3,  # Lower temperature for more consistent results
-                response_format={"type": "json_object"}
-            )
-            
-            # Parse response
-            content = response.choices[0].message.content
-            threats_data = json.loads(content)
-            
-            # Convert to Threat objects
-            threats = self._parse_threats(threats_data)
-            return threats
-            
-        except Exception as e:
-            print(f"OpenAI analysis failed: {e}")
-            raise RuntimeError(f"OpenAI API call failed: {e}") from e
-    
+                "temperature": 0.3,
+                "max_tokens": 3200,
+            }
+            if self.supports_response_format:
+                request["response_format"] = {"type": "json_object"}
+
+            response = self.client.chat.completions.create(**request)
+            content = self._extract_response_content(response)
+            threats_data = self._parse_response_json(content)
+            return self._parse_threats(threats_data)
+        except Exception as exc:
+            print(f"OpenAI analysis failed: {exc}")
+            raise RuntimeError(f"OpenAI API call failed: {exc}") from exc
+
+    def _extract_response_content(self, response: Any) -> str:
+        """Normalize OpenAI-compatible chat completion output into plain text."""
+        choices = getattr(response, "choices", None) or []
+        if not choices:
+            raise RuntimeError("LLM returned no completion choices")
+
+        message = getattr(choices[0], "message", None)
+        if message is None:
+            raise RuntimeError("LLM returned a choice without a message")
+
+        content = getattr(message, "content", None)
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+
+        if isinstance(content, list):
+            text_parts = []
+            for part in content:
+                if isinstance(part, str) and part.strip():
+                    text_parts.append(part.strip())
+                    continue
+                if isinstance(part, dict):
+                    if isinstance(part.get("text"), str) and part["text"].strip():
+                        text_parts.append(part["text"].strip())
+                        continue
+                    if part.get("type") == "text":
+                        nested = part.get("text")
+                        if isinstance(nested, str) and nested.strip():
+                            text_parts.append(nested.strip())
+                        elif isinstance(nested, dict) and isinstance(nested.get("value"), str) and nested["value"].strip():
+                            text_parts.append(nested["value"].strip())
+            if text_parts:
+                return "\n".join(text_parts)
+
+        fallback_text = getattr(choices[0], "text", None)
+        if isinstance(fallback_text, str) and fallback_text.strip():
+            return fallback_text.strip()
+
+        raise RuntimeError("LLM returned an empty completion payload")
+
+    def _parse_response_json(self, content: str) -> Dict:
+        """Extract and parse the JSON object from a model response."""
+        return parse_response_json(content)
+
     def _get_system_prompt(self) -> str:
         """Get the system prompt for threat analysis."""
-        return """You are an expert security architect specializing in threat modeling using the STRIDE framework.
+        return build_system_prompt()
 
-Your task is to analyze system architecture descriptions and identify security threats.
-
-For each threat you identify, provide:
-1. id: A unique identifier (e.g., "LLM-001")
-2. category: STRIDE category (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege)
-3. title: Brief, clear title
-4. description: Detailed explanation of the threat
-5. severity: Critical, High, Medium, or Low
-6. likelihood: High, Medium, or Low
-7. impact: High, Medium, or Low
-8. mitigation: Specific steps to mitigate the threat
-9. evidence: Specific quotes or references from the architecture description
-10. owasp_top_10: Relevant OWASP Top 10 category (if applicable)
-11. cwe_id: Relevant CWE ID (if applicable)
-
-Return your analysis as a JSON object with a "threats" array.
-
-Example format:
-{
-  "threats": [
-    {
-      "id": "LLM-001",
-      "category": "Information Disclosure",
-      "title": "Sensitive Data Exposure in Logs",
-      "description": "...",
-      "severity": "High",
-      "likelihood": "Medium",
-      "impact": "High",
-      "mitigation": "...",
-      "evidence": ["..."],
-      "owasp_top_10": "A01:2021 - Broken Access Control",
-      "cwe_id": "CWE-200"
-    }
-  ]
-}"""
-    
     def _build_prompt(self, description: str, project_name: str) -> str:
         """Build the analysis prompt."""
-        return f"""Analyze the following system architecture for security threats using the STRIDE framework.
+        return build_user_prompt(description, project_name)
 
-Project: {project_name}
-
-Architecture Description:
-{description}
-
-Identify all potential security threats, focusing on:
-- Authentication and authorization issues
-- Data protection and encryption
-- API security
-- Input validation
-- Third-party integrations
-- Network security
-- Session management
-- Error handling
-- Access control
-
-Provide detailed, actionable findings with specific evidence from the description."""
-    
     def _parse_threats(self, threats_data: Dict) -> List[Threat]:
-        """
-        Parse threats from LLM response.
-        
-        Args:
-            threats_data: Parsed JSON response from LLM
-            
-        Returns:
-            List of Threat objects
-        """
-        threats = []
-        
-        for threat_dict in threats_data.get("threats", []):
-            try:
-                # Normalize compliance fields — LLM may return strings or lists
-                owasp_raw = threat_dict.get("owasp_top_10", [])
-                cwe_raw = threat_dict.get("cwe_id") or threat_dict.get("cwe", [])
-                mitre_raw = threat_dict.get("mitre_attack", [])
-                
-                # Ensure they are lists
-                owasp = [owasp_raw] if isinstance(owasp_raw, str) else (owasp_raw or [])
-                cwe = [cwe_raw] if isinstance(cwe_raw, str) else (cwe_raw or [])
-                mitre = [mitre_raw] if isinstance(mitre_raw, str) else (mitre_raw or [])
-                
-                # Ensure evidence is a list
-                evidence = threat_dict.get("evidence", [])
-                if isinstance(evidence, str):
-                    evidence = [evidence]
-                
-                threat = Threat(
-                    id=threat_dict.get("id", "LLM-UNKNOWN"),
-                    category=threat_dict.get("category", "Unknown"),
-                    title=f"[AI] {threat_dict.get('title', 'Unknown Threat')}",
-                    description=threat_dict.get("description", ""),
-                    severity=threat_dict.get("severity", "Medium"),
-                    likelihood=threat_dict.get("likelihood", "Medium"),
-                    impact=threat_dict.get("impact", "Medium"),
-                    risk_score=self._calculate_risk_score(
-                        threat_dict.get("severity", "Medium"),
-                        threat_dict.get("likelihood", "Medium")
-                    ),
-                    mitigation=threat_dict.get("mitigation", ""),
-                    confidence="High",
-                    evidence=evidence,
-                    status="Identified",
-                    tier="Confirmed",
-                    owasp_top_10=owasp,
-                    cwe=cwe,
-                    mitre_attack=mitre,
-                )
-                threats.append(threat)
-            except Exception as e:
-                print(f"Failed to parse LLM threat: {e} | Data: {threat_dict}")
-                continue
-        
-        return threats
-    
+        """Parse threats from LLM response."""
+        return parse_threats(threats_data)
+
     def _calculate_risk_score(self, severity: str, likelihood: str) -> int:
         """Calculate risk score from severity and likelihood."""
-        severity_scores = {"Critical": 100, "High": 75, "Medium": 50, "Low": 25}
-        likelihood_scores = {"High": 1.0, "Medium": 0.7, "Low": 0.4}
-        
-        base_score = severity_scores.get(severity, 50)
-        multiplier = likelihood_scores.get(likelihood, 0.7)
-        
-        return int(base_score * multiplier)
+        return calculate_risk_score(severity, likelihood)

@@ -1,8 +1,10 @@
 import yaml
 import logging
+import re
 from typing import Dict, List, Any, Optional
 
 from app.models import Component, SystemArchitecture, DataFlow
+from .iac_security import IaCSecurityAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +15,7 @@ class IaCParser:
     """
     
     def __init__(self):
-        pass
+        self.security_analyzer = IaCSecurityAnalyzer()
         
     def parse(self, iac_content: str, format_hint: str = 'auto') -> SystemArchitecture:
         """
@@ -23,17 +25,24 @@ class IaCParser:
             raise ValueError("Empty IaC content provided")
             
         try:
+            if format_hint == 'terraform' or self._looks_like_terraform(iac_content):
+                architecture = self._parse_terraform(iac_content)
+                return self._attach_security_findings(architecture, iac_content, 'terraform')
+
             # Safely parse YAML (handles multi-document streams like K8s)
             documents = list(yaml.safe_load_all(iac_content))
             
             # Determine format
             is_compose = False
             is_k8s = False
+            is_cloudformation = False
             
             if format_hint == 'docker-compose':
                 is_compose = True
             elif format_hint == 'kubernetes':
                 is_k8s = True
+            elif format_hint == 'cloudformation':
+                is_cloudformation = True
             else:
                 # Auto-detect
                 if not documents or not documents[0]:
@@ -45,13 +54,19 @@ class IaCParser:
                         is_k8s = True
                     elif 'services' in doc or 'version' in doc:
                         is_compose = True
+                    elif 'Resources' in doc or 'AWSTemplateFormatVersion' in doc:
+                        is_cloudformation = True
             
             if is_compose:
-                return self._parse_docker_compose(documents[0] if documents else {})
+                architecture = self._parse_docker_compose(documents[0] if documents else {})
             elif is_k8s:
-                return self._parse_kubernetes(documents)
+                architecture = self._parse_kubernetes(documents)
+            elif is_cloudformation:
+                architecture = self._parse_cloudformation(documents[0] if documents else {})
             else:
-                raise ValueError("Could not automatically determine IaC format. Please specify 'docker-compose' or 'kubernetes'.")
+                raise ValueError("Could not determine the IaC format. Supported formats are Docker Compose, Kubernetes, Terraform, and CloudFormation.")
+
+            return self._attach_security_findings(architecture, iac_content, format_hint, documents)
                 
         except yaml.YAMLError as e:
             logger.error(f"YAML parsing error: {e}")
@@ -59,6 +74,96 @@ class IaCParser:
         except Exception as e:
             logger.error(f"IaC parsing error: {e}")
             raise ValueError(f"Failed to parse IaC: {str(e)}")
+
+    @staticmethod
+    def _looks_like_terraform(iac_content: str) -> bool:
+        return bool(re.search(r'^\s*(?:resource|module|provider|terraform)\s+"', iac_content, re.MULTILINE))
+
+    def _attach_security_findings(
+        self,
+        architecture: SystemArchitecture,
+        iac_content: str,
+        format_hint: str,
+        documents: Optional[List[Dict[str, Any]]] = None,
+    ) -> SystemArchitecture:
+        metadata = architecture.metadata or {}
+        metadata['iac_findings'] = self.security_analyzer.analyze(iac_content, format_hint, documents)
+        metadata['iac_findings_count'] = len(metadata['iac_findings'])
+        architecture.metadata = metadata
+        return architecture
+
+    def _parse_terraform(self, content: str) -> SystemArchitecture:
+        """Create architecture components from Terraform resources for report context."""
+        type_map = {
+            'aws_s3_bucket': 'Object Storage',
+            'aws_db_instance': 'Database',
+            'aws_lambda_function': 'Serverless',
+            'aws_api_gateway_rest_api': 'API Gateway',
+            'aws_instance': 'Service',
+            'aws_eks_cluster': 'Container',
+            'aws_dynamodb_table': 'Database',
+            'aws_iam_role': 'IAM',
+            'aws_iam_policy': 'IAM',
+            'aws_kms_key': 'KMS',
+        }
+        components = []
+        for resource_type, name, _, _ in self.security_analyzer._terraform_blocks(content):
+            component_type = type_map.get(resource_type)
+            if not component_type:
+                continue
+            components.append(Component(
+                id=f'{resource_type}.{name}',
+                name=name.replace('-', ' ').replace('_', ' ').title(),
+                type=component_type,
+                properties={
+                    'iac_resource_type': resource_type,
+                    'cloud_provider': 'aws' if resource_type.startswith('aws_') else None,
+                    'deployment': 'terraform',
+                },
+            ))
+        return SystemArchitecture(
+            components=components,
+            flows=[],
+            metadata={'source': 'terraform', 'original_text': 'Terraform infrastructure configuration'},
+        )
+
+    def _parse_cloudformation(self, template: Dict[str, Any]) -> SystemArchitecture:
+        """Create architecture components from CloudFormation resources."""
+        type_map = {
+            'AWS::S3::Bucket': 'Object Storage',
+            'AWS::RDS::DBInstance': 'Database',
+            'AWS::Lambda::Function': 'Serverless',
+            'AWS::ApiGateway::RestApi': 'API Gateway',
+            'AWS::EC2::Instance': 'Service',
+            'AWS::EKS::Cluster': 'Container',
+            'AWS::DynamoDB::Table': 'Database',
+            'AWS::IAM::Role': 'IAM',
+            'AWS::IAM::ManagedPolicy': 'IAM',
+            'AWS::KMS::Key': 'KMS',
+        }
+        components = []
+        for logical_id, resource in (template.get('Resources') or {}).items():
+            if not isinstance(resource, dict):
+                continue
+            resource_type = resource.get('Type', '')
+            component_type = type_map.get(resource_type)
+            if not component_type:
+                continue
+            components.append(Component(
+                id=logical_id,
+                name=logical_id.replace('-', ' ').replace('_', ' '),
+                type=component_type,
+                properties={
+                    'iac_resource_type': resource_type,
+                    'cloud_provider': 'aws',
+                    'deployment': 'cloudformation',
+                },
+            ))
+        return SystemArchitecture(
+            components=components,
+            flows=[],
+            metadata={'source': 'cloudformation', 'original_text': 'CloudFormation infrastructure configuration'},
+        )
             
     def _parse_docker_compose(self, compose_data: Dict) -> SystemArchitecture:
         """Parse Docker Compose YAML into a SystemArchitecture"""

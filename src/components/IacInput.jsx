@@ -26,9 +26,13 @@ const IacInput = ({ onAnalyze, isAnalyzing }) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Auto-detect format from filename
+        // Auto-detect format from filename.
         const filename = file.name.toLowerCase();
-        if (filename.includes('compose')) {
+        if (filename.endsWith('.tf') || filename.endsWith('.tfvars')) {
+            setFormatHint('terraform');
+        } else if (filename.includes('cloudformation') || filename.includes('cfn')) {
+            setFormatHint('cloudformation');
+        } else if (filename.includes('compose')) {
             setFormatHint('docker-compose');
         } else if (filename.endsWith('.yaml') || filename.endsWith('.yml')) {
             // Default to k8s for generic yamls unless it explicitly says compose
@@ -43,17 +47,20 @@ const IacInput = ({ onAnalyze, isAnalyzing }) => {
     };
 
     return (
-        <div className="w-full max-w-3xl mx-auto mb-10 animate-fade-in-up">
-            <div className="glass-panel rounded-xl p-6 border-l-4 border-l-brand-success dark:bg-brand-800 dark:border-brand-success">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold flex items-center gap-2 text-brand-success">
-                        <FileCode className="w-6 h-6" />
+        <div className="mx-auto mb-10 w-full max-w-6xl animate-fade-in-up">
+            <div className="glass-panel p-6">
+                <div className="mb-5 border-b border-brand-200 pb-4 dark:border-brand-700">
+                    <h2 className="flex items-center gap-2 text-2xl font-semibold text-brand-950 dark:text-white">
+                        <FileCode className="h-5 w-5 text-brand-success" />
                         Infrastructure-as-Code Analysis
                     </h2>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-brand-600 dark:text-brand-400">
+                        Upload or paste Docker Compose, Kubernetes, Terraform, or CloudFormation to generate resource-level security findings.
+                    </p>
                 </div>
                 
                 <div className="mb-4">
-                    <label className="block text-xs font-mono text-brand-500 mb-1">Project Name</label>
+                    <label className="ui-label">Project Name</label>
                     <input
                         type="text"
                         value={projectName}
@@ -63,22 +70,22 @@ const IacInput = ({ onAnalyze, isAnalyzing }) => {
                     />
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-4 mb-4">
+                <div className="mb-4 grid gap-4 md:grid-cols-[1fr_220px]">
                     <div className="flex-1">
-                        <label className="block text-xs font-mono text-brand-500 mb-1">Upload File</label>
-                        <label className="flex items-center justify-center w-full h-10 px-4 transition bg-white border-2 border-brand-300 border-dashed rounded-lg appearance-none cursor-pointer hover:border-brand-primary focus:outline-none dark:bg-brand-700 dark:border-brand-600">
+                        <label className="ui-label">Upload File</label>
+                        <label className="flex h-11 w-full cursor-pointer items-center justify-center rounded-lg border border-dashed border-brand-300 bg-white px-4 transition hover:border-brand-primary dark:border-brand-600 dark:bg-brand-900/55">
                             <span className="flex items-center space-x-2">
                                 <Upload className="w-4 h-4 text-brand-500" />
                                 <span className="text-sm font-medium text-brand-600 dark:text-brand-300">
-                                    Drop YAML file or click to browse
+                                    Drop IaC file or click to browse
                                 </span>
                             </span>
-                            <input type="file" name="file_upload" className="hidden" accept=".yaml,.yml" onChange={handleFileUpload} />
+                            <input type="file" name="file_upload" className="hidden" accept=".yaml,.yml,.json,.tf,.tfvars" onChange={handleFileUpload} />
                         </label>
                     </div>
                     
-                    <div className="w-full md:w-48">
-                        <label className="block text-xs font-mono text-brand-500 mb-1">Format Hint</label>
+                    <div>
+                        <label className="ui-label">Format Hint</label>
                         <select 
                             value={formatHint} 
                             onChange={(e) => setFormatHint(e.target.value)}
@@ -87,12 +94,14 @@ const IacInput = ({ onAnalyze, isAnalyzing }) => {
                             <option value="auto">Auto-detect</option>
                             <option value="docker-compose">Docker Compose</option>
                             <option value="kubernetes">Kubernetes</option>
+                            <option value="terraform">Terraform</option>
+                            <option value="cloudformation">CloudFormation</option>
                         </select>
                     </div>
                 </div>
 
-                <p className="text-brand-600 dark:text-brand-400 text-sm mb-4">
-                    Or paste your Docker Compose or Kubernetes YAML manifest below:
+                <p className="mb-4 text-sm text-brand-600 dark:text-brand-400">
+                    Or paste an IaC manifest below:
                 </p>
                 
                 <form onSubmit={handleSubmit} className="relative">
@@ -101,8 +110,8 @@ const IacInput = ({ onAnalyze, isAnalyzing }) => {
                             <Code className="w-4 h-4" />
                         </div>
                         <textarea
-                            className="input-brand w-full h-64 resize-y font-mono text-sm leading-relaxed bg-brand-50 dark:bg-brand-900/50"
-                            placeholder="version: '3.8'\nservices:\n  api:\n    image: node:18\n..."
+                            className="input-brand h-72 w-full resize-y bg-brand-50 font-mono text-sm leading-relaxed dark:bg-brand-900/50"
+                            placeholder={'resource "aws_s3_bucket" "uploads" {\n  bucket = "customer-uploads"\n}\n'}
                             value={iacContent}
                             onChange={(e) => setIacContent(e.target.value)}
                             onKeyDown={handleKeyDown}
@@ -111,12 +120,12 @@ const IacInput = ({ onAnalyze, isAnalyzing }) => {
                         />
                     </div>
 
-                    <div className="flex items-center justify-between mt-4">
-                        <span className="text-xs text-brand-400 font-mono">Ctrl+Enter to submit</span>
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span className="text-xs font-medium uppercase tracking-wide text-brand-400">Ctrl+Enter to submit</span>
                         <button
                             type="submit"
                             disabled={isAnalyzing || !iacContent.trim()}
-                            className={`flex items-center gap-2 bg-brand-success hover:bg-green-600 text-white px-4 py-2 rounded-lg font-bold transition-all shadow-md shadow-green-500/20 ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`inline-flex items-center justify-center gap-2 rounded-lg bg-brand-success px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-600 ${isAnalyzing ? 'cursor-not-allowed opacity-50' : ''}`}
                         >
                             {isAnalyzing ? (
                                 <>Parsing IaC...</>

@@ -97,3 +97,30 @@ export const analyzeIac = async (iacContent, projectName = "Untitled Project", f
         throw error;
     }
 };
+
+export const analyzeCode = async (codeContent, projectName = "Source Security Audit", language = 'auto') => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/analyze-code`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                code_content: codeContent,
+                project_name: projectName,
+                language,
+                analysis_mode: 'standard',
+            }),
+        });
+
+        if (!response.ok) {
+            const errorPayload = await response.json().catch(() => null);
+            throw new Error(errorPayload?.detail || `API error: ${response.status}`);
+        }
+
+        return mapAnalysisResult(await response.json());
+    } catch (error) {
+        console.error("Backend connection failed for code analysis.", error);
+        throw error;
+    }
+};

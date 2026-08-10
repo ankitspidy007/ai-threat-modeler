@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import ThreatInput from './components/ThreatInput';
 import IacInput from './components/IacInput';
+import CodeInput from './components/CodeInput';
 import ThreatDashboard from './components/ThreatDashboard';
 import AIAnalysis from './components/AIAnalysis';
 import AnalysisHistory from './components/AnalysisHistory';
 import Sidebar from './components/Sidebar';
-import { analyzeDocuments, analyzeSystem, analyzeIac } from './services/mockAi';
+import { analyzeDocuments, analyzeSystem, analyzeIac, analyzeCode } from './services/mockAi';
 import { useStreamingAnalysis } from './hooks/useStreamingAnalysis';
 import { saveAnalysis } from './utils/storage';
 import { mapAnalysisResult } from './utils/analysisMapper';
-import { RotateCcw, Zap, Sparkles, Clock } from 'lucide-react';
+import { RotateCcw, Zap, Sparkles, Clock, FileCode2 } from 'lucide-react';
 import { useToast } from './components/Toast';
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
   const [projectName, setProjectName] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState('static');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('theme') === 'dark';
   });
@@ -94,6 +96,23 @@ function App() {
     }
   };
 
+  const handleCodeAnalyze = async (codeContent, name, language) => {
+    setProjectName(name);
+    setData(null);
+    setIsAnalyzing(true);
+    try {
+      const result = await analyzeCode(codeContent, name, language);
+      setData(result);
+      saveAnalysis(name, result);
+      toast.success(`Code analysis complete! Found ${result.threats.length} potential threats.`, 'Success');
+    } catch (error) {
+      console.error('Code analysis failed', error);
+      toast.error(error.message || 'Failed to analyze source code.', 'Analysis Failed');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleAIAnalysisComplete = (result, name) => {
     const mappedResult = mapAnalysisResult(result);
     setData(mappedResult);
@@ -116,8 +135,9 @@ function App() {
   // Page titles and icons for the header
   const pageInfo = {
     static: { title: 'Static Analysis', subtitle: 'Rule-based + NLP + Semantic threat detection', icon: Zap, color: 'text-brand-primary' },
-    iac: { title: 'Infrastructure-as-Code', subtitle: 'Parse Docker Compose and K8s files', icon: Zap, color: 'text-brand-success' },
-    ai: { title: 'AI Analysis', subtitle: 'LLM-enhanced analysis with RAG', icon: Sparkles, color: 'text-purple-500' },
+    code: { title: 'Code Security', subtitle: 'Evidence-backed checks for common source vulnerabilities', icon: FileCode2, color: 'text-brand-primary' },
+    iac: { title: 'Infrastructure-as-Code', subtitle: 'Analyze Compose, Kubernetes, Terraform, and CloudFormation', icon: Zap, color: 'text-brand-success' },
+    ai: { title: 'AI Analysis', subtitle: 'LLM-enhanced analysis with RAG', icon: Sparkles, color: 'text-brand-secondary' },
     history: { title: 'Analysis History', subtitle: 'Previous analyses saved locally', icon: Clock, color: 'text-brand-secondary' },
   };
 
@@ -132,19 +152,21 @@ function App() {
         onTabChange={setActiveTab}
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode(!darkMode)}
+        collapsed={sidebarCollapsed}
+        onCollapsedChange={setSidebarCollapsed}
       />
 
       {/* Main Content — offset by sidebar width */}
-      <div className="ml-[68px] transition-all duration-300">
+      <div className={`${sidebarCollapsed ? 'ml-[68px]' : 'ml-[220px]'} transition-all duration-300`}>
         {/* Top Bar */}
-        <header className="sticky top-0 z-40 border-b border-white/70 dark:border-brand-700/60 bg-white/58 dark:bg-brand-900/58 backdrop-blur-xl">
-          <div className="px-6 py-4 flex items-center justify-between max-w-[1440px] mx-auto">
+        <header className="sticky top-0 z-40 border-b border-brand-200 bg-white/95 dark:border-brand-700 dark:bg-brand-900/95">
+          <div className="mx-auto flex max-w-[1440px] items-center justify-between px-8 py-3.5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/80 dark:bg-brand-800/80 shadow-sm border border-white/70 dark:border-brand-700/60">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 dark:border-brand-700 dark:bg-brand-800">
                 <PageIcon className={`w-5 h-5 ${currentPage.color}`} />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-brand-900 dark:text-white">{currentPage.title}</h1>
+                <h1 className="text-lg font-semibold text-brand-950 dark:text-white">{currentPage.title}</h1>
                 <p className="text-xs text-brand-500 dark:text-brand-400">{currentPage.subtitle}</p>
               </div>
             </div>
@@ -152,13 +174,13 @@ function App() {
               {data && (
                 <button
                   onClick={handleNewAnalysis}
-                  className="flex items-center gap-2 px-3.5 py-2 text-sm border border-brand-200 dark:border-brand-600 rounded-xl hover:bg-white dark:hover:bg-brand-800 transition-colors text-brand-600 dark:text-brand-300 shadow-sm"
+                  className="ui-button-secondary"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   New Analysis
                 </button>
               )}
-              <div className="text-[10px] font-mono text-brand-500 dark:text-brand-500 border border-brand-200 dark:border-brand-700 px-2.5 py-1 rounded-full bg-white/70 dark:bg-brand-800/80">
+              <div className="ui-chip font-mono">
                 v2.0.0
               </div>
             </div>
@@ -166,18 +188,18 @@ function App() {
         </header>
 
         {/* Page Content */}
-        <main className="px-6 py-8 max-w-[1440px] mx-auto">
+        <main className="mx-auto max-w-[1440px] px-8 py-7">
           {activeTab === 'static' ? (
             <>
               {!data && !isAnalyzing && (
-                <div className="text-center mb-10 max-w-4xl mx-auto animate-fade-in-up panel-soft px-8 py-10">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-brand-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-brand-primary mb-4">
+                <div className="mx-auto mb-7 w-full max-w-6xl animate-fade-in-up panel-soft px-6 py-5">
+                  <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-brand-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-primary">
                     Local Analysis
                   </div>
-                  <h2 className="text-4xl font-bold mb-3 text-brand-900 dark:text-white tracking-tight">
+                  <h2 className="mb-2 text-2xl font-semibold tracking-tight text-brand-950 dark:text-white">
                     Rule-Based Threat Detection
                   </h2>
-                  <p className="text-brand-600 dark:text-brand-400 text-base max-w-2xl mx-auto leading-7">
+                  <p className="max-w-3xl text-sm leading-6 text-brand-600 dark:text-brand-400">
                     Fast, accurate threat detection using our enhanced rule engine with 60+ threat patterns, NLP-powered parsing, and semantic matching.
                   </p>
                 </div>
@@ -186,7 +208,7 @@ function App() {
               {!data && <ThreatInput onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing || streaming.isAnalyzing} />}
 
               {activeTab === 'static' && (isAnalyzing || streaming.isAnalyzing) && (
-                <div className="flex flex-col items-center justify-center py-16 space-y-6 animate-fade-in-up panel-soft">
+                <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-center space-y-6 px-6 py-14 animate-fade-in-up panel-soft">
                   {/* Live progress bar */}
                   <div className="w-full max-w-md px-8 pt-10">
                     <div className="flex justify-between items-center mb-2">
@@ -199,7 +221,7 @@ function App() {
                     </div>
                     <div className="h-2 bg-brand-100 dark:bg-brand-800 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-brand-primary to-brand-accent rounded-full transition-all duration-500 ease-out"
+                        className="h-full rounded-full bg-brand-primary transition-all duration-500 ease-out"
                         style={{ width: `${streaming.progress || 2}%` }}
                       />
                     </div>
@@ -218,17 +240,28 @@ function App() {
                 </div>
               )}
             </>
+          ) : activeTab === 'code' ? (
+            <>
+              {!data && <CodeInput onAnalyze={handleCodeAnalyze} isAnalyzing={isAnalyzing} />}
+              {isAnalyzing && (
+                <div className="mx-auto flex w-full max-w-6xl items-center justify-center gap-3 px-6 py-14 panel-soft text-sm text-brand-500 dark:text-brand-400">
+                  <FileCode2 className="h-5 w-5 animate-pulse text-brand-primary" />
+                  Analyzing source code...
+                </div>
+              )}
+              {data && <div className="w-full"><ThreatDashboard data={data} projectName={projectName} /></div>}
+            </>
           ) : activeTab === 'iac' ? (
             <>
               {!data && !isAnalyzing && (
-                <div className="text-center mb-10 max-w-4xl mx-auto animate-fade-in-up panel-soft px-8 py-10">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-brand-success/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-brand-success mb-4">
+                <div className="mx-auto mb-7 w-full max-w-6xl animate-fade-in-up panel-soft px-6 py-5">
+                  <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-brand-success/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-success">
                     Infrastructure
                   </div>
-                  <h2 className="text-4xl font-bold mb-3 text-brand-900 dark:text-white tracking-tight">
+                  <h2 className="mb-2 text-2xl font-semibold tracking-tight text-brand-950 dark:text-white">
                     IaC Architecture Parser
                   </h2>
-                  <p className="text-brand-600 dark:text-brand-400 text-base max-w-2xl mx-auto leading-7">
+                  <p className="max-w-3xl text-sm leading-6 text-brand-600 dark:text-brand-400">
                     Directly parse Docker Compose and Kubernetes manifests to build architectural threat models.
                   </p>
                 </div>
@@ -237,7 +270,7 @@ function App() {
               {!data && <IacInput onAnalyze={handleIacAnalyze} isAnalyzing={isAnalyzing} />}
 
               {isAnalyzing && (
-                <div className="flex flex-col items-center justify-center py-16 space-y-6 animate-fade-in-up panel-soft">
+                <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-center space-y-6 px-6 py-14 animate-fade-in-up panel-soft">
                   <div className="w-10 h-10 border-3 border-brand-200 dark:border-brand-700 border-t-brand-success rounded-full animate-spin" />
                   <p className="text-sm font-mono text-brand-500 dark:text-brand-400 pb-10">Parsing Infrastructure-as-Code...</p>
                 </div>
@@ -266,7 +299,7 @@ function App() {
         </main>
 
         {/* Footer */}
-        <footer className="py-4 text-center text-brand-400 dark:text-brand-500 text-xs border-t border-brand-200/60 dark:border-brand-700/60 mt-auto">
+        <footer className="mt-auto border-t border-brand-200 py-4 text-center text-xs text-brand-400 dark:border-brand-700 dark:text-brand-500">
           <p>&copy; 2026 AITM v2.0 • NLP &bull; Semantic Search &bull; Attack Chains &bull; Multi-LLM</p>
         </footer>
       </div>

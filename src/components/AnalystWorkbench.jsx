@@ -77,7 +77,7 @@ export default function AnalystWorkbench({ data, projectName, reviewStates }) {
   return (
     <section className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
       <div className="space-y-6">
-        <div className="rounded-[28px] border bg-white/80 p-6 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.28)] backdrop-blur-xl dark:border-brand-700 dark:bg-brand-800/72">
+        <div className="ui-panel p-6">
           <div className="flex items-center gap-2">
             <Bot className="h-5 w-5 text-brand-primary" />
             <h3 className="text-lg font-bold text-brand-950 dark:text-white">Threat modeling copilot</h3>
@@ -94,20 +94,20 @@ export default function AnalystWorkbench({ data, projectName, reviewStates }) {
             />
             <button onClick={askCopilot} className="btn-brand whitespace-nowrap">Ask</button>
           </div>
-          <div className="mt-4 rounded-[24px] border border-brand-100 bg-brand-50/70 p-4 dark:border-brand-700 dark:bg-brand-900/25">
+          <div className="ui-subpanel mt-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">{copilotAnswer.title}</p>
             <p className="mt-3 text-sm leading-7 text-brand-700 dark:text-brand-300">{copilotAnswer.answer}</p>
             {copilotAnswer.bullets?.length > 0 && (
               <ul className="mt-3 space-y-2 text-sm text-brand-700 dark:text-brand-300">
                 {copilotAnswer.bullets.map((bullet, index) => (
-                  <li key={index} className="rounded-2xl bg-white/80 px-3 py-2 dark:bg-brand-800/60">{bullet}</li>
+                  <li key={index} className="rounded-lg border border-brand-200 bg-white px-3 py-2 dark:border-brand-700 dark:bg-brand-800/60">{bullet}</li>
                 ))}
               </ul>
             )}
           </div>
         </div>
 
-        <div className="rounded-[28px] border bg-white/80 p-6 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.28)] backdrop-blur-xl dark:border-brand-700 dark:bg-brand-800/72">
+        <div className="ui-panel p-6">
           <div className="flex items-center gap-2">
             <Layers3 className="h-5 w-5 text-brand-primary" />
             <h3 className="text-lg font-bold text-brand-950 dark:text-white">Architecture workbench</h3>
@@ -117,7 +117,7 @@ export default function AnalystWorkbench({ data, projectName, reviewStates }) {
           </p>
           <div className="mt-4 grid gap-3">
             {(data.architecture?.components || []).slice(0, 8).map((component) => (
-              <div key={component.id} className="rounded-[22px] border border-brand-100 bg-brand-50/70 p-4 dark:border-brand-700 dark:bg-brand-900/25">
+              <div key={component.id} className="ui-subpanel">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-brand-950 dark:text-white">{component.name}</p>
@@ -140,7 +140,7 @@ export default function AnalystWorkbench({ data, projectName, reviewStates }) {
       </div>
 
       <div className="space-y-6">
-        <div className="rounded-[28px] border bg-white/80 p-6 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.28)] backdrop-blur-xl dark:border-brand-700 dark:bg-brand-800/72">
+        <div className="ui-panel p-6">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <MessageSquareQuote className="h-5 w-5 text-brand-primary" />
@@ -154,7 +154,7 @@ export default function AnalystWorkbench({ data, projectName, reviewStates }) {
             {data.domain_context?.headline || 'No domain-specific context was attached to this run.'}
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <div className="rounded-[22px] border border-brand-100 bg-brand-50/70 p-4 dark:border-brand-700 dark:bg-brand-900/25">
+            <div className="ui-subpanel">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Priority controls</p>
               <ul className="mt-3 space-y-2 text-sm text-brand-700 dark:text-brand-300">
                 {(data.domain_context?.priority_controls || []).map((item) => (
@@ -162,7 +162,7 @@ export default function AnalystWorkbench({ data, projectName, reviewStates }) {
                 ))}
               </ul>
             </div>
-            <div className="rounded-[22px] border border-brand-100 bg-brand-50/70 p-4 dark:border-brand-700 dark:bg-brand-900/25">
+            <div className="ui-subpanel">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">High-risk areas</p>
               <ul className="mt-3 space-y-2 text-sm text-brand-700 dark:text-brand-300">
                 {(data.domain_context?.high_risk_areas || []).map((item) => (
@@ -173,24 +173,24 @@ export default function AnalystWorkbench({ data, projectName, reviewStates }) {
           </div>
         </div>
 
-        <div className="rounded-[28px] border bg-white/80 p-6 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.28)] backdrop-blur-xl dark:border-brand-700 dark:bg-brand-800/72">
+        <div className="ui-panel p-6">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <ListTodo className="h-5 w-5 text-brand-primary" />
               <h3 className="text-lg font-bold text-brand-950 dark:text-white">Action register</h3>
             </div>
             <div className="flex gap-2">
-              <button onClick={exportActionRegister} className="rounded-xl border border-brand-200 bg-white px-3 py-2 text-xs font-semibold text-brand-700 dark:border-brand-700 dark:bg-brand-800 dark:text-brand-300">
+              <button onClick={exportActionRegister} className="ui-button-secondary px-3 py-2 text-xs">
                 <span className="inline-flex items-center gap-1.5"><Download className="h-3.5 w-3.5" /> CSV</span>
               </button>
-              <button onClick={exportActionBrief} className="rounded-xl border border-brand-200 bg-white px-3 py-2 text-xs font-semibold text-brand-700 dark:border-brand-700 dark:bg-brand-800 dark:text-brand-300">
+              <button onClick={exportActionBrief} className="ui-button-secondary px-3 py-2 text-xs">
                 <span className="inline-flex items-center gap-1.5"><Download className="h-3.5 w-3.5" /> Brief</span>
               </button>
             </div>
           </div>
           <div className="mt-4 space-y-3">
             {actionRows.map((row) => (
-              <div key={row.id} className="rounded-[22px] border border-brand-100 bg-brand-50/70 p-4 dark:border-brand-700 dark:bg-brand-900/25">
+              <div key={row.id} className="ui-subpanel">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-brand-950 dark:text-white">{row.title}</p>

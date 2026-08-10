@@ -1,0 +1,181 @@
+[
+  {
+    "threat_id": "ZT-001",
+    "threat_name": "Missing Workload Identity for Service-to-Service Calls",
+    "component": ["Service", "IAM", "API", "Container"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Spoofing",
+    "attack_vector": "Services authenticate using static credentials, shared tokens, or network location instead of verifiable workload identity, allowing caller impersonation.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Confidentiality", "Integrity"],
+    "prerequisites": ["Service-to-service traffic exists", "No mTLS or workload identity", "Shared credentials or implicit network trust"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Use workload identity and mutual authentication",
+        "implementation": "Adopt service mesh mTLS or cloud workload identity and verify caller identity at each service boundary.",
+        "tools": ["SPIFFE/SPIRE", "Istio", "Linkerd", "AWS IAM Roles Anywhere", "GCP Workload Identity"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Service authentication review",
+        "indicators": ["Bearer tokens shared across services", "No client certificate validation", "Authorization based only on source IP"],
+        "tools": ["Service Mesh Telemetry", "Config Audit", "SIEM"]
+      }
+    ],
+    "references": {
+      "cwe": ["CWE-287", "CWE-306"],
+      "mitre_attack": ["T1550"],
+      "nist": ["IA-2", "SC-8", "AC-3"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001", "PCI-DSS"],
+    "architecture_patterns": ["Zero-Trust", "Microservices", "Container-based"],
+    "trust_boundaries": ["Service -> Service", "Container -> Service"],
+    "tags": ["zero-trust", "workload-identity", "mtls", "service-auth"]
+  },
+  {
+    "threat_id": "ZT-002",
+    "threat_name": "Excessive OAuth or API Scopes",
+    "component": ["API", "IAM", "Service", "WebClient"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Elevation of Privilege",
+    "attack_vector": "Applications request broad OAuth scopes or API permissions, allowing a stolen token or compromised app to access more data or actions than required.",
+    "likelihood": "High",
+    "impact": "High",
+    "affected_cia": ["Confidentiality", "Integrity"],
+    "prerequisites": ["OAuth/OIDC or API tokens are used", "Scopes are broad or admin-consented", "No least-privilege review"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Reduce scopes to least privilege",
+        "implementation": "Use incremental consent, resource-specific consent, short-lived tokens, and regular app permission reviews.",
+        "tools": ["Entra ID", "OAuth Consent Review", "Cloud IAM Recommender"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "OAuth app permission audit",
+        "indicators": ["Wildcard or admin scopes", "Long-lived refresh tokens", "Unused granted scopes"],
+        "tools": ["IdP Logs", "CASB", "SIEM"]
+      }
+    ],
+    "references": {
+      "owasp": ["API5:2023", "A01:2021"],
+      "cwe": ["CWE-266", "CWE-269"],
+      "mitre_attack": ["T1528"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001", "GDPR"],
+    "architecture_patterns": ["Zero-Trust", "API-first", "SaaS"],
+    "trust_boundaries": ["User -> Application", "Application -> API"],
+    "tags": ["oauth", "authorization", "least-privilege", "zero-trust"]
+  },
+  {
+    "threat_id": "ZT-003",
+    "threat_name": "Missing Step-Up Authentication for Sensitive Actions",
+    "component": ["WebClient", "API", "IAM", "Service"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Spoofing",
+    "attack_vector": "Attackers using a stolen session can perform sensitive actions because the application does not require recent MFA, re-authentication, or risk-based verification.",
+    "likelihood": "Medium",
+    "impact": "High",
+    "affected_cia": ["Confidentiality", "Integrity"],
+    "prerequisites": ["Sensitive actions exist", "Session tokens are sufficient for all operations", "No risk-based or action-based reauthentication"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Require step-up verification for high-risk operations",
+        "implementation": "Trigger phishing-resistant MFA or re-authentication before payment changes, privilege changes, credential viewing, exports, or destructive actions.",
+        "tools": ["FIDO2", "WebAuthn", "Adaptive MFA", "Risk Engine"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Sensitive action audit",
+        "indicators": ["Privilege change without recent auth", "Export after unusual login", "High-risk action from new device"],
+        "tools": ["IdP Logs", "Application Audit Logs", "SIEM"]
+      }
+    ],
+    "references": {
+      "owasp": ["A07:2021", "ASVS V2"],
+      "cwe": ["CWE-287", "CWE-613"],
+      "nist": ["IA-2"]
+    },
+    "compliance_relevance": ["PCI-DSS", "SOC2", "ISO27001", "HIPAA"],
+    "architecture_patterns": ["Zero-Trust", "API-first"],
+    "trust_boundaries": ["User -> Privileged Action"],
+    "tags": ["mfa", "step-up-auth", "session-security", "zero-trust"]
+  },
+  {
+    "threat_id": "ZT-004",
+    "threat_name": "Privilege Creep in Service Accounts",
+    "component": ["IAM", "Service", "CI/CD", "Serverless"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Elevation of Privilege",
+    "attack_vector": "Service accounts accumulate permissions over time and become high-value lateral movement paths after application, pipeline, or cloud identity compromise.",
+    "likelihood": "High",
+    "impact": "Critical",
+    "affected_cia": ["Confidentiality", "Integrity", "Availability"],
+    "prerequisites": ["Long-lived service accounts", "Permissions are not reviewed", "Unused permissions are retained"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Continuously right-size service account permissions",
+        "implementation": "Use usage-based IAM recommendations, separate identities per workload, remove stale grants, and enforce permission boundaries.",
+        "tools": ["IAM Access Analyzer", "GCP IAM Recommender", "Azure PIM", "CIEM"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Cloud identity entitlement analysis",
+        "indicators": ["Permissions unused for 90 days", "Service account with admin role", "Same identity used by multiple workloads"],
+        "tools": ["CIEM", "CloudTrail", "Azure Activity Logs", "GCP Audit Logs"]
+      }
+    ],
+    "references": {
+      "cwe": ["CWE-266", "CWE-269"],
+      "mitre_attack": ["T1098", "T1078"],
+      "nist": ["AC-2", "AC-6"]
+    },
+    "compliance_relevance": ["SOC2", "ISO27001", "SOX"],
+    "architecture_patterns": ["Zero-Trust", "Microservices", "Hybrid"],
+    "trust_boundaries": ["Workload -> Cloud Control Plane"],
+    "tags": ["iam", "service-account", "privilege-creep", "ciem"]
+  },
+  {
+    "threat_id": "ZT-005",
+    "threat_name": "Tenant Isolation Failure in Shared Authorization Layer",
+    "component": ["API", "Service", "Database", "IAM"],
+    "cloud_platform": ["AWS", "Azure", "GCP", "On-Premise", "Hybrid"],
+    "stride_category": "Information Disclosure",
+    "attack_vector": "Authorization checks validate user identity but fail to enforce tenant, organization, or workspace ownership on requested resources.",
+    "likelihood": "High",
+    "impact": "Critical",
+    "affected_cia": ["Confidentiality", "Integrity"],
+    "prerequisites": ["Multi-tenant data model", "Resource identifiers are user-controlled", "Tenant ownership is not checked consistently"],
+    "mitigations": [
+      {
+        "control_type": "Preventive",
+        "description": "Enforce tenant context on every resource access",
+        "implementation": "Use centralized authorization that binds user, tenant, resource, action, and relationship checks before data access.",
+        "tools": ["OPA", "Zanzibar-style Authorization", "Database RLS", "Policy Engine"]
+      }
+    ],
+    "detection_methods": [
+      {
+        "method": "Cross-tenant access testing",
+        "indicators": ["Object ID from another tenant returns 200", "Missing tenant_id predicate", "Tenant mismatch in audit log"],
+        "tools": ["API Tests", "DAST", "Application Logs"]
+      }
+    ],
+    "references": {
+      "owasp": ["API1:2023", "A01:2021"],
+      "cwe": ["CWE-639", "CWE-862", "CWE-863"]
+    },
+    "compliance_relevance": ["GDPR", "HIPAA", "SOC2", "ISO27001"],
+    "architecture_patterns": ["API-first", "Microservices", "SaaS", "Zero-Trust"],
+    "trust_boundaries": ["Tenant -> Tenant", "User -> Resource"],
+    "tags": ["multi-tenant", "authorization", "idor", "tenant-isolation"]
+  }
+]

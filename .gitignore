@@ -33,3 +33,7 @@ test_out.txt
 *.njsproj
 *.sln
 *.sw?
+
+# Virtual environments
+.venv/
+backend/.venv/
