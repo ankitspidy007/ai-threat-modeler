@@ -131,14 +131,47 @@ THREAT_LIBRARY = {
     },
     "redis_missing_auth": {
         "id": "CTX-DATA-003",
-        "category": "Information Disclosure",
-        "title": "Redis cache lacks authentication controls",
-        "description": "A Redis cache is present without explicit authentication, allowing unauthorized cache access if the network boundary is crossed.",
-        "root_cause": "Cache authentication is missing or not documented for a session or application data store.",
-        "owasp_top_10": ["A05:2021 Security Misconfiguration"],
-        "cwe": ["CWE-306", "CWE-200"],
-        "mitre_attack": ["T1552"],
+        "category": "Spoofing",
+        "title": "Redis session store permits unauthenticated session access",
+        "description": "A Redis-backed session store explicitly lacks authentication, allowing session injection or impersonation if its network boundary is reached.",
+        "root_cause": "Redis authentication is explicitly absent from a session security boundary.",
+        "owasp_top_10": ["A07:2021 Identification and Authentication Failures"],
+        "cwe": ["CWE-306", "CWE-384"],
+        "mitre_attack": ["T1078"],
         "nist_800_53": ["AC-3", "IA-2"],
+    },
+    "redis_session_auth_unknown": {
+        "id": "CTX-SESSION-001",
+        "category": "Spoofing",
+        "title": "Redis session-store authentication requires validation",
+        "description": "Redis stores application sessions, but its authentication, TLS, and network-isolation controls are not defined at the component boundary.",
+        "root_cause": "The architecture identifies a security-critical session store without documenting how workloads authenticate to it.",
+        "owasp_top_10": ["A07:2021 Identification and Authentication Failures"],
+        "cwe": ["CWE-306", "CWE-384"],
+        "mitre_attack": ["T1078"],
+        "nist_800_53": ["IA-2", "SC-8", "SC-7"],
+    },
+    "fhir_partner_authentication": {
+        "id": "CTX-FHIR-001",
+        "category": "Spoofing",
+        "title": "FHIR partner authentication boundary requires validation",
+        "description": "The FHIR interoperability service is modeled without component-specific partner authentication controls.",
+        "root_cause": "OAuth client identity, audience validation, and mutual TLS are not defined for the FHIR partner boundary.",
+        "owasp_top_10": ["API2:2023 Broken Authentication"],
+        "cwe": ["CWE-287", "CWE-306"],
+        "mitre_attack": ["T1078"],
+        "nist_800_53": ["IA-2", "IA-5", "SC-8"],
+    },
+    "oauth_token_lifecycle_unknown": {
+        "id": "CTX-OAUTH-001",
+        "category": "Spoofing",
+        "title": "OAuth token replay and revocation controls require validation",
+        "description": "OAuth or Azure AD is present, but token lifetime, refresh-token rotation, revocation, and replay controls are not specified.",
+        "root_cause": "The identity design names an OAuth provider without defining the token lifecycle and invalidation contract.",
+        "owasp_top_10": ["A07:2021 Identification and Authentication Failures", "API2:2023 Broken Authentication"],
+        "cwe": ["CWE-294", "CWE-613"],
+        "mitre_attack": ["T1528", "T1078"],
+        "nist_800_53": ["IA-5", "AC-12"],
     },
 }
 
@@ -172,6 +205,12 @@ class ContextualThreatEngine:
     def _analyze_component(self, component, generated_keys) -> List[Threat]:
         findings: List[Threat] = []
         props = component.properties or {}
+        explicit_negations = set(props.get('explicit_negations') or [])
+        architecture_text = ((self._system_model.metadata or {}).get('architecture_text') or '').lower()
+        component_line = next(
+            (line.strip() for line in architecture_text.splitlines() if component.name.lower() in line.lower()),
+            '',
+        )
 
         if component.type in {"API", "API Gateway", "Service", "ML Service"} and (
             component.trust_level in {"public", "external"} or props.get("public_access")
@@ -191,7 +230,7 @@ class ContextualThreatEngine:
 
         if component.type in {"API", "API Gateway", "WebClient", "Service"} and (
             component.trust_level in {"public", "external"} or props.get("public_access")
-        ) and not props.get("waf_enabled"):
+        ) and props.get("waf_enabled") is False:
             findings.append(self._build_threat(
                 "missing_waf",
                 component=component,
@@ -205,7 +244,7 @@ class ContextualThreatEngine:
                 privilege_required="none",
             ))
 
-        if component.type in {"API", "API Gateway", "Service", "WebClient"} and not props.get("input_validation"):
+        if component.type in {"API", "API Gateway", "Service", "WebClient"} and props.get("input_validation") is False and "input_validation" in explicit_negations:
             findings.append(self._build_threat(
                 "missing_input_validation",
                 component=component,
@@ -219,7 +258,7 @@ class ContextualThreatEngine:
                 privilege_required="none",
             ))
 
-        if component.type == "Database" and props.get("db_type") == "redis" and props.get("auth_type") in {None, "", "none"}:
+        if component.type == "Database" and props.get("db_type") == "redis" and props.get("auth_type") == "none":
             findings.append(self._build_threat(
                 "redis_missing_auth",
                 component=component,
@@ -232,8 +271,61 @@ class ContextualThreatEngine:
                 exploit_complexity="low",
                 privilege_required="low",
             ))
+        elif component.type == "Database" and props.get("db_type") == "redis" and props.get("auth_type") in {None, "", "unknown"} and 'session' in component_line:
+            findings.append(self._build_threat(
+                "redis_session_auth_unknown",
+                component=component,
+                asset=self._match_asset_for_component(component),
+                flow_ref=None,
+                generated_keys=generated_keys,
+                realistic_attack_scenario=f"If an attacker or compromised workload can reach {component.name}, weak Redis client authentication could permit session injection, fixation, or theft.",
+                exposure="internal",
+                data_sensitivity="credentials",
+                exploit_complexity="medium",
+                privilege_required="low",
+                confidence_override="Medium",
+                finding_type="control_gap",
+                evidence_override=[f"Architecture input: {component_line}", "Redis AUTH/ACL and component-specific TLS are not specified."],
+            ))
 
-        if component.type in {"Database", "Object Storage", "Data Warehouse"} and props.get("data_sensitivity") in {"pii", "financial", "credentials", "phi", "secrets"} and not props.get("encryption_at_rest"):
+        is_fhir = 'fhir' in component.id.lower() or 'hl7' in component.id.lower() or props.get('healthcare_integration')
+        if is_fhir and props.get('auth_type') in {None, "", "unknown", "none"}:
+            explicit_missing = props.get('auth_type') == 'none'
+            findings.append(self._build_threat(
+                "fhir_partner_authentication",
+                component=component,
+                asset=self._match_asset_for_component(component),
+                flow_ref=None,
+                generated_keys=generated_keys,
+                realistic_attack_scenario=f"A system presenting a stolen or untrusted partner identity calls {component.name} and attempts to query or modify PHI through the interoperability API.",
+                exposure="external" if props.get('external') else "internal",
+                data_sensitivity="phi",
+                exploit_complexity="low" if explicit_missing else "medium",
+                privilege_required="none" if explicit_missing else "low",
+                confidence_override="High" if explicit_missing else "Medium",
+                finding_type="control_gap",
+                evidence_override=[f"Architecture input: {component_line}", "FHIR-specific OAuth client credentials, audience validation, and mTLS are not specified."],
+            ))
+
+        has_token_lifecycle = any(token in architecture_text for token in ('token revocation', 'refresh token rotation', 'refresh-token rotation', 'token rotation', 'session revocation'))
+        if component.type == 'Identity Provider' and props.get('auth_type') in {'oauth2', 'azure_ad'} and not has_token_lifecycle:
+            findings.append(self._build_threat(
+                "oauth_token_lifecycle_unknown",
+                component=component,
+                asset=self._match_asset_for_component(component),
+                flow_ref=None,
+                generated_keys=generated_keys,
+                realistic_attack_scenario=f"An attacker replays a stolen access or refresh token accepted through {component.name} after the legitimate user expects the session to be invalidated.",
+                exposure="external",
+                data_sensitivity="credentials",
+                exploit_complexity="medium",
+                privilege_required="none",
+                confidence_override="Medium",
+                finding_type="control_gap",
+                evidence_override=[f"Architecture input: {component_line}", "Token lifetime, refresh-token rotation, replay detection, and revocation are not specified."],
+            ))
+
+        if component.type in {"Database", "Object Storage", "Data Warehouse"} and props.get("data_sensitivity") in {"pii", "financial", "credentials", "phi", "secrets"} and props.get("encryption_at_rest") is False and "encryption_at_rest" in explicit_negations:
             findings.append(self._build_threat(
                 "unencrypted_storage",
                 component=component,
@@ -249,7 +341,7 @@ class ContextualThreatEngine:
 
         if component.type in {"Service", "API", "ML Service"} and (
             props.get("third_party_integration") or props.get("has_webhooks") or props.get("external")
-        ) and not props.get("secrets_manager") and not props.get("idp_integration"):
+        ) and props.get("secrets_manager") is False and props.get("idp_integration") is False:
             findings.append(self._build_threat(
                 "secrets_exposure",
                 component=component,
@@ -263,7 +355,7 @@ class ContextualThreatEngine:
                 privilege_required="low",
             ))
 
-        if props.get("cloud_provider") and component.type in {"Service", "API", "ML Service"} and not props.get("rbac_enabled"):
+        if props.get("cloud_provider") and component.type in {"Service", "API", "ML Service"} and props.get("rbac_enabled") is False:
             findings.append(self._build_threat(
                 "iam_misconfig",
                 component=component,
@@ -277,7 +369,7 @@ class ContextualThreatEngine:
                 privilege_required="low",
             ))
 
-        if props.get("containerized") or props.get("deployment") == "k8s":
+        if (props.get("containerized") or props.get("deployment") == "k8s") and props.get("container_image_provenance") is False:
             findings.append(self._build_threat(
                 "supply_chain",
                 component=component,
@@ -291,7 +383,12 @@ class ContextualThreatEngine:
                 privilege_required="low",
             ))
 
-        if component.type == "ML Service" or props.get("ml_pipeline") or props.get("has_graphql") and props.get("user_html_input"):
+        if (component.type == "ML Service" or props.get("ml_pipeline")) and (
+            props.get("untrusted_retrieval") is True
+            or props.get("tool_authorization") is False
+            or props.get("prompt_sanitization") is False
+            or props.get("output_validation") is False
+        ):
             findings.append(self._build_threat(
                 "llm_prompt_injection",
                 component=component,
@@ -323,8 +420,8 @@ class ContextualThreatEngine:
             or "internal"
         )
 
-        if data_flow.protocol.lower() in {"http", "tcp", "ws"} and (
-            data_flow.assumed or source.trust_level != target.trust_level or combined_sensitivity not in {"application_data", "internal"}
+        if data_flow.protocol.lower() in {"http", "ws"} and not data_flow.assumed and (
+            source.trust_level != target.trust_level or combined_sensitivity not in {"application_data", "internal"}
         ):
             findings.append(self._build_threat(
                 "cleartext_flow",
@@ -355,7 +452,12 @@ class ContextualThreatEngine:
                     privilege_required="low",
                 ))
 
-        if target.trust_level == "external" and combined_sensitivity in {"pii", "financial", "credentials", "phi", "secrets"}:
+        if (
+            target.trust_level == "external"
+            and target.type != "Identity Provider"
+            and not data_flow.assumed
+            and combined_sensitivity in {"pii", "financial", "credentials", "phi", "secrets"}
+        ):
             findings.append(self._build_threat(
                 "external_data_exposure",
                 component=source,
@@ -400,6 +502,9 @@ class ContextualThreatEngine:
         data_sensitivity: str,
         exploit_complexity: str,
         privilege_required: str,
+        confidence_override: Optional[str] = None,
+        finding_type: str = "architecture",
+        evidence_override: Optional[List[str]] = None,
     ) -> Optional[Threat]:
         library_entry = THREAT_LIBRARY[pattern]
         component_id = component.id if component else None
@@ -408,6 +513,7 @@ class ContextualThreatEngine:
             return None
         generated_keys.add(dedupe_key)
 
+        confidence = confidence_override or ("High" if not flow_ref or not flow_ref.endswith("assumed") else "Medium")
         risk = calculate_risk({
             "category": library_entry["category"],
             "exposure": exposure,
@@ -415,6 +521,7 @@ class ContextualThreatEngine:
             "asset_sensitivity": asset.sensitivity if asset else data_sensitivity,
             "exploit_complexity": exploit_complexity,
             "privilege_required": privilege_required,
+            "evidence_confidence": confidence,
         })
         mitigation = generate_mitigation({"pattern": pattern})
 
@@ -430,7 +537,9 @@ class ContextualThreatEngine:
             likelihood=risk["likelihood"],
             impact=risk["impact"],
             risk_score=risk["risk_score"],
-            confidence="High" if not flow_ref or not flow_ref.endswith("assumed") else "Medium",
+            confidence=confidence,
+            finding_type=finding_type,
+            risk_factors=risk["risk_factors"],
             mitigation=mitigation["mitigation"],
             component=component_id,
             data_flow=flow_ref,
@@ -454,7 +563,7 @@ class ContextualThreatEngine:
             data_sensitivity=data_sensitivity,
             exploit_complexity=exploit_complexity.title(),
             privilege_required=privilege_required.title(),
-            evidence=[
+            evidence=evidence_override or [
                 f"Affected component: {component.name}" if component else "Component context inferred",
                 f"Related flow: {flow_ref}" if flow_ref else "Component-local weakness",
                 f"Related asset: {asset.name}" if asset else f"Data sensitivity: {data_sensitivity}",

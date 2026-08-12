@@ -67,8 +67,13 @@ class EmbeddingService:
     
     @property
     def is_available(self) -> bool:
-        """Check if full embedding model is available."""
-        return self.model is not None
+        """Check whether an embedding backend can produce vectors."""
+        return True
+
+    @property
+    def backend(self) -> str:
+        """Identify the active backend without overstating model capability."""
+        return "sentence_transformer" if self.model is not None else "local_hashing"
     
     def embed(self, text: str) -> np.ndarray:
         """

@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import re
 from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -9,12 +10,22 @@ from .analysis_gaps import detect_missing_elements
 from .architecture_intelligence import ArchitectureIntelligence
 from .attack_path_engine import generate_attack_paths
 from .contextual_threat_engine import ContextualThreatEngine
+from .canonical_model import canonicalize_architecture
 from .deduplication_engine import deduplicate_threats
+from .disagreement_engine import DisagreementEngine
 from .graph_builder import GraphBuilder
 from .impact_mapper import map_business_impact
 from .mermaid_generator import generate_mermaid
+from .output_model import build_system_model, group_findings, normalize_finding_output, risk_methodology
+from .knowledge_threat_engine import KnowledgeThreatEngine
+from .local_intelligence import LocalIntelligence
 from .parser import ArchitectureParser
 from .reporter import ReportGenerator
+from .risk_scoring import calculate_risk
+from .confidence_calibration import ConfidenceCalibrator
+from .stride_coverage_engine import StrideCoverageEngine
+from .specialist_router import SpecialistRouter
+from .specialist_orchestrator import SpecialistOrchestrator
 from ..knowledge_base.loader import get_knowledge_base, reload_knowledge_base
 from ..models import AnalysisResult, SystemArchitecture, Threat
 
@@ -73,6 +84,13 @@ class ThreatAnalyzer:
     def __init__(self):
         self.knowledge_base = get_knowledge_base()
         self.contextual_engine = ContextualThreatEngine(self.knowledge_base)
+        self.knowledge_engine = KnowledgeThreatEngine(self.knowledge_base)
+        self.stride_coverage_engine = StrideCoverageEngine()
+        self.specialist_router = SpecialistRouter()
+        self.specialist_orchestrator = SpecialistOrchestrator(self.knowledge_base)
+        self.local_intelligence = LocalIntelligence(self.knowledge_base)
+        self.confidence_calibrator = ConfidenceCalibrator()
+        self.disagreement_engine = DisagreementEngine()
         self._parsed_arch_cache: OrderedDict[str, SystemArchitecture] = OrderedDict()
         self._graph_cache: OrderedDict[str, object] = OrderedDict()
         self._report_cache: OrderedDict[str, str] = OrderedDict()
@@ -124,8 +142,20 @@ class ThreatAnalyzer:
         return report
 
     def reload_local_intelligence(self) -> Dict[str, object]:
+        from .embedding_service import reset_vector_store
+        from .semantic_matcher import reset_semantic_matcher
+        from .stride_classifier import reset_stride_classifier
+
+        reset_semantic_matcher()
+        reset_vector_store()
+        reset_stride_classifier()
         self.knowledge_base = reload_knowledge_base()
         self.contextual_engine = ContextualThreatEngine(self.knowledge_base)
+        self.knowledge_engine = KnowledgeThreatEngine(self.knowledge_base)
+        self.specialist_orchestrator = SpecialistOrchestrator(self.knowledge_base)
+        self.local_intelligence = LocalIntelligence(self.knowledge_base)
+        self.confidence_calibrator = ConfidenceCalibrator()
+        self.disagreement_engine = DisagreementEngine()
         self._parsed_arch_cache.clear()
         self._graph_cache.clear()
         self._report_cache.clear()
@@ -159,12 +189,17 @@ class ThreatAnalyzer:
         use_local_slm: bool = True,
         analysis_mode: str = "standard",
         domain_profile: str = "general",
+        source_documents: Optional[List[Dict[str, Any]]] = None,
     ) -> AnalysisResult:
-        cache_key = self._stable_hash({"description": description})
+        cache_key = self._stable_hash({"description": description, "source_documents": source_documents or []})
         system_architecture = self._cache_get(self._parsed_arch_cache, cache_key)
         if system_architecture is None:
             parser = ArchitectureParser()
             system_architecture = parser.parse(description)
+            if source_documents:
+                metadata = system_architecture.metadata or {}
+                metadata["source_documents"] = source_documents
+                system_architecture.metadata = metadata
             self._cache_set(self._parsed_arch_cache, cache_key, system_architecture, max_size=32)
         return self.analyze(
             system_architecture,
@@ -183,17 +218,39 @@ class ThreatAnalyzer:
         domain_profile: str = "general",
     ) -> AnalysisResult:
         analysis_flags = self._analysis_flags(analysis_mode, use_local_slm)
+        architecture, architecture_validation = canonicalize_architecture(architecture)
         graph = self._get_cached_graph(architecture)
 
-        threats = self.contextual_engine.analyze(architecture)
+        threats, specialist_diagnostics = self.specialist_orchestrator.analyze(architecture)
+        specialist_route = specialist_diagnostics
+        kb_diagnostics = specialist_diagnostics["knowledge_diagnostics"]
         threats = self._process_known_issues(architecture, threats)
         threats = self._normalize_stride(threats)
         threats = self._ensure_architecture_links(threats, architecture)
+        threats = normalize_finding_output(threats, architecture)
+        threats = self._apply_risk_model(threats, architecture)
+        threats = deduplicate_threats(threats)
+        coverage_candidates, _ = self.stride_coverage_engine.assess(
+            architecture, threats, generate_candidates=True,
+        )
+        threats.extend(coverage_candidates)
+        threats = self._normalize_stride(threats)
+        threats = normalize_finding_output(threats, architecture)
+        threats = self._apply_risk_model(threats, architecture)
+        threats = deduplicate_threats(threats)
+        threats, local_diagnostics = self.local_intelligence.enrich(
+            architecture, threats, enabled=analysis_flags["local_intelligence"],
+        )
+        disagreement_diagnostics = self.disagreement_engine.assess(threats, local_diagnostics)
+        threats, confidence_diagnostics = self.confidence_calibrator.calibrate(threats, architecture)
+        threats = self._apply_risk_model(threats, architecture)
+        threats = self._classify_tiers(threats)
+        threats = self._suppress_potentials_superseded_by_known_issues(threats)
+        _, stride_coverage = self.stride_coverage_engine.assess(
+            architecture, threats, generate_candidates=False,
+        )
         attack_paths = generate_attack_paths(architecture, threats)
         threats = self._attach_attack_paths(threats, attack_paths)
-        threats = deduplicate_threats(threats)
-        threats = self._normalize_stride(threats)
-        threats = self._classify_tiers(threats)
         threats = self._enrich_threat_explanations(threats, architecture)
         architecture_insights = []
         if analysis_flags["architecture_intelligence"]:
@@ -228,25 +285,149 @@ class ThreatAnalyzer:
             "paths": attack_paths,
             "count": len(attack_paths),
         }
+        result.system_model = build_system_model(architecture)
+        result.stride_coverage = stride_coverage
+        result.architecture_validation = architecture_validation
+        result.engine_status = {
+            "canonical_model": {"status": "active", "version": architecture_validation["version"]},
+            "rule_engine": {"status": "active", "findings": len(threats)},
+            "knowledge_base": {
+                "status": "active",
+                "schema_version": "canonical-kb-3.0",
+                "threats": len(self.knowledge_base.get_all_threats()),
+                "typed_rules": len(self.knowledge_base.get_typed_rules()),
+                "deterministic_rules": sum(
+                    item.rule_kind == "deterministic" for item in self.knowledge_base.get_typed_rules()
+                ),
+                "candidate_only_rules": sum(
+                    item.rule_kind == "candidate" for item in self.knowledge_base.get_typed_rules()
+                ),
+                "validation_issues": len(self.knowledge_base.validation_issues),
+                **kb_diagnostics,
+            },
+            "specialist_router": specialist_route,
+            "local_intelligence": local_diagnostics,
+            "disagreements": disagreement_diagnostics,
+            "confidence_calibration": confidence_diagnostics,
+            "stride_coverage": {
+                "status": "active", "version": stride_coverage["version"],
+                "applicable_cells": stride_coverage["applicable_cells"],
+                "unknown_cells": stride_coverage["unknown_cells"],
+            },
+            "quality_gate": self._runtime_quality_gate(
+                architecture_validation, threats, stride_coverage, local_diagnostics,
+                disagreement_diagnostics,
+            ),
+        }
+        result.finding_groups = group_findings(threats)
+        result.risk_methodology = risk_methodology()
         result.architecture_insights = architecture_insights
         result.ml_enhanced = {
             "analysis_mode": analysis_flags["mode"],
-            "local_intelligence": analysis_flags["local_intelligence"],
-            "semantic_matching": analysis_flags["local_intelligence"],
-            "stride_classifier": analysis_flags["local_intelligence"],
+            "local_intelligence": local_diagnostics["status"],
+            "semantic_matching": local_diagnostics["semantic_retrieval"],
+            "stride_classifier": local_diagnostics["stride_classifier"],
             "architecture_modeled": True,
             "attack_paths": True,
             "attack_chains": True,
             "contextual_threat_engine": True,
         }
         result.coverage = self._build_coverage(architecture, threats, analysis_flags, missing_information)
-        result.follow_up_questions = self._build_follow_up_questions(architecture, threats, missing_information)
+        result.follow_up_questions = self._build_follow_up_questions(
+            architecture, threats, missing_information, stride_coverage, disagreement_diagnostics,
+        )
         result.review_summary = self._build_review_summary(threats)
         result.domain_context = self._build_domain_context(domain_profile, architecture, threats)
         result.ai_security_lens = self._build_ai_security_lens(architecture, threats)
         result.priority_actions = self._build_priority_actions(threats)
         result.report_markdown = self._generate_report_markdown(result)
         return result
+
+    @staticmethod
+    def _runtime_quality_gate(
+        architecture_validation: Dict[str, Any],
+        threats: List[Threat],
+        stride_coverage: Dict[str, Any],
+        local_diagnostics: Optional[Dict[str, Any]] = None,
+        disagreement_diagnostics: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        confirmed_without_evidence = sum(
+            threat.tier == "Confirmed" and not threat.evidence_details for threat in threats
+        )
+        unmapped = sum(
+            not (threat.affected_components or threat.affected_data_flows or threat.affected_assets)
+            for threat in threats
+        )
+        confirmed_unmapped = sum(
+            threat.tier == "Confirmed"
+            and not (threat.affected_components or threat.affected_data_flows or threat.affected_assets)
+            for threat in threats
+        )
+        omitted_components = int(
+            (((local_diagnostics or {}).get("challenger") or {}).get("omitted_component_count") or 0)
+        )
+        duplicate_aliases = int(
+            (((local_diagnostics or {}).get("challenger") or {}).get("duplicate_alias_count") or 0)
+        )
+        unclassified_known_issues = sum(
+            threat.tier == "Confirmed" and str(threat.id).startswith("UNCLASSIFIED-KNOWN-ISSUE")
+            for threat in threats
+        )
+        hard_failure = (
+            not architecture_validation.get("valid", False)
+            or confirmed_without_evidence > 0
+            or confirmed_unmapped > 0
+            or omitted_components > 0
+            or duplicate_aliases > 0
+            or unclassified_known_issues > 0
+        )
+        unresolved_disagreements = int((disagreement_diagnostics or {}).get("unresolved_count") or 0)
+        status = "fail" if hard_failure else "review" if (
+            unmapped or stride_coverage.get("unknown_cells") or unresolved_disagreements
+        ) else "pass"
+        return {
+            "status": status,
+            "architecture_valid": architecture_validation.get("valid", False),
+            "confirmed_without_evidence": confirmed_without_evidence,
+            "unmapped_findings": unmapped,
+            "confirmed_unmapped_findings": confirmed_unmapped,
+            "omitted_named_components": omitted_components,
+            "duplicate_component_aliases": duplicate_aliases,
+            "unclassified_known_issues": unclassified_known_issues,
+            "unknown_stride_cells": stride_coverage.get("unknown_cells", 0),
+            "unresolved_engine_disagreements": unresolved_disagreements,
+            "publication_status": "blocked" if hard_failure else "review" if status == "review" else "ready",
+            "policy": "Invalid topology, omitted or duplicate components, unclassified known issues, confirmed findings without evidence, or confirmed findings without scope block final report publication.",
+        }
+
+    @staticmethod
+    def _suppress_potentials_superseded_by_known_issues(threats: List[Threat]) -> List[Threat]:
+        """Do not repeat an explicit source weakness as a generic question."""
+        confirmed_pairs = set()
+        for threat in threats:
+            source_refs = {
+                str(item.get("source_ref") or "") for item in (threat.evidence_details or [])
+            }
+            if threat.tier != "Confirmed" or not any(re.fullmatch(r"K\d+", ref) for ref in source_refs):
+                continue
+            category = threat.stride_category or threat.category
+            component_ids = set(threat.affected_components or [])
+            if threat.affected_component:
+                component_ids.add(threat.affected_component)
+            confirmed_pairs.update((component_id, category) for component_id in component_ids if component_id)
+
+        filtered = []
+        for threat in threats:
+            category = threat.stride_category or threat.category
+            component_ids = set(threat.affected_components or [])
+            if threat.affected_component:
+                component_ids.add(threat.affected_component)
+            superseded = threat.tier == "Potential" and any(
+                (component_id, category) in confirmed_pairs for component_id in component_ids
+            )
+            if not superseded:
+                filtered.append(threat)
+        return filtered
 
     def refresh_result_artifacts(
         self,
@@ -260,7 +441,19 @@ class ThreatAnalyzer:
         architecture = result.architecture
         threats = self._normalize_stride(result.threats)
         threats = self._ensure_architecture_links(threats, architecture)
+        threats = normalize_finding_output(threats, architecture)
+        threats = self._apply_risk_model(threats, architecture)
         threats = self._classify_tiers(threats)
+        threats = self._suppress_potentials_superseded_by_known_issues(threats)
+        threats, local_diagnostics = self.local_intelligence.enrich(
+            architecture, threats, enabled=analysis_flags["local_intelligence"],
+        )
+        disagreement_diagnostics = self.disagreement_engine.assess(threats, local_diagnostics)
+        threats, confidence_diagnostics = self.confidence_calibrator.calibrate(threats, architecture)
+        threats = self._apply_risk_model(threats, architecture)
+        _, stride_coverage = self.stride_coverage_engine.assess(
+            architecture, threats, generate_candidates=False,
+        )
         threats = self._enrich_threat_explanations(threats, architecture)
         result.threats = threats
 
@@ -275,23 +468,58 @@ class ThreatAnalyzer:
             f"and {len((result.attack_chains or {}).get('paths', []))} modeled attack paths."
         )
         result.coverage = self._build_coverage(architecture, threats, analysis_flags, missing_information)
-        result.follow_up_questions = self._build_follow_up_questions(architecture, threats, missing_information)
+        result.follow_up_questions = self._build_follow_up_questions(
+            architecture, threats, missing_information, stride_coverage, disagreement_diagnostics,
+        )
         result.review_summary = self._build_review_summary(threats)
         result.domain_context = self._build_domain_context(domain_profile, architecture, threats)
         result.ai_security_lens = self._build_ai_security_lens(architecture, threats)
         result.priority_actions = self._build_priority_actions(threats)
+        result.system_model = build_system_model(architecture)
+        result.stride_coverage = stride_coverage
+        result.engine_status = {
+            **(result.engine_status or {}),
+            "local_intelligence": local_diagnostics,
+            "disagreements": disagreement_diagnostics,
+            "confidence_calibration": confidence_diagnostics,
+            "stride_coverage": {
+                "status": "active", "version": stride_coverage["version"],
+                "applicable_cells": stride_coverage["applicable_cells"],
+                "unknown_cells": stride_coverage["unknown_cells"],
+            },
+            "quality_gate": self._runtime_quality_gate(
+                result.architecture_validation or {"valid": True}, threats, stride_coverage, local_diagnostics,
+                disagreement_diagnostics,
+            ),
+        }
+        result.finding_groups = group_findings(threats)
+        result.risk_methodology = risk_methodology()
         result.report_markdown = self._generate_report_markdown(result)
         return result
 
     def _process_known_issues(self, architecture: SystemArchitecture, threats: List[Threat]) -> List[Threat]:
         metadata = architecture.metadata or {}
         known_issues = metadata.get("known_issues", [])
-        for issue in known_issues:
+        component_ids = {component.id for component in architecture.components or []}
+        for issue_index, issue in enumerate(known_issues, 1):
             description = issue.get("description", "Known security issue identified in source material.")
             severity = issue.get("severity", "medium").title()
+            threat_id = issue.get("suggested_threat_id") or "KNOWN"
+            source_record_id = issue.get("source_record_id")
+            # Preserve every known issue even where multiple instances map to a
+            # single taxonomy rule. Deduplication must never drop source facts.
+            threat_id = f"{threat_id}-{source_record_id or f'{issue_index:02d}'}"
+            category = issue.get("category", "Tampering")
+            affected_components = [
+                component_id for component_id in issue.get("component_hints", [])
+                if component_id in component_ids
+            ]
+            primary_component = affected_components[0] if affected_components else None
             threat = Threat(
-                id=issue.get("suggested_threat_id") or f"KNOWN-{len(threats)+1}",
-                category="Tampering",
+                id=threat_id,
+                category=category,
+                stride_category=category,
+                affected_stride_categories=issue.get("affected_stride_categories") or [category],
                 title=f"Known issue: {description[:72]}",
                 description=description,
                 severity=severity,
@@ -299,28 +527,55 @@ class ThreatAnalyzer:
                 impact="High" if severity in {"Critical", "High"} else "Medium",
                 risk_score=90 if severity == "Critical" else 75 if severity == "High" else 55,
                 confidence="High",
-                mitigation=f"Resolve the explicitly documented issue: {description}",
-                component=None,
+                mitigation=issue.get("mitigation") or f"Resolve the explicitly documented issue: {description}",
+                component=primary_component,
                 data_flow=None,
                 asset=None,
+                affected_component=primary_component,
+                component_id=primary_component,
                 root_cause="The design input explicitly lists this weakness as already present.",
                 realistic_attack_scenario=f"An attacker exploits the already-known weakness exactly where the design states it exists: {description}",
                 attack_scenario=f"An attacker exploits the already-known weakness exactly where the design states it exists: {description}",
                 business_impact=map_business_impact({"title": description, "root_cause": description}),
                 evidence=[f"Known issue from design input: {description}"],
-                affected_components=[],
+                evidence_details=[{
+                    "source_type": "architecture_input",
+                    "source_ref": source_record_id or f"K{issue_index}",
+                    "line": None,
+                    "statement": description,
+                    "confidence": "High",
+                }],
+                affected_components=affected_components,
                 affected_data_flows=[],
                 affected_assets=[],
                 tier="Confirmed",
                 status="Identified",
+                finding_type="control_gap",
+                owasp_top_10=issue.get("owasp_top_10", []),
+                cwe=issue.get("cwe", []),
+                explanation={
+                    "scope_resolution": issue.get("component_resolution", "unresolved"),
+                    "scope_warning": None if primary_component else "Confirmed source issue; affected component requires analyst mapping.",
+                },
             )
             threats.append(threat)
 
         # Static findings are explicit source or configuration evidence, not
         # assumptions. Keep them separate from generic architecture rules.
-        for finding in metadata.get("iac_findings", []) + metadata.get("security_findings", []):
+        source_findings = (
+            [("iac", item) for item in metadata.get("iac_findings", [])]
+            + [("code", item) for item in metadata.get("security_findings", [])]
+        )
+        for source_kind, finding in source_findings:
             severity = str(finding.get("severity", "Medium")).title()
             severity_score = {"Critical": 95, "High": 80, "Medium": 55, "Low": 30}.get(severity, 55)
+            finding_text = f"{finding.get('rule_id', '')} {finding.get('title', '')}".upper()
+            exposure = "public" if any(token in finding_text for token in ("PUBLIC", "OPEN", "INTERNET")) else "internal"
+            resource_id = finding.get("resource_id")
+            component_id = resource_id if resource_id in component_ids else (
+                "source" if source_kind == "code" and "source" in component_ids else None
+            )
+            evidence = finding.get("evidence", []) or [finding.get("description", "Static analysis rule matched.")]
             threats.append(Threat(
                 id=finding.get("id") or f"IAC-{len(threats) + 1}",
                 category=finding.get("category", "Tampering"),
@@ -332,18 +587,30 @@ class ThreatAnalyzer:
                 risk_score=severity_score,
                 confidence="High",
                 mitigation=finding.get("mitigation", "Correct the insecure source or configuration pattern."),
-                component_id=finding.get("resource_id"),
-                component=finding.get("resource_id"),
+                component_id=component_id,
+                component=component_id,
                 root_cause=f"Security rule {finding.get('rule_id', 'unknown')} matched {finding.get('resource_id', 'unknown')}.",
                 realistic_attack_scenario=finding.get("description", "An attacker exploits the insecure source or infrastructure configuration."),
                 attack_scenario=finding.get("description", "An attacker exploits the insecure source or infrastructure configuration."),
                 business_impact=map_business_impact({"title": finding.get("title", "Security finding"), "severity": severity}),
-                evidence=finding.get("evidence", []),
+                evidence=evidence,
+                evidence_details=[{
+                    "source_type": source_kind,
+                    "source_ref": str(resource_id or finding.get("rule_id") or "source"),
+                    "line": finding.get("line"),
+                    "statement": item,
+                    "confidence": "High",
+                } for item in evidence],
                 cwe=finding.get("cwe", []),
                 owasp_top_10=["A05:2021 Security Misconfiguration"],
-                affected_components=[finding.get("resource_id")] if finding.get("resource_id") else [],
+                exposure=exposure,
+                data_sensitivity="sensitive",
+                exploit_complexity="Low" if severity in {"Critical", "High"} else "Medium",
+                privilege_required="None" if exposure == "public" else "Low",
+                affected_components=[component_id] if component_id else [],
                 tier="Confirmed",
                 status="Identified",
+                finding_type=source_kind,
             ))
         return threats
 
@@ -354,7 +621,14 @@ class ThreatAnalyzer:
 
     def _classify_tiers(self, threats: List[Threat]) -> List[Threat]:
         for threat in threats:
-            if threat.confidence == "High":
+            if threat.confidence_score is not None:
+                direct = bool((threat.explanation or {}).get("confidence_calibration", {}).get("direct_evidence"))
+                threat.tier = "Confirmed" if direct and threat.confidence_score >= 0.8 else "Potential"
+            elif threat.finding_type in {"code", "iac"} and threat.evidence_details:
+                threat.tier = "Confirmed"
+            elif threat.finding_type in {"architecture", "control_gap"} and threat.confidence in {"Low", "Medium"}:
+                threat.tier = "Potential"
+            elif threat.confidence == "High" and threat.evidence_details:
                 threat.tier = "Confirmed"
             elif threat.related_data_flow or threat.affected_component:
                 threat.tier = "Confirmed" if len(threat.evidence) >= 2 else "Potential"
@@ -362,33 +636,52 @@ class ThreatAnalyzer:
                 threat.tier = "Potential"
         return threats
 
+    def _apply_risk_model(self, threats: List[Threat], architecture: Optional[SystemArchitecture] = None) -> List[Threat]:
+        """Apply one transparent technical risk calculation to every finding."""
+        severity_rank = {"Low": 1, "Medium": 2, "High": 3, "Critical": 4}
+        components = {item.id: item for item in (architecture.components if architecture else [])}
+        flows = {
+            f"{item.source_id}->{item.target_id}": item for item in (architecture.flows if architecture else [])
+        }
+        for threat in threats:
+            direct_evidence = threat.finding_type in {"code", "iac"} or bool(threat.evidence_details)
+            component = components.get(threat.component or threat.affected_component or threat.component_id or "")
+            flow_ref = (threat.data_flow or threat.related_data_flow or "").replace(" â†’ ", "->")
+            flow = flows.get(flow_ref)
+            control_assertions = (component.properties or {}).get("control_assertions", {}) if component else {}
+            present_controls = sum(value == "present" for value in control_assertions.values())
+            risk = calculate_risk({
+                "category": threat.category,
+                "exposure": threat.exposure,
+                "data_sensitivity": threat.data_sensitivity,
+                "exploit_complexity": threat.exploit_complexity,
+                "privilege_required": threat.privilege_required,
+                "evidence_confidence": threat.confidence,
+                "compensating_controls": present_controls,
+                "crosses_trust_boundary": bool(flow and (flow.properties or {}).get("crosses_trust_boundary")),
+                "blast_radius": len(set(threat.affected_components or [])),
+            })
+            calculated_severity = risk["severity"]
+            if direct_evidence and severity_rank.get(threat.severity, 1) > severity_rank.get(calculated_severity, 1):
+                calculated_severity = threat.severity
+            threat.severity = calculated_severity
+            threat.likelihood = risk["likelihood"]
+            threat.impact = risk["impact"]
+            threat.risk_score = max(threat.risk_score or 0, risk["risk_score"])
+            threat.risk_factors = risk["risk_factors"]
+        return threats
+
     def _ensure_architecture_links(self, threats: List[Threat], architecture: SystemArchitecture) -> List[Threat]:
-        component_to_flows: Dict[str, List[str]] = {}
         component_to_assets: Dict[str, List[str]] = {}
-        default_component = architecture.components[0].id if architecture.components else None
-        default_flow = f"{architecture.flows[0].source_id}->{architecture.flows[0].target_id}" if architecture.flows else None
-        default_asset = architecture.assets[0].name if architecture.assets else None
-
-        for flow in architecture.flows:
-            flow_ref = f"{flow.source_id}->{flow.target_id}"
-            component_to_flows.setdefault(flow.source_id, []).append(flow_ref)
-            component_to_flows.setdefault(flow.target_id, []).append(flow_ref)
-
         for asset in architecture.assets:
             if asset.related_component_id:
                 component_to_assets.setdefault(asset.related_component_id, []).append(asset.name)
 
         for threat in threats:
-            threat.component = threat.component or threat.affected_component or threat.component_id or default_component
+            threat.component = threat.component or threat.affected_component or threat.component_id
             if threat.component and not threat.affected_components:
                 threat.affected_components = [threat.component]
 
-            if not threat.data_flow:
-                candidate_flows = component_to_flows.get(threat.component or "", [])
-                if candidate_flows:
-                    threat.data_flow = candidate_flows[0]
-                    threat.related_data_flow = threat.related_data_flow or threat.data_flow
-            threat.data_flow = threat.data_flow or default_flow
             if threat.data_flow and threat.data_flow.replace("->", " → ") not in threat.affected_data_flows:
                 threat.affected_data_flows.append(threat.data_flow.replace("->", " → "))
 
@@ -396,7 +689,6 @@ class ThreatAnalyzer:
                 candidate_assets = component_to_assets.get(threat.component or "", [])
                 if candidate_assets:
                     threat.asset = candidate_assets[0]
-            threat.asset = threat.asset or default_asset
             if threat.asset and threat.asset not in threat.affected_assets:
                 threat.affected_assets.append(threat.asset)
 
@@ -452,6 +744,8 @@ class ThreatAnalyzer:
         architecture: SystemArchitecture,
         threats: List[Threat],
         missing_information: List[Dict[str, str]],
+        stride_coverage: Optional[Dict[str, Any]] = None,
+        disagreement_diagnostics: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         prompts = []
         for index, gap in enumerate(missing_information[:8], start=1):
@@ -464,6 +758,37 @@ class ThreatAnalyzer:
                 "rationale": "Clarifying this item will tighten contextual threat accuracy and reduce assumed paths.",
                 "related_components": [],
                 "related_threat_count": len([threat for threat in threats if threat.tier == "Potential"]),
+            })
+        represented = {(item["scope"], item["type"]) for item in prompts}
+        for cell in (stride_coverage or {}).get("cells", []):
+            if cell.get("status") != "unknown" or len(prompts) >= 12:
+                continue
+            key = (cell["element_id"], cell["category"])
+            if key in represented:
+                continue
+            prompts.append({
+                "id": f"stride-gap-{len(prompts) + 1}",
+                "scope": cell["element_id"],
+                "type": cell["category"],
+                "priority": "high" if cell["category"] in {"Spoofing", "Information Disclosure", "Elevation of Privilege"} else "medium",
+                "question": f"What verified controls address {cell['category']} for {cell['element_name']}?",
+                "rationale": cell["rationale"],
+                "related_components": [cell["element_id"]] if cell["element_kind"] == "component" else [],
+                "related_threat_count": 0,
+            })
+            represented.add(key)
+        for item in (disagreement_diagnostics or {}).get("items", []):
+            if len(prompts) >= 16:
+                break
+            prompts.append({
+                "id": item["id"],
+                "scope": item.get("element_id") or item.get("finding_id") or "analysis",
+                "type": "engine_disagreement",
+                "priority": "high" if item.get("status") == "review_required" else "medium",
+                "question": item.get("question"),
+                "rationale": item.get("resolution"),
+                "related_components": [item["element_id"]] if item.get("element_id") else [],
+                "related_threat_count": 1 if item.get("finding_id") else 0,
             })
         return prompts
 

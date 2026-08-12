@@ -34,6 +34,10 @@ export const generateReport = async (data, projectName) => {
             alert('No data to export.');
             return;
         }
+        const qualityGate = data.engine_status?.quality_gate || {};
+        if (qualityGate.status === 'fail' || qualityGate.publication_status === 'blocked') {
+            throw new Error('Final report publication is blocked by unresolved quality-gate failures.');
+        }
 
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const pageWidth = doc.internal.pageSize.getWidth();
@@ -162,29 +166,37 @@ export const generateReport = async (data, projectName) => {
         };
 
         const drawCover = () => {
-            doc.setFillColor(...COLORS.brand);
+            doc.setFillColor(255, 255, 255);
             doc.rect(0, 0, pageWidth, 44, 'F');
+            doc.setDrawColor(...COLORS.line);
+            doc.line(left, 41, pageWidth - right, 41);
 
-            doc.setTextColor(255, 255, 255);
+            doc.setTextColor(...COLORS.ink);
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(21);
-            doc.text('Aegis Threat', left, 18);
-            doc.setFontSize(12);
+            doc.setFontSize(9);
+            doc.text('AEGIS THREAT', left, 12);
+            doc.setFontSize(20);
+            doc.text('Technical Threat Model', left, 23);
+            doc.setFontSize(11);
             doc.setFont('helvetica', 'normal');
-            doc.text('Threat Modeling Report', left, 26);
+            doc.setTextColor(...COLORS.muted);
+            doc.text(projectName || 'Untitled Project', left, 30);
 
             const generatedAt = new Date().toLocaleString();
             doc.setFontSize(8);
-            doc.text(`Generated: ${generatedAt}`, left, 35);
+            doc.text(`Generated ${generatedAt} | Publication ready`, left, 36);
 
             const scoreColor = score >= 70 ? COLORS.success : score >= 40 ? COLORS.warning : COLORS.danger;
-            doc.setFillColor(...scoreColor);
-            doc.roundedRect(pageWidth - 52, 10, 38, 23, 2.6, 2.6, 'F');
+            doc.setFillColor(255, 255, 255);
+            doc.setDrawColor(...scoreColor);
+            doc.roundedRect(pageWidth - 52, 10, 38, 23, 1.5, 1.5, 'FD');
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(16);
+            doc.setTextColor(...COLORS.ink);
             doc.text(`${score}/100`, pageWidth - 33, 21.5, { align: 'center' });
             doc.setFontSize(7);
             doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...COLORS.muted);
             doc.text('Security score', pageWidth - 33, 27.5, { align: 'center' });
 
             y = 52;
@@ -410,10 +422,26 @@ export const generateReport = async (data, projectName) => {
             }
 
             threats.forEach((threat) => {
-                checkPageBreak(46);
                 const severity = threat.severity || 'Low';
                 const theme = SEVERITY_THEME[severity] || SEVERITY_THEME.Low;
-                const boxHeight = 38;
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8.2);
+                const descLines = doc.splitTextToSize(threat.description || '', contentWidth - 5.2).slice(0, 2);
+                const refs = [];
+                if (threat.cwe?.length) refs.push(`CWE ${threat.cwe.join(', ')}`);
+                if (threat.mitre_attack?.length) refs.push(`MITRE ATT&CK ${threat.mitre_attack.join(', ')}`);
+                if (threat.mitre_atlas?.length) refs.push(`MITRE ATLAS ${threat.mitre_atlas.join(', ')}`);
+                if (threat.owasp_top_10?.length) refs.push(`OWASP ${threat.owasp_top_10.map((o) => String(o).split('-')[0]).join(', ')}`);
+                doc.setFontSize(7);
+                const refLines = refs.length ? doc.splitTextToSize(refs.join(' | '), contentWidth - 5.2).slice(0, 1) : [];
+                doc.setFontSize(7.3);
+                const mitigationLines = doc.splitTextToSize(`Mitigation: ${threat.mitigation || 'N/A'}`, contentWidth - 7).slice(0, 3);
+                const descTop = 14.2;
+                const refsTop = descTop + Math.max(descLines.length, 1) * 3.6 + 1.2;
+                const mitigationTop = refsTop + (refLines.length ? 3.4 : 0) + 1.3;
+                const mitigationHeight = Math.max(8, mitigationLines.length * 3.3 + 3.2);
+                const boxHeight = mitigationTop + mitigationHeight + 1.5;
+                checkPageBreak(boxHeight + 6);
 
                 doc.setFillColor(252, 253, 255);
                 doc.setDrawColor(...COLORS.line);
@@ -432,31 +460,25 @@ export const generateReport = async (data, projectName) => {
                 const meta = [
                     threat.category || 'Unknown category',
                     `Confidence: ${threat.confidence || 'Medium'}`,
-                    threat.stride_category ? `STRIDE: ${threat.stride_category}` : '',
+                    `STRIDE: ${(threat.affected_stride_categories?.length ? threat.affected_stride_categories : [threat.stride_category || threat.category]).join(', ')}`,
                 ].filter(Boolean);
-                doc.text(meta.join(' | '), left + 2.6, y + 10.1);
+                doc.text(doc.splitTextToSize(meta.join(' | '), contentWidth - 5.2).slice(0, 1), left + 2.6, y + 10.1);
 
                 doc.setTextColor(...COLORS.ink);
                 doc.setFontSize(8.2);
-                const descLines = doc.splitTextToSize(threat.description || '', contentWidth - 5.2).slice(0, 3);
-                doc.text(descLines, left + 2.6, y + 14.2);
+                doc.text(descLines, left + 2.6, y + descTop);
 
-                const refs = [];
-                if (threat.cwe?.length) refs.push(`CWE ${threat.cwe.join(', ')}`);
-                if (threat.mitre_attack?.length) refs.push(`MITRE ATT&CK ${threat.mitre_attack.join(', ')}`);
-                if (threat.mitre_atlas?.length) refs.push(`MITRE ATLAS ${threat.mitre_atlas.join(', ')}`);
-                if (threat.owasp_top_10?.length) refs.push(`OWASP ${threat.owasp_top_10.map((o) => String(o).split('-')[0]).join(', ')}`);
-                if (refs.length) {
+                if (refLines.length) {
                     doc.setTextColor(...toneColor);
                     doc.setFontSize(7);
-                    doc.text(refs.join(' | ').substring(0, 128), left + 2.6, y + 26.6);
+                    doc.text(refLines, left + 2.6, y + refsTop);
                 }
 
                 doc.setFillColor(...theme.soft);
-                doc.roundedRect(left + 2, y + 28.2, contentWidth - 4, 8, 1.8, 1.8, 'F');
+                doc.roundedRect(left + 2, y + mitigationTop, contentWidth - 4, mitigationHeight, 1.8, 1.8, 'F');
                 doc.setTextColor(...COLORS.ink);
                 doc.setFontSize(7.3);
-                doc.text(`Mitigation: ${(threat.mitigation || 'N/A').substring(0, 144)}`, left + 3.2, y + 33.2);
+                doc.text(mitigationLines, left + 3.2, y + mitigationTop + 4.1);
 
                 y += boxHeight + 4;
             });

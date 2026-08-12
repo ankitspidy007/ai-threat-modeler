@@ -1,74 +1,194 @@
-from typing import Dict, List
+"""Evidence-aware attack paths over the canonical architecture graph."""
+
+from __future__ import annotations
+
+from collections import deque
+from typing import Dict, List, Optional, Tuple
 
 
 def generate_attack_paths(system_model, threats) -> List[Dict]:
     components = {component.id: component for component in system_model.components or []}
-    flows = {f"{flow.source_id}->{flow.target_id}": flow for flow in system_model.flows or []}
+    flows = list(system_model.flows or [])
+    adjacency: Dict[str, List[Tuple[str, object]]] = {}
+    for flow in flows:
+        adjacency.setdefault(flow.source_id, []).append((flow.target_id, flow))
+
+    entry_points = [
+        component.id for component in components.values()
+        if component.trust_level in {"public", "external"} or (component.properties or {}).get("public_access")
+    ]
     paths: List[Dict] = []
-
     for threat in threats:
-        component_id = threat.component or threat.affected_component or threat.component_id
-        flow_ref = threat.data_flow or threat.related_data_flow
-        asset_name = threat.asset or (threat.affected_assets[0] if getattr(threat, "affected_assets", None) else None)
-        component = components.get(component_id) if component_id else None
-        flow = flows.get(flow_ref) if flow_ref else None
-
-        if threat.id.startswith("CTX-AI") or "prompt injection" in (threat.title or "").lower():
-            rag_steps = _build_rag_steps(system_model, threat)
-            paths.append({
-                "entry_point": rag_steps[0],
-                "steps": rag_steps[1:],
-                "target_component": component.name if component else "ML Service",
-                "impact": threat.business_impact or threat.impact or "Model decision manipulation",
-                "related_threat_id": threat.id,
-            })
+        # Potential control questions are not exploitable attack paths. A path
+        # requires a confirmed finding, a mapped target, and a graph-reachable
+        # entry point.
+        if threat.tier != "Confirmed":
+            continue
+        target = _target_component(threat, components)
+        if not target:
             continue
 
+        threat_entries = list(entry_points)
+        if threat.exposure == "public" and target not in threat_entries:
+            threat_entries.append(target)
+        route = _best_route(threat_entries, target, adjacency)
+        if route is None and threat.data_flow:
+            source, _, flow_target = threat.data_flow.replace(" → ", "->").partition("->")
+            if source in components and flow_target in components:
+                flow = next((item for item in flows if item.source_id == source and item.target_id == flow_target), None)
+                route = [(source, None), (flow_target, flow)]
+
+        if route is None:
+            continue
+
+        hops = []
         steps = []
-        entry_point = component.name if component else "System entry point"
-        if flow and flow.source_id in components:
-            source = components[flow.source_id]
-            target = components.get(flow.target_id)
-            entry_point = source.name
-            steps.append(f"Attacker reaches {source.name} through the exposed or trusted interaction path.")
-            steps.append(f"Traffic follows system flow {source.name} -> {target.name if target else flow.target_id} over {flow.protocol}.")
-        elif component:
-            steps.append(f"Attacker targets component {component.name}.")
+        inferred_hops = 0
+        for index in range(1, len(route)):
+            source_id = route[index - 1][0]
+            target_id, flow = route[index]
+            if flow is None:
+                continue
+            inferred = bool(flow.assumed)
+            inferred_hops += int(inferred)
+            source = components[source_id]
+            destination = components[target_id]
+            hop = {
+                "source": source_id,
+                "target": target_id,
+                "protocol": flow.protocol,
+                "data_type": flow.data_type,
+                "evidence_status": "inferred" if inferred else "explicit",
+            }
+            hops.append(hop)
+            steps.append(
+                f"{'Inferred' if inferred else 'Explicit'} flow: {source.name} -> {destination.name} over {flow.protocol}."
+            )
+        scenario = threat.attack_scenario or threat.realistic_attack_scenario
+        if scenario:
+            steps.append(scenario)
+        if threat.asset:
+            steps.append(f"The path affects protected asset {threat.asset}.")
 
-        if threat.attack_scenario or threat.realistic_attack_scenario:
-            steps.append(threat.attack_scenario or threat.realistic_attack_scenario)
-        if asset_name:
-            steps.append(f"The attack reaches protected asset {asset_name}.")
-
+        entry_id = route[0][0]
+        confidence = "High" if inferred_hops == 0 and threat.confidence == "High" else "Medium"
         paths.append({
-            "entry_point": entry_point,
+            "id": f"PATH-{threat.id}",
+            "entry_point": components[entry_id].name,
+            "entry_component_id": entry_id,
             "steps": steps,
-            "target_component": component.name if component else "Unknown component",
+            "hops": hops,
+            "target_component": components[target].name,
+            "target_component_id": target,
             "impact": threat.business_impact or threat.impact or "Operational impact",
             "related_threat_id": threat.id,
+            "finding_type": threat.finding_type,
+            "confidence": confidence,
+            "severity": threat.severity,
+            "preconditions": threat.preconditions,
+            "evidence": threat.evidence_details or _fallback_evidence(threat),
+            "path_status": "explicit" if inferred_hops == 0 else "partially_inferred",
+            "inferred_hops": inferred_hops,
         })
-
     return paths
 
 
-def _build_rag_steps(system_model, threat) -> List[str]:
-    components = {component.id: component for component in system_model.components or []}
-    flow_refs = [flow_ref.replace(" → ", "->") for flow_ref in (threat.affected_data_flows or [])]
-    upload_step = "User uploads malicious document or content."
-    retrieval_step = "Content is embedded and stored in retrieval memory."
-    inference_step = "Retrieved content is injected into model inference context."
-    action_step = "Model output manipulates decisioning or triggers unsafe tool execution."
+def _target_component(threat, components: Dict[str, object]) -> Optional[str]:
+    for candidate in (threat.component, threat.affected_component, threat.component_id):
+        if candidate in components:
+            return candidate
+    if threat.data_flow or threat.related_data_flow:
+        flow_ref = (threat.data_flow or threat.related_data_flow).replace(" → ", "->")
+        _, _, target = flow_ref.partition("->")
+        if target in components:
+            return target
+    for candidate in threat.affected_components or []:
+        if candidate in components:
+            return candidate
+    return None
 
-    for flow_ref in flow_refs:
-        source_id, _, target_id = flow_ref.partition("->")
-        source = components.get(source_id)
-        target = components.get(target_id)
-        if source and target:
-            if "upload" in source.name.lower() or source.trust_level in {"public", "external"}:
-                upload_step = f"User-controlled content enters via {source.name}."
-            if "vector" in target.name.lower() or "storage" in target.name.lower():
-                retrieval_step = f"Content is stored or indexed in {target.name} for retrieval."
-            if "ml" in target.type.lower() or "model" in target.name.lower():
-                inference_step = f"Retrieved context reaches {target.name} during inference."
 
-    return [upload_step, retrieval_step, inference_step, action_step]
+def _best_route(entries: List[str], target: str, adjacency: Dict[str, List[Tuple[str, object]]]):
+    candidates = []
+    for entry in entries:
+        route = _route(entry, target, adjacency)
+        if route:
+            inferred = sum(1 for _, flow in route[1:] if flow and flow.assumed)
+            candidates.append((inferred, len(route), route))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    return candidates[0][2]
+
+
+def _route(source: str, target: str, adjacency: Dict[str, List[Tuple[str, object]]]):
+    if source == target:
+        return [(source, None)]
+    queue = deque([(source, [(source, None)])])
+    visited = {source}
+    while queue:
+        node, route = queue.popleft()
+        edges = sorted(adjacency.get(node, []), key=lambda item: bool(item[1].assumed))
+        for next_node, flow in edges:
+            if next_node in visited:
+                continue
+            next_route = [*route, (next_node, flow)]
+            if next_node == target:
+                return next_route
+            visited.add(next_node)
+            queue.append((next_node, next_route))
+    return None
+
+
+def _component_local_path(threat, target: str, components: Dict[str, object]) -> Dict:
+    component = components[target]
+    scenario = threat.attack_scenario or threat.realistic_attack_scenario or threat.description
+    return {
+        "id": f"PATH-{threat.id}",
+        "entry_point": "Unspecified prerequisite",
+        "entry_component_id": None,
+        "steps": [f"No graph route from a modeled external entry point to {component.name} was established.", scenario],
+        "hops": [],
+        "target_component": component.name,
+        "target_component_id": target,
+        "impact": threat.business_impact or threat.impact or "Operational impact",
+        "related_threat_id": threat.id,
+        "finding_type": threat.finding_type,
+        "confidence": "Low" if threat.confidence != "High" else "Medium",
+        "severity": threat.severity,
+        "preconditions": threat.preconditions,
+        "evidence": threat.evidence_details or _fallback_evidence(threat),
+        "path_status": "unresolved_entry_path",
+        "inferred_hops": 0,
+    }
+
+
+def _unresolved_path(threat) -> Dict:
+    return {
+        "id": f"PATH-{threat.id}",
+        "entry_point": "Unmapped",
+        "entry_component_id": None,
+        "steps": ["The finding is supported, but its affected component is not mapped to the architecture graph."],
+        "hops": [],
+        "target_component": "Unmapped",
+        "target_component_id": None,
+        "impact": threat.business_impact or threat.impact or "Operational impact",
+        "related_threat_id": threat.id,
+        "finding_type": threat.finding_type,
+        "confidence": "Low",
+        "severity": threat.severity,
+        "preconditions": threat.preconditions,
+        "evidence": threat.evidence_details or _fallback_evidence(threat),
+        "path_status": "unmapped",
+        "inferred_hops": 0,
+    }
+
+
+def _fallback_evidence(threat) -> List[Dict]:
+    return [{
+        "source_type": "architecture",
+        "source_ref": threat.component or threat.affected_component or "architecture input",
+        "line": None,
+        "statement": evidence,
+        "confidence": threat.confidence,
+    } for evidence in (threat.evidence or [])]

@@ -38,6 +38,17 @@ jobs:
         run: |
           cd backend
           pytest tests/ -v --tb=short
+
+      - name: Run threat-model quality gate
+        run: |
+          cd backend
+          python scripts/evaluate_threat_model.py --output threat-evaluation.json
+
+      - name: Upload threat-model evaluation
+        uses: actions/upload-artifact@v4
+        with:
+          name: threat-model-evaluation
+          path: backend/threat-evaluation.json
       
       - name: Test coverage
         run: |

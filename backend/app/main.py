@@ -341,7 +341,8 @@ def _analyze_text_payload(
         project_name,
         use_local_slm=use_local_slm,
         analysis_mode=analysis_mode,
-        domain_profile=domain_profile
+        domain_profile=domain_profile,
+        source_documents=source_documents,
     )
     result.diff_summary = _build_diff_summary(previous_result, result)
 
@@ -420,6 +421,15 @@ async def analyze_documents(
         context_text = (context_text or "").strip()
 
         extracted_text, source_documents = await extract_documents(files)
+        degraded_structured_docs = [
+            doc["filename"] for doc in source_documents
+            if doc.get("type") == "docx" and doc.get("extraction_quality") == "fallback_text"
+        ]
+        if degraded_structured_docs:
+            raise ValueError(
+                "Structured DOCX extraction failed for " + ", ".join(degraded_structured_docs)
+                + ". Analysis was stopped because tables and topology records would be lost."
+            )
         design_docs = [doc for doc in source_documents if doc.get("role") != "reference_report"]
         reference_docs = [doc for doc in source_documents if doc.get("role") == "reference_report"]
 
@@ -433,9 +443,16 @@ async def analyze_documents(
             combined_description = "\n\n---\n\n".join(sections)
 
         if context_text:
-            combined_description = f"User Context:\n{context_text}\n\n---\n\n{extracted_text}"
-            if design_docs:
-                combined_description = f"User Context:\n{context_text}\n\n---\n\n{combined_description}"
+            combined_description = f"User Context:\n{context_text}\n\n---\n\n{combined_description}"
+
+        if domain_profile == "general":
+            lowered_description = combined_description.lower()
+            if any(token in lowered_description for token in ("fhir", "hipaa", "protected health information", "phi")):
+                domain_profile = "healthcare"
+            elif any(token in lowered_description for token in ("payment gateway", "paymentintent", "stripe", "pci dss")):
+                domain_profile = "fintech"
+            elif any(token in lowered_description for token in ("llm", "bedrock", "rag", "model endpoint")):
+                domain_profile = "ai"
 
         AnalyzeRequest.validate_description(combined_description)
 
@@ -461,6 +478,18 @@ async def analyze_documents(
             domain_profile=domain_profile,
             source_documents=source_documents,
         )
+        authoritative_counts = (result.architecture.metadata or {}).get("authoritative_record_counts")
+        if authoritative_counts:
+            technical_components = sum(
+                1 for component in result.architecture.components
+                if (component.properties or {}).get("source_record_id", "").startswith("C")
+            )
+            if technical_components != authoritative_counts.get("components"):
+                raise ValueError("Authoritative component records were not modeled completely; analysis was stopped.")
+            if len(result.architecture.flows) != authoritative_counts.get("flows"):
+                raise ValueError("Authoritative data-flow records were not modeled completely; analysis was stopped.")
+            if len((result.architecture.metadata or {}).get("known_issues", [])) != authoritative_counts.get("known_issues"):
+                raise ValueError("Known-issue records were not modeled completely; analysis was stopped.")
         if reference_docs:
             coverage = result.coverage or {}
             coverage["reference_reports"] = reference_docs
@@ -728,7 +757,12 @@ async def analyze_with_llm(request: Request, payload: LLMAnalyzeRequest):
                 provider=payload.llm_provider,
                 api_key=payload.api_key,
                 model=payload.model,
-                kb_context=kb_context
+                kb_context=kb_context,
+                architecture_model=rule_based_result.system_model,
+                stride_coverage=rule_based_result.stride_coverage,
+            )
+            llm_threats = LLMAnalyzer.validate_llm_threats(
+                llm_threats, rule_based_result.architecture, payload.description,
             )
 
             merged_threats = LLMAnalyzer.merge_threats(rule_based_result.threats, llm_threats)

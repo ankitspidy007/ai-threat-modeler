@@ -1,0 +1,47 @@
+[
+  {
+    "id": "healthcare_fhir",
+    "domain": "healthcare",
+    "description": "Healthcare portal with a React frontend and Node.js REST API using OAuth2 through Azure AD. The REST API calls an HL7 FHIR API and stores PHI in encrypted PostgreSQL. Redis stores sessions over TLS. External healthcare partners call the FHIR API.\nKNOWN ISSUES:\n- Redis has no authentication.\n- FHIR partner connections have no mutual authentication.\n- Session tokens do not expire when a user changes their password.",
+    "required_components": ["react", "postgresql", "redis"],
+    "required_categories": ["Spoofing"],
+    "required_title_terms": ["session"],
+    "forbidden_components": ["gin", "openai", "stripe"]
+  },
+  {
+    "id": "aws_serverless",
+    "domain": "platform",
+    "description": "Public AWS API Gateway invokes Lambda functions. Lambda writes customer records to DynamoDB, publishes events to SNS, reads secrets from Secrets Manager, and stores exports in S3. Cognito authenticates users and CloudTrail provides audit logs.\nKNOWN ISSUES:\n- API Gateway has no WAF.\n- The Lambda execution role uses wildcard IAM permissions.\n- The S3 export bucket is publicly accessible and has no encryption at rest.",
+    "required_components": ["lambda", "s3"],
+    "required_categories": ["Information Disclosure", "Denial of Service", "Elevation of Privilege"],
+    "required_title_terms": ["waf"],
+    "forbidden_components": ["azure", "gemini", "stripe"]
+  },
+  {
+    "id": "multi_tenant_saas",
+    "domain": "saas",
+    "description": "A public React tenant portal calls a Node.js GraphQL API using JWT authentication. The API reads tenant records from PostgreSQL and caches sessions in Redis. Administrators use a separate admin API through Okta. Kubernetes hosts the services behind an ingress with a WAF.\nKNOWN ISSUES:\n- GraphQL product search has no query depth or cost limiting.\n- Object authorization checks do not validate tenant ownership.\n- Session tokens do not expire on password change.",
+    "required_components": ["react", "postgresql", "redis"],
+    "required_categories": ["Denial of Service", "Elevation of Privilege"],
+    "required_title_terms": ["graphql", "tenant"],
+    "forbidden_components": ["gin", "sagemaker", "stripe"]
+  },
+  {
+    "id": "rag_agent_mcp",
+    "domain": "ai",
+    "description": "A public Next.js application sends user prompts to a FastAPI agent service. The agent retrieves untrusted support tickets from a vector database, calls an LLM, and can invoke GitHub and PostgreSQL tools through an MCP server. Tool credentials are stored in Vault and OpenTelemetry captures traces.\nKNOWN ISSUES:\n- Retrieved ticket text can contain prompt injection instructions.\n- MCP tool calls do not require user approval or per-tool authorization.\n- There is no output validation or prompt sanitization.",
+    "required_components": ["fastapi", "llm", "postgresql"],
+    "required_categories": ["Tampering", "Elevation of Privilege"],
+    "required_title_terms": ["prompt injection", "tool"],
+    "forbidden_components": ["gin", "stripe", "azure"]
+  },
+  {
+    "id": "payment_processing",
+    "domain": "fintech",
+    "description": "A public React checkout calls a Node.js payment API. The API creates payment intents with Stripe, stores order state in PostgreSQL, and consumes Stripe webhooks through a webhook endpoint. Redis holds idempotency keys and a worker sends receipts through SendGrid.\nKNOWN ISSUES:\n- Stripe webhook signatures are not validated.\n- Payment payloads and provider tokens are written to application logs.\n- Refunds can be approved without a signed approval identifier.",
+    "required_components": ["react", "postgresql", "stripe"],
+    "required_categories": ["Spoofing", "Tampering", "Information Disclosure", "Elevation of Privilege"],
+    "required_title_terms": ["webhook", "payment"],
+    "forbidden_components": ["gin", "sagemaker", "azure"]
+  }
+]

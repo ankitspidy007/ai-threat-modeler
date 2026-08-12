@@ -13,6 +13,8 @@ import logging
 import os
 import json
 import pickle
+import warnings
+import hashlib
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -132,6 +134,7 @@ class StrideClassifier:
         self._embedding_service = None
         self._is_trained = False
         self._accuracy = 0.0
+        self._training_hash = None
         
         if model_dir is None:
             model_dir = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -174,7 +177,8 @@ class StrideClassifier:
             return False
         
         # Try loading from cache first
-        if self._load_from_cache():
+        expected_hash = self._training_data_hash(kb_threats) if kb_threats else None
+        if self._load_from_cache(expected_hash):
             logger.info(f"STRIDE classifier loaded from cache (accuracy: {self._accuracy:.1%})")
             return True
         
@@ -197,6 +201,8 @@ class StrideClassifier:
         """
         if not self.is_available:
             return False
+
+        self._training_hash = self._training_data_hash(kb_threats)
         
         emb_service = self._get_embedding_service()
         if not emb_service or not emb_service.is_available:
@@ -396,11 +402,16 @@ class StrideClassifier:
         """Save trained model to disk."""
         try:
             os.makedirs(self._model_dir, exist_ok=True)
+            embedding_service = self._get_embedding_service()
             data = {
                 'model': self._model,
                 'label_encoder': self._label_encoder,
                 'accuracy': self._accuracy,
-                'version': '1.0',
+                'version': '2.0',
+                'feature_dimension': int(getattr(self._model, 'n_features_in_', 0)),
+                'embedding_model': getattr(embedding_service, 'model_name', None),
+                'embedding_backend': getattr(embedding_service, 'backend', None),
+                'training_hash': self._training_hash,
             }
             with open(self._model_path, 'wb') as f:
                 pickle.dump(data, f)
@@ -408,24 +419,64 @@ class StrideClassifier:
         except Exception as e:
             logger.warning(f"Failed to cache classifier: {e}")
     
-    def _load_from_cache(self) -> bool:
+    def _load_from_cache(self, expected_training_hash: str | None = None) -> bool:
         """Load trained model from disk cache."""
         if not os.path.exists(self._model_path):
             return False
         
         try:
-            with open(self._model_path, 'rb') as f:
-                data = pickle.load(f)
+            # A pickle produced by a different scikit-learn release can load
+            # successfully but produce undefined predictions. Reject it and
+            # retrain from the canonical KB instead.
+            from sklearn.exceptions import InconsistentVersionWarning
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", InconsistentVersionWarning)
+                with open(self._model_path, 'rb') as f:
+                    data = pickle.load(f)
+
+            embedding_service = self._get_embedding_service()
+            cached_dimension = int(
+                data.get('feature_dimension')
+                or getattr(data.get('model'), 'n_features_in_', 0)
+                or 0
+            )
+            active_dimension = int(getattr(embedding_service, 'dimension', 0) or 0)
+            cached_model = data.get('embedding_model')
+            active_model = getattr(embedding_service, 'model_name', None)
+            cached_backend = data.get('embedding_backend')
+            active_backend = getattr(embedding_service, 'backend', None)
+            if cached_dimension != active_dimension:
+                raise ValueError(
+                    f"cached feature dimension {cached_dimension} does not match active embeddings {active_dimension}"
+                )
+            if data.get('version') != '2.0' or cached_model != active_model or cached_backend != active_backend:
+                raise ValueError("cached classifier embedding contract is stale")
+            if expected_training_hash and data.get('training_hash') != expected_training_hash:
+                raise ValueError("cached classifier training corpus is stale")
             
             self._model = data['model']
             self._label_encoder = data['label_encoder']
             self._accuracy = data.get('accuracy', 0.0)
+            self._training_hash = data.get('training_hash')
             self._is_trained = True
             return True
             
         except Exception as e:
             logger.warning(f"Failed to load cached classifier: {e}")
             return False
+
+    @staticmethod
+    def _training_data_hash(kb_threats: List[Dict]) -> str:
+        labels = [
+            {
+                "id": item.get("id") or item.get("threat_id"),
+                "title": item.get("title") or item.get("threat_name"),
+                "description": item.get("description"),
+                "category": item.get("stride_category") or item.get("category"),
+            }
+            for item in kb_threats or []
+        ]
+        return hashlib.sha256(json.dumps(labels, sort_keys=True).encode("utf-8")).hexdigest()
 
 
 # Global instance

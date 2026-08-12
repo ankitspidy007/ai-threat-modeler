@@ -43,6 +43,31 @@
   }
 }
 
+/* The final technical report stays print-like in both application themes. */
+.technical-report,
+.dark .technical-report {
+  color-scheme: light;
+  background: #ffffff;
+  color: #172033;
+}
+
+.dark .technical-report [class*="dark:bg-brand"],
+.dark .technical-report [class*="dark:bg-black"] {
+  background-color: #ffffff !important;
+}
+
+.dark .technical-report [class*="dark:text-white"] {
+  color: #0f172a !important;
+}
+
+.dark .technical-report [class*="dark:text-brand"] {
+  color: #475569 !important;
+}
+
+.dark .technical-report [class*="dark:border-brand"] {
+  border-color: #e2e8f0 !important;
+}
+
 @keyframes slide-in-right {
   from {
     transform: translateX(100%);

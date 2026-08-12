@@ -453,6 +453,9 @@ class TestEndToEndIntegration:
         analyzer = ThreatAnalyzer()
         result = analyzer.analyze_from_text(desc, "E-Commerce Test")
         
-        # Should find many threats in a complex architecture
-        assert len(result.threats) >= 5
+        # Complexity alone must not manufacture vulnerabilities. Both explicit
+        # known issues must be retained and unknown controls stay in coverage.
+        assert len(result.architecture.metadata["known_issues"]) == 2
+        assert sum(item.tier == "Confirmed" for item in result.threats) >= 2
+        assert result.stride_coverage["assessment_percent"] == 100.0
         assert result.score >= 0

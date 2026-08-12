@@ -5,13 +5,28 @@ from ..models import Threat
 
 
 def deduplicate_threats(threat_list: List[Threat]) -> List[Threat]:
-    grouped: Dict[Tuple[str, str, str], Threat] = {}
+    grouped: Dict[Tuple[str, ...], Threat] = {}
 
     for threat in threat_list:
-        cwe_key = ",".join(sorted(threat.cwe or [])) or "no-cwe"
-        stride_key = (threat.stride_category or threat.category or "unknown").lower()
-        root_cause_key = _normalize_root_cause(threat.root_cause or threat.title)
-        group_key = (cwe_key, stride_key, root_cause_key)
+        # Each documented issue is independent source evidence. Do not merge it
+        # merely because another issue has the same STRIDE category or CWE set.
+        if threat.finding_type == "control_gap":
+            group_key = ("control_gap", threat.id or "unknown", str(id(threat)))
+        else:
+            cwe_key = ",".join(sorted(threat.cwe or [])) or "no-cwe"
+            stride_key = (threat.stride_category or threat.category or "unknown").lower()
+            root_cause_key = _normalize_root_cause(threat.root_cause or threat.title)
+            component_scope = sorted(set(filter(None, [
+                threat.component, threat.affected_component, threat.component_id,
+                *(threat.affected_components or []),
+            ])))
+            flow_scope = sorted(set(filter(None, [
+                threat.data_flow, threat.related_data_flow,
+                *(threat.affected_data_flows or []),
+            ])))
+            asset_scope = sorted(set(filter(None, [threat.asset, *(threat.affected_assets or [])])))
+            scope_key = "|".join(component_scope + flow_scope + asset_scope) or "unscoped"
+            group_key = (cwe_key, stride_key, root_cause_key, scope_key)
 
         if group_key not in grouped:
             grouped[group_key] = threat.model_copy(deep=True)
@@ -28,6 +43,8 @@ def deduplicate_threats(threat_list: List[Threat]) -> List[Threat]:
         existing.affected_data_flows = _merge_unique(existing.affected_data_flows, threat.affected_data_flows or [])
         existing.affected_assets = _merge_unique(existing.affected_assets, threat.affected_assets or [])
         existing.evidence = _merge_unique(existing.evidence, threat.evidence or [])
+        existing.evidence_details = _merge_evidence_details(existing.evidence_details, threat.evidence_details)
+        existing.preconditions = _merge_unique(existing.preconditions, threat.preconditions or [])
         existing.owasp_top_10 = _merge_unique(existing.owasp_top_10 or [], threat.owasp_top_10 or [])
         existing.cwe = _merge_unique(existing.cwe or [], threat.cwe or [])
         existing.mitre_attack = _merge_unique(existing.mitre_attack or [], threat.mitre_attack or [])
@@ -58,6 +75,10 @@ def deduplicate_threats(threat_list: List[Threat]) -> List[Threat]:
         existing.risk_score = max(existing.risk_score or 0, threat.risk_score or 0)
         if threat.confidence == "High":
             existing.confidence = "High"
+        if threat.finding_type in {"code", "iac"}:
+            existing.finding_type = threat.finding_type
+        if not existing.risk_factors and threat.risk_factors:
+            existing.risk_factors = threat.risk_factors
 
     deduped = list(grouped.values())
     for threat in deduped:
@@ -81,3 +102,14 @@ def _merge_unique(left: List[str], right: List[str]) -> List[str]:
         if item and item not in seen:
             seen.append(item)
     return seen
+
+
+def _merge_evidence_details(left: List[Dict], right: List[Dict]) -> List[Dict]:
+    merged = []
+    seen = set()
+    for item in [*(left or []), *(right or [])]:
+        key = (item.get("source_type"), item.get("source_ref"), item.get("line"), item.get("statement"))
+        if key not in seen:
+            seen.add(key)
+            merged.append(item)
+    return merged

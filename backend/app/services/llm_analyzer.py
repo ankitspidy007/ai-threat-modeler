@@ -8,6 +8,7 @@ Improvements over original:
 """
 
 import logging
+import json
 from typing import List, Optional, Dict
 from ..models import Threat
 from .llm_providers import create_service, list_provider_models, validate_provider_key
@@ -32,7 +33,9 @@ class LLMAnalyzer:
         provider: str,
         api_key: str,
         model: Optional[str] = None,
-        kb_context: Optional[List[Dict]] = None
+        kb_context: Optional[List[Dict]] = None,
+        architecture_model: Optional[Dict] = None,
+        stride_coverage: Optional[Dict] = None,
     ) -> List[Threat]:
         """
         Analyze architecture using specified LLM provider.
@@ -54,8 +57,83 @@ class LLMAnalyzer:
         enriched_description = LLMAnalyzer._enrich_with_rag(
             architecture_description, kb_context
         )
+        if architecture_model:
+            enriched_description += "\n\n--- CANONICAL ARCHITECTURE MODEL ---\n"
+            enriched_description += json.dumps(architecture_model, ensure_ascii=True, default=str)
+            enriched_description += (
+                "\nUse only component IDs and flow IDs from this model. "
+                "Do not introduce a technology, component, flow, boundary, or control that is not present."
+            )
+        if stride_coverage:
+            enriched_description += "\n\n--- CURRENT STRIDE COVERAGE SUMMARY ---\n"
+            enriched_description += json.dumps({
+                "category_summary": stride_coverage.get("category_summary", {}),
+                "unknown_cells": stride_coverage.get("unknown_cells", 0),
+                "cells": [cell for cell in stride_coverage.get("cells", []) if cell.get("status") == "unknown"],
+            }, ensure_ascii=True, default=str)
+            enriched_description += "\nChallenge the current model: identify supported missing findings and false assumptions."
         
         return service.analyze_architecture(enriched_description, project_name)
+
+    @staticmethod
+    def validate_llm_threats(threats: List[Threat], architecture, source_text: str) -> List[Threat]:
+        """Ground model output against canonical component, flow, and source evidence."""
+        components = {component.id: component for component in architecture.components or []}
+        aliases = {}
+        for component in components.values():
+            aliases[component.id.lower()] = component.id
+            aliases[component.name.lower()] = component.id
+        flow_ids = {f"{flow.source_id}->{flow.target_id}" for flow in architecture.flows or []}
+        source_lower = (source_text or "").lower()
+        validated = []
+        for threat in threats:
+            if threat.category not in {
+                "Spoofing", "Tampering", "Repudiation", "Information Disclosure",
+                "Denial of Service", "Elevation of Privilege",
+            }:
+                continue
+            mapped_components = []
+            for candidate in [threat.component, threat.affected_component, *(threat.affected_components or [])]:
+                if not candidate:
+                    continue
+                component_id = aliases.get(str(candidate).lower())
+                if component_id and component_id not in mapped_components:
+                    mapped_components.append(component_id)
+            mapped_flows = []
+            for candidate in [threat.data_flow, threat.related_data_flow, *(threat.affected_data_flows or [])]:
+                normalized = str(candidate or "").replace(" → ", "->")
+                if normalized in flow_ids and normalized not in mapped_flows:
+                    mapped_flows.append(normalized)
+            supported_evidence = [item for item in (threat.evidence or []) if item and str(item).lower() in source_lower]
+            if not supported_evidence or not (mapped_components or mapped_flows):
+                logger.info("Rejected ungrounded LLM threat %s", threat.id)
+                continue
+            threat.affected_components = mapped_components
+            threat.component = mapped_components[0] if mapped_components else None
+            threat.affected_component = threat.component
+            threat.component_id = threat.component
+            threat.affected_data_flows = mapped_flows
+            threat.data_flow = mapped_flows[0] if mapped_flows else None
+            threat.related_data_flow = threat.data_flow
+            threat.evidence = supported_evidence
+            threat.evidence_details = [{
+                "source_type": "llm_challenger",
+                "source_ref": "architecture input",
+                "line": None,
+                "statement": item,
+                "confidence": "Medium",
+            } for item in threat.evidence]
+            threat.confidence = "Medium"
+            threat.tier = "Potential"
+            threat.finding_type = "architecture"
+            threat.id = f"LLM-CHALLENGER-{threat.id}"
+            threat.explanation = {
+                **(threat.explanation or {}),
+                "validation": "Accepted only after canonical component/flow resolution and verbatim source-evidence validation.",
+                "validation_status": "grounded_challenger",
+            }
+            validated.append(threat)
+        return validated
     
     @staticmethod
     def _enrich_with_rag(description: str, kb_context: Optional[List[Dict]] = None) -> str:
@@ -137,6 +215,8 @@ class LLMAnalyzer:
             best_similarity = 0.0
             
             for existing_threat in merged:
+                if not LLMAnalyzer._same_finding_scope(existing_threat, llm_threat):
+                    continue
                 similarity = LLMAnalyzer._compute_threat_similarity(
                     existing_threat, llm_threat
                 )
@@ -199,6 +279,21 @@ class LLMAnalyzer:
                     f"→ {len(merged)} total (removed {len(rule_based_threats) + len(llm_threats) - len(merged)} duplicates)")
         
         return merged
+
+    @staticmethod
+    def _same_finding_scope(left: Threat, right: Threat) -> bool:
+        """Only semantically deduplicate findings that concern the same scope."""
+        if (left.stride_category or left.category) != (right.stride_category or right.category):
+            return False
+        left_components = set(filter(None, [left.component, left.affected_component, left.component_id, *(left.affected_components or [])]))
+        right_components = set(filter(None, [right.component, right.affected_component, right.component_id, *(right.affected_components or [])]))
+        left_flows = set(filter(None, [left.data_flow, left.related_data_flow, *(left.affected_data_flows or [])]))
+        right_flows = set(filter(None, [right.data_flow, right.related_data_flow, *(right.affected_data_flows or [])]))
+        if left_components and right_components and left_components.isdisjoint(right_components):
+            return False
+        if left_flows and right_flows and left_flows.isdisjoint(right_flows):
+            return False
+        return bool(left_components or right_components or left_flows or right_flows)
     
     @staticmethod
     def _compute_threat_similarity(threat1: Threat, threat2: Threat) -> float:

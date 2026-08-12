@@ -69,7 +69,9 @@ Rules:
 - Use this exact threat template for every finding.
 - Only return threats supported by the provided architecture.
 - Every threat must include concrete evidence strings from the architecture text.
-- Prefer 3 to 12 high-signal threats rather than broad speculative coverage.
+- Review every modeled element against all six STRIDE categories before selecting findings.
+- Do not force a finding for a category when a control is present or the category is not applicable.
+- Do not omit an applicable category silently: unsupported or uncertain cases must be represented by an evidence-based Potential finding.
 - Use STRIDE categories exactly as listed above.
 - If a field is unknown, use an empty array for arrays or an empty string for strings.
 - Keep IDs stable within the response using LLM-001, LLM-002, and so on.
@@ -86,6 +88,7 @@ PROJECT
 
 ANALYSIS OBJECTIVE
 - Find architecture-specific threats using STRIDE.
+- Review every component, flow, asset, actor, and trust-boundary crossing against all six STRIDE categories.
 - Focus on realistic, evidence-based findings.
 - Output only the JSON object defined in the system instructions.
 - Populate every threat field in the template when the architecture provides enough evidence.
@@ -156,10 +159,11 @@ def parse_threats(threats_data: Dict) -> List[Threat]:
                 impact=_normalize_level(threat_dict.get("impact"), "Medium"),
                 risk_score=_coerce_risk_score(threat_dict.get("risk_score"), severity, likelihood),
                 mitigation=_string_or_empty(threat_dict.get("mitigation")),
-                confidence="High",
+                confidence="Medium",
                 evidence=_as_list(threat_dict.get("evidence")),
                 status="Identified",
-                tier="Confirmed",
+                tier="Potential",
+                finding_type="architecture",
                 component=_string_or_none(threat_dict.get("component")),
                 data_flow=_string_or_none(threat_dict.get("data_flow")),
                 asset=_string_or_none(threat_dict.get("asset")),

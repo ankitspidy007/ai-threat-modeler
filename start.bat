@@ -92,7 +92,7 @@ if not exist "backend\app" (
 )
 
 REM Check if backend dependencies are installed in the same Python used to run the backend
-%PYTHON_CMD% -c "import fastapi, uvicorn, networkx, pydantic, yaml" >nul 2>&1
+%PYTHON_CMD% -c "import fastapi, uvicorn, networkx, pydantic, yaml, docx, pypdf" >nul 2>&1
 if errorlevel 1 (
     echo Installing backend dependencies...
     cd backend

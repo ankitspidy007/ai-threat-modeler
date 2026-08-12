@@ -52,6 +52,7 @@ TECH_COMPONENT_MAP = {
     "firestore": "Database",
     "documentdb": "Database",
     "elasticsearch": "Database",
+    "opensearch": "Database",
     "snowflake": "Database",
     "redshift": "Database",
     "bigquery": "Database",
@@ -98,6 +99,8 @@ TECH_COMPONENT_MAP = {
     "koa": "API",
     "hapi": "API",
     "adonisjs": "API",
+    "node.js": "API",
+    "nodejs": "API",
     "llm gateway": "API Gateway",
     "react": "WebClient",
     "vue": "WebClient",
@@ -147,6 +150,15 @@ TECH_COMPONENT_MAP = {
     "gcs": "Object Storage",
     "minio": "Object Storage",
     "cloudflare r2": "Object Storage",
+    "aws kms": "Key Management",
+    "kms": "Key Management",
+    "route 53": "DNS",
+    "route53": "DNS",
+    "eks": "Container Platform",
+    "ecr": "Container Registry",
+    "rds": "Database",
+    "aurora": "Database",
+    "elasticache": "Database",
     "cloudfront": "CDN",
     "cloudflare": "CDN",
     "akamai": "CDN",
@@ -166,8 +178,18 @@ TECH_COMPONENT_MAP = {
     "cloudwatch": "Monitoring",
     "sentry": "Monitoring",
     "lambda": "Service",
+    "ec2": "Compute",
     "cloud function": "Service",
     "azure function": "Service",
+    "github actions": "CI/CD",
+    "argo cd": "CI/CD",
+    "argocd": "CI/CD",
+    "github mcp": "MCP Server",
+    "jira mcp": "MCP Server",
+    "salesforce mcp": "MCP Server",
+    "mcp server": "MCP Server",
+    "shell executor": "Tool",
+    "filesystem": "Tool",
     "iot device": "IoT Device",
     "sensor": "IoT Device",
     "medical device": "IoT Device",
@@ -191,6 +213,7 @@ TECH_COMPONENT_MAP = {
     "rag": "ML Service",
     "embedding model": "ML Service",
     "model serving": "ML Service",
+    "orchestration agent": "ML Service",
 }
 
 FLOW_VERBS = {
@@ -391,8 +414,11 @@ class NLPProcessor:
         text_lower = text.lower()
         seen = set()
 
-        for tech, comp_type in TECH_COMPONENT_MAP.items():
-            if tech in text_lower and tech not in seen:
+        for tech in sorted(TECH_COMPONENT_MAP, key=len, reverse=True):
+            comp_type = TECH_COMPONENT_MAP[tech]
+            # Technologies are terms, not arbitrary substrings. Without token
+            # boundaries, "gin" matched words such as "logging".
+            if re.search(r'(?<![a-z0-9])' + re.escape(tech) + r'(?![a-z0-9])', text_lower) and tech not in seen:
                 seen.add(tech)
                 result["technologies"].append(
                     {
@@ -487,6 +513,7 @@ class NLPProcessor:
         matches = []
 
         patterns = [
+            r"(\b[\w\s/.-]+?)\s+(?:calls?|invokes?|proxies?\s+to|routes?\s+(?:requests?\s+)?to)\s+(\b[\w\s/.-]+)",
             r"(\b[\w\s/-]+?)\s+(?:sends?|forwards?|pushes?|transmits?|routes?)\s+(?:[\w\s/-]+?\s+)?(?:to|into)\s+(\b[\w\s/-]+)",
             r"(\b[\w\s/-]+?)\s+(?:connects?|communicates?|integrates?|interfaces?)\s+(?:with|to)\s+(\b[\w\s/-]+)",
             r"(\b[\w\s/-]+?)\s+(?:queries|reads?\s+from|writes?\s+to|stores?\s+(?:data\s+)?in|fetches?\s+from|pulls?\s+from)\s+(\b[\w\s/-]+)",
@@ -583,12 +610,12 @@ class NLPProcessor:
     def extract_security_properties(self, text: str) -> Dict[str, Any]:
         text_lower = text.lower()
         props = {
-            "auth_type": "none",
-            "encryption_at_rest": False,
-            "logging_enabled": False,
-            "input_validation": False,
-            "rate_limiting": False,
-            "public_access": False,
+            "auth_type": "unknown",
+            "encryption_at_rest": None,
+            "logging_enabled": None,
+            "input_validation": None,
+            "rate_limiting": None,
+            "public_access": None,
             "compliance_frameworks": [],
             "trust_boundary": "internal",
         }
@@ -597,6 +624,7 @@ class NLPProcessor:
             ("cognito", "cognito"),
             ("auth0", "auth0"),
             ("okta", "okta"),
+            ("keycloak", "keycloak"),
             ("azure ad", "azure_ad"),
             ("google identity", "google_identity"),
             ("firebase auth", "firebase"),
@@ -674,7 +702,10 @@ class NLPProcessor:
             props["deployment"] = "k8s"
         if any(word in text_lower for word in ["docker", "container"]):
             props["containerized"] = True
-        if any(word in text_lower for word in ["llm", "rag", "embedding model", "vector database", "model serving"]):
+        if any(
+            re.search(r"(?<![a-z0-9])" + re.escape(term) + r"(?![a-z0-9])", text_lower)
+            for term in ("llm", "rag", "embedding model", "vector database", "model serving")
+        ):
             props["ml_pipeline"] = True
 
         if any(word in text_lower for word in ["internet-facing", "public-facing", "public endpoint", "external users"]):

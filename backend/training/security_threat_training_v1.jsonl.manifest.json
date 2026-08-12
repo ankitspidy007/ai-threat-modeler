@@ -1,0 +1,22 @@
+{
+  "complete_stride_coverage": true,
+  "missing_stride_categories": [],
+  "output": "backend\\training\\security_threat_training_v1.jsonl",
+  "record_count": 183,
+  "schema_version": "security-slm-training-1.0",
+  "sha256": "81f0f10ddec82d69364ec09b362782d54f69627949545bfac9d6bc1b3a6d6bbd",
+  "stride_categories": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Repudiation",
+    "Spoofing",
+    "Tampering"
+  ],
+  "tasks": [
+    "applicable_threat",
+    "architecture_extraction",
+    "hallucination_rejection",
+    "non_applicable_threat"
+  ]
+}

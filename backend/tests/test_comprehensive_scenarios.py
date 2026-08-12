@@ -17,8 +17,11 @@ class TestComprehensiveScenarios:
         analyzer = ThreatAnalyzer()
         result = analyzer.analyze_from_text(desc, "Serverless App")
         
-        # Verify
-        assert len(result.threats) > 0
+        # The explicit missing WAF is reportable; other unknown controls stay
+        # in the coverage matrix instead of becoming synthetic findings.
+        assert result.stride_coverage["assessment_percent"] == 100.0
+        assert not any("cleartext" in item.title.lower() for item in result.threats)
+        assert result.engine_status["quality_gate"]["confirmed_without_evidence"] == 0
         titles = [t.title for t in result.threats]
         assert any("Missing Web Application Firewall" in t for t in titles)
 
@@ -32,7 +35,11 @@ class TestComprehensiveScenarios:
         )
         analyzer = ThreatAnalyzer()
         result = analyzer.analyze_from_text(desc, "Microservices App")
-        assert len(result.threats) > 0
+        # mTLS and WAF are stated controls; architecture complexity is not
+        # evidence of a vulnerability.
+        assert result.stride_coverage["assessment_percent"] == 100.0
+        assert not any("cleartext" in item.title.lower() for item in result.threats)
+        assert result.engine_status["quality_gate"]["confirmed_without_evidence"] == 0
 
     def test_iot_edge_architecture(self):
         from app.engine.analyzer import ThreatAnalyzer

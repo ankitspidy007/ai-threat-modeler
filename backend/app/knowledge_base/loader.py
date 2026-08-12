@@ -8,8 +8,10 @@ and attack patterns.
 
 import json
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 import logging
+
+from .contracts import CanonicalThreatRule
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,9 @@ class ThreatKnowledgeBase:
         self.threats_by_id: Dict[str, Dict] = {}
         self.threats_by_component: Dict[str, List[Dict]] = {}
         self.threats_by_cloud: Dict[str, List[Dict]] = {}
+        self.validation_issues: List[Dict[str, str]] = []
+        self.loaded_modules: List[str] = []
+        self.typed_rules: List[CanonicalThreatRule] = []
         self.load_all()
     
     def load_all(self):
@@ -36,16 +41,26 @@ class ThreatKnowledgeBase:
         self.threats_by_id = {}
         self.threats_by_component = {}
         self.threats_by_cloud = {}
+        self.validation_issues = []
+        self.loaded_modules = []
+        self.typed_rules = []
 
         modules = self._discover_modules()
         
+        raw_threats = []
         for module in modules:
-            self.load_module(module)
+            raw_threats.extend(self.load_module(module))
+
+        self.threats = self._normalize_and_merge(raw_threats)
+        self.typed_rules = [CanonicalThreatRule.model_validate(item) for item in self.threats]
         
         # Build indexes
         self._build_indexes()
         
-        logger.info(f"Loaded {len(self.threats)} threats from {len(modules)} modules")
+        logger.info(
+            "Loaded %s normalized threats from %s modules (%s validation issues)",
+            len(self.threats), len(modules), len(self.validation_issues),
+        )
 
     def _discover_modules(self) -> List[str]:
         """Auto-discover knowledge base modules so new packs load without code changes."""
@@ -92,7 +107,7 @@ class ThreatKnowledgeBase:
         
         if not filepath.exists():
             logger.warning(f"Threat module not found: {filename}")
-            return
+            return []
         
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
@@ -107,13 +122,164 @@ class ThreatKnowledgeBase:
                     logger.warning(f"Invalid format in {filename}")
                     return
                 
-                self.threats.extend(threats)
+                self.loaded_modules.append(filename)
+                for threat in threats:
+                    threat["_source_module"] = filename
                 logger.debug(f"Loaded {len(threats)} threats from {filename}")
+                return threats
                 
         except json.JSONDecodeError as e:
             logger.error(f"Error parsing {filename}: {e}")
+            self.validation_issues.append({"module": filename, "issue": f"Invalid JSON: {e}"})
         except Exception as e:
             logger.error(f"Error loading {filename}: {e}")
+            self.validation_issues.append({"module": filename, "issue": str(e)})
+        return []
+
+    def _normalize_and_merge(self, raw_threats: List[Dict]) -> List[Dict]:
+        merged: Dict[str, Dict] = {}
+        for index, raw in enumerate(raw_threats, 1):
+            normalized = self._normalize_threat(raw, index)
+            if normalized["stride_category"] not in STRIDE_CATEGORIES:
+                self.validation_issues.append({
+                    "module": normalized["source_module"],
+                    "issue": f"Threat {normalized['id']} has an unsupported STRIDE category and was rejected.",
+                })
+                continue
+            schema_errors = self._canonical_validation_errors(normalized)
+            if schema_errors:
+                self.validation_issues.extend({
+                    "module": normalized["source_module"],
+                    "issue": f"Threat {normalized['id']}: {message}",
+                } for message in schema_errors)
+                continue
+            threat_id = normalized["id"]
+            if threat_id in merged:
+                self.validation_issues.append({
+                    "module": normalized["source_module"],
+                    "issue": f"Duplicate threat ID {threat_id} merged into the canonical record.",
+                })
+                merged[threat_id] = self._merge_canonical(merged[threat_id], normalized)
+            else:
+                merged[threat_id] = normalized
+        return list(merged.values())
+
+    @staticmethod
+    def _canonical_validation_errors(threat: Dict[str, Any]) -> List[str]:
+        errors = []
+        if not threat.get("id") or not threat.get("title") or not threat.get("description"):
+            errors.append("id, title, and description are required")
+        if threat.get("severity") not in {"Critical", "High", "Medium", "Low"}:
+            errors.append("severity is invalid")
+        if not isinstance(threat.get("components"), list) or not threat.get("components"):
+            errors.append("at least one affected component type is required")
+        detection = threat.get("detection") or {}
+        if detection.get("auto_detectable") and not isinstance(detection.get("logic"), dict):
+            errors.append("auto-detectable threats require structured detection logic")
+        return errors
+
+    def _normalize_threat(self, raw: Dict, index: int) -> Dict:
+        nested_threat = raw.get("threat") if isinstance(raw.get("threat"), dict) else {}
+        risk = raw.get("risk") if isinstance(raw.get("risk"), dict) else {}
+        mapped = raw.get("mapped_controls") if isinstance(raw.get("mapped_controls"), dict) else {}
+        mitigation = raw.get("mitigation")
+        mitigations = raw.get("mitigations") or []
+        threat_id = str(raw.get("threat_id") or raw.get("id") or f"KB-AUTO-{index:04d}")
+        title = str(raw.get("threat_name") or raw.get("title") or nested_threat.get("title") or threat_id)
+        description = str(
+            raw.get("description") or nested_threat.get("description") or raw.get("attack_vector") or title
+        )
+        category = _normalize_stride(raw.get("stride_category") or raw.get("category"))
+        components = _as_list(raw.get("component") or raw.get("resource_type") or "Any")
+        severity = _normalize_severity(
+            raw.get("severity") or risk.get("severity") or raw.get("impact")
+        )
+        mitigation_text = _mitigation_text(mitigation, mitigations)
+        preconditions = _as_list(raw.get("preconditions") or raw.get("prerequisites"))
+        cwe = _as_list(raw.get("cwe") or mapped.get("cwe"))
+        detection = raw.get("detection") if isinstance(raw.get("detection"), dict) else {}
+        auto_detectable = bool(detection.get("auto_detectable") and detection.get("logic"))
+        applicability_raw = raw.get("applicability") if isinstance(raw.get("applicability"), dict) else {}
+        applicability = {
+            "element_types": _as_list(applicability_raw.get("element_types") or components),
+            "cloud_platforms": _as_list(applicability_raw.get("cloud_platforms") or raw.get("cloud_platform")),
+            "cloud_services": _as_list(applicability_raw.get("cloud_services") or raw.get("cloud_services")),
+            "required_signals": _as_list(applicability_raw.get("required_signals") or preconditions),
+            "excluded_signals": _as_list(applicability_raw.get("excluded_signals")),
+        }
+        normalized_detection = {
+            **detection,
+            "auto_detectable": auto_detectable,
+            "logic": detection.get("logic") if auto_detectable else {},
+            "evidence_requirement": (
+                str(detection.get("evidence_requirement") or "explicit")
+                if auto_detectable else "candidate_only"
+            ),
+        }
+        return {
+            "id": threat_id,
+            "threat_id": threat_id,
+            "title": title,
+            "threat_name": title,
+            "description": description,
+            # Compatibility envelope for pre-v2 consumers. Canonical engine
+            # code uses the flat title and description fields above.
+            "threat": {"title": title, "description": description},
+            "attack_vector": str(raw.get("attack_vector") or description),
+            "stride_category": category,
+            "category": category,
+            "components": components,
+            "component": components,
+            "cloud_platform": _as_list(raw.get("cloud_platform")),
+            "cloud_services": _as_list(raw.get("cloud_services")),
+            "severity": severity,
+            "impact": severity,
+            "likelihood": _normalize_level(raw.get("likelihood") or risk.get("likelihood")),
+            "mitigation": mitigation_text,
+            "preconditions": preconditions,
+            "cwe": cwe,
+            "owasp_top_10": _as_list(raw.get("owasp_top_10") or mapped.get("owasp_top_10")),
+            "nist_800_53": _as_list(raw.get("nist_800_53") or mapped.get("nist_800_53")),
+            "mitre_attack": _as_list(raw.get("mitre_attack")),
+            "mitre_atlas": _as_list(raw.get("mitre_atlas")),
+            "tags": _as_list(raw.get("tags")),
+            "detection": normalized_detection,
+            "applicability": applicability,
+            "negating_controls": _as_list(raw.get("negating_controls")),
+            "controls": {
+                "negating_controls": _as_list(raw.get("negating_controls")),
+                "remediation": mitigation_text or "Validate and implement an architecture-specific security control.",
+            },
+            "taxonomies": {
+                "cwe": cwe,
+                "owasp_top_10": _as_list(raw.get("owasp_top_10") or mapped.get("owasp_top_10")),
+                "nist_800_53": _as_list(raw.get("nist_800_53") or mapped.get("nist_800_53")),
+                "mitre_attack": _as_list(raw.get("mitre_attack")),
+                "mitre_atlas": _as_list(raw.get("mitre_atlas")),
+            },
+            "rule_kind": "deterministic" if auto_detectable else "candidate",
+            "source_module": str(raw.get("_source_module") or "unknown"),
+            "references": _as_list(raw.get("references")),
+            "raw": raw,
+        }
+
+    @staticmethod
+    def _merge_canonical(left: Dict, right: Dict) -> Dict:
+        result = dict(left)
+        for key in (
+            "components", "component", "cloud_platform", "cloud_services", "preconditions",
+            "cwe", "owasp_top_10", "nist_800_53", "mitre_attack", "mitre_atlas",
+            "tags", "negating_controls", "references",
+        ):
+            result[key] = list(dict.fromkeys([*(left.get(key) or []), *(right.get(key) or [])]))
+        if len(right.get("description", "")) > len(left.get("description", "")):
+            result["description"] = right["description"]
+            result["attack_vector"] = right["attack_vector"]
+        if not result.get("detection") and right.get("detection"):
+            result["detection"] = right["detection"]
+        if not result.get("mitigation") and right.get("mitigation"):
+            result["mitigation"] = right["mitigation"]
+        return result
     
     def _build_indexes(self):
         """Build lookup indexes for fast querying"""
@@ -146,6 +312,9 @@ class ThreatKnowledgeBase:
     def get_all_threats(self) -> List[Dict]:
         """Get all threats"""
         return self.threats
+
+    def get_typed_rules(self) -> List[CanonicalThreatRule]:
+        return self.typed_rules
     
     def get_by_id(self, threat_id: str) -> Optional[Dict]:
         """Get threat by ID"""
@@ -153,7 +322,8 @@ class ThreatKnowledgeBase:
     
     def get_by_component(self, component: str) -> List[Dict]:
         """Get threats for a specific component"""
-        return self.threats_by_component.get(component, [])
+        exact = self.threats_by_component.get(component, [])
+        return exact or self.threats_by_component.get(component.lower(), [])
     
     def get_by_cloud_platform(self, platform: str) -> List[Dict]:
         """Get threats for a specific cloud platform"""
@@ -195,6 +365,9 @@ class ThreatKnowledgeBase:
         """Get knowledge base statistics"""
         return {
             'total_threats': len(self.threats),
+            'schema_version': 'canonical-kb-3.0',
+            'modules': len(self.loaded_modules),
+            'validation_issues': self.validation_issues,
             'by_component': {k: len(v) for k, v in self.threats_by_component.items()},
             'by_cloud': {k: len(v) for k, v in self.threats_by_cloud.items()},
             'by_stride': {
@@ -204,6 +377,74 @@ class ThreatKnowledgeBase:
                                "Elevation of Privilege"]
             }
         }
+
+
+STRIDE_CATEGORIES = {
+    "Spoofing", "Tampering", "Repudiation", "Information Disclosure",
+    "Denial of Service", "Elevation of Privilege",
+}
+
+
+def _normalize_stride(value: Any) -> str:
+    text = str(value or "").strip()
+    if text in STRIDE_CATEGORIES:
+        return text
+    return {
+        "Authentication": "Spoofing",
+        "Injection": "Tampering",
+        "Eavesdropping": "Information Disclosure",
+        "Data Breach": "Information Disclosure",
+        "Lateral Movement": "Elevation of Privilege",
+        "Authorization": "Elevation of Privilege",
+        "Combined": "Tampering",
+    }.get(text, "Unknown")
+
+
+def _as_list(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        items = value
+    elif isinstance(value, tuple):
+        items = list(value)
+    else:
+        items = [value]
+    output = []
+    for item in items:
+        if isinstance(item, dict):
+            text = str(item.get("description") or item.get("name") or "").strip()
+        else:
+            text = str(item).strip()
+        if text and text not in output:
+            output.append(text)
+    return output
+
+
+def _normalize_severity(value: Any) -> str:
+    if isinstance(value, dict):
+        value = value.get("severity")
+    text = str(value or "Medium").title()
+    return text if text in {"Critical", "High", "Medium", "Low"} else "Medium"
+
+
+def _normalize_level(value: Any) -> str:
+    text = str(value or "Medium").title()
+    return text if text in {"High", "Medium", "Low"} else "Medium"
+
+
+def _mitigation_text(value: Any, mitigations: List[Any]) -> str:
+    if isinstance(value, dict):
+        text = value.get("primary") or value.get("description")
+        if text:
+            return str(text)
+    elif value:
+        return str(value)
+    for item in mitigations:
+        if isinstance(item, dict) and item.get("description"):
+            return str(item["description"])
+        if isinstance(item, str):
+            return item
+    return "Validate applicability and implement the control defined by the threat pattern."
 
 
 # Global instance

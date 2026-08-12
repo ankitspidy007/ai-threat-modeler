@@ -41,9 +41,196 @@ def generate_mermaid(graph: nx.DiGraph, threats: List = None, enhanced: bool = T
         threats: Optional list of threats to annotate on diagram
         enhanced: If True, include STRIDE colors and annotations
     """
-    if not enhanced:
-        # Fallback to basic generation for backward compatibility
-        return _generate_basic_mermaid(graph)
+    # The report diagram is a DFD, not an infrastructure inventory. A single
+    # focused view is more useful for threat modeling than every discovered
+    # component and inferred connection. Keep the legacy renderers below for
+    # compatibility with stored reports, but generate the professional DFD for
+    # all new analyses.
+    return _generate_professional_dfd_mermaid(graph)
+
+
+DFD_ZONE_ORDER = ('external', 'public', 'application', 'data', 'third_party')
+DFD_ZONE_TITLES = {
+    'external': 'External Entity',
+    'public': 'Internet / Client Boundary',
+    'application': 'Application Trust Boundary',
+    'data': 'Data Trust Boundary',
+    'third_party': 'Third-Party Trust Boundary',
+}
+DFD_ZONE_LIMITS = {'external': 3, 'public': 3, 'application': 5, 'data': 4, 'third_party': 3}
+DFD_NON_FLOW_COMPONENTS = {'Threat Detection', 'Monitoring', 'Backup'}
+
+
+def _dfd_zone(data: Dict) -> str:
+    node_type = data.get('type', 'Service')
+    if node_type == 'Identity Provider':
+        return 'third_party'
+    if data.get('external', False):
+        return 'external' if node_type in {'WebClient', 'Mobile App'} else 'third_party'
+    if node_type in {'Database', 'Object Storage', 'Queue', 'Data Warehouse', 'Secrets Manager'}:
+        return 'data'
+    if node_type in {'WebClient', 'Mobile App', 'CDN', 'API Gateway', 'Load Balancer'} or data.get('public_access'):
+        return 'public'
+    return 'application'
+
+
+def _dfd_node_priority(graph: nx.DiGraph, node: str, data: Dict) -> tuple:
+    label = _sanitize_label(data.get('label', node))
+    score = graph.in_degree(node) + graph.out_degree(node)
+    if label.lower() in LOW_SIGNAL_COMPONENT_LABELS:
+        score -= 100
+    if len(label) > 50:
+        score -= 20
+    if data.get('external'):
+        score += 15
+    return (-score, label.lower())
+
+
+def _dfd_node_label(data: Dict, number: str) -> str:
+    label = _sanitize_label(data.get('label', 'Component'))
+    if len(label) > 32:
+        label = f'{label[:29].rstrip()}...'
+    return f'{number} {label}'
+
+
+def _dfd_shape(data: Dict) -> tuple:
+    node_type = data.get('type', 'Service')
+    if data.get('external', False) or node_type == 'Identity Provider':
+        return ('[', ']')                 # DFD external entity
+    if node_type in {'Database', 'Object Storage', 'Queue', 'Data Warehouse', 'Secrets Manager'}:
+        return ('[(', ')]')                # DFD data store
+    return ('((', '))')                    # DFD process
+
+
+def _workflow_score(graph: nx.DiGraph, path: List[str]) -> tuple:
+    zones = {_dfd_zone(graph.nodes[node]) for node in path}
+    edge_data = [graph.get_edge_data(a, b) or {} for a, b in zip(path, path[1:])]
+    score = len(zones) * 20 + len(path)
+    if _dfd_zone(graph.nodes[path[0]]) in {'external', 'public'}:
+        score += 20
+    if _dfd_zone(graph.nodes[path[-1]]) in {'data', 'third_party'}:
+        score += 25
+    if any(graph.nodes[node].get('type') == 'ML Service' for node in path):
+        score += 5
+    if any(graph.nodes[node].get('type') == 'API Gateway' for node in path):
+        score += 10
+    if graph.nodes[path[-1]].get('type') in {'Database', 'Object Storage', 'Data Warehouse'}:
+        score += 5
+    score += sum(3 for data in edge_data if not data.get('assumed'))
+    return score, -len(path)
+
+
+def _representative_workflow(graph: nx.DiGraph) -> tuple:
+    """Select one coherent entry-to-asset flow for a readable final DFD."""
+    eligible = [
+        node for node, data in graph.nodes(data=True)
+        if data.get('type') not in DFD_NON_FLOW_COMPONENTS
+    ]
+    workflow_graph = graph.subgraph(eligible).copy()
+    contextual_types = {'Identity Provider', 'Object Storage', 'Secrets Manager'}
+    if (
+        workflow_graph.number_of_nodes() <= 10
+        and workflow_graph.number_of_edges() <= 14
+        and any(data.get('type') in contextual_types for _, data in workflow_graph.nodes(data=True))
+    ):
+        return set(workflow_graph.nodes), list(workflow_graph.edges(data=True))
+    sources = [
+        node for node in workflow_graph
+        if _dfd_zone(workflow_graph.nodes[node]) in {'external', 'public'} and workflow_graph.out_degree(node)
+    ]
+    if not sources:
+        sources = [node for node in workflow_graph if workflow_graph.in_degree(node) == 0 and workflow_graph.out_degree(node)]
+    sinks = [
+        node for node in workflow_graph
+        if _dfd_zone(workflow_graph.nodes[node]) in {'data', 'third_party'} and workflow_graph.in_degree(node)
+    ]
+
+    candidates = []
+    for source in sources:
+        for sink in sinks:
+            for path in nx.all_simple_paths(workflow_graph, source, sink, cutoff=5):
+                if len(path) >= 2:
+                    candidates.append(path)
+
+    if candidates:
+        path = max(candidates, key=lambda item: _workflow_score(workflow_graph, item))
+        edges = [(a, b, workflow_graph.get_edge_data(a, b) or {}) for a, b in zip(path, path[1:])]
+        return set(path), edges
+
+    fallback_edges = list(workflow_graph.edges(data=True))[:4]
+    fallback_nodes = {node for edge in fallback_edges for node in edge[:2]}
+    if not fallback_nodes:
+        fallback_nodes = set(eligible[:4])
+    return fallback_nodes, fallback_edges
+
+
+def _generate_professional_dfd_mermaid(graph: nx.DiGraph) -> str:
+    """Generate a compact, presentation-ready DFD with explicit boundaries."""
+    workflow_nodes, workflow_edges = _representative_workflow(graph)
+    zones = {zone: [] for zone in DFD_ZONE_ORDER}
+    for node, data in graph.nodes(data=True):
+        if node in workflow_nodes:
+            zones[_dfd_zone(data)].append((node, data))
+
+    visible_by_zone = {
+        zone: sorted(nodes, key=lambda item: _dfd_node_priority(graph, item[0], item[1]))[:DFD_ZONE_LIMITS[zone]]
+        for zone, nodes in zones.items()
+    }
+    visible_nodes = {node for nodes in visible_by_zone.values() for node, _ in nodes}
+
+    entity_number = process_number = datastore_number = 1
+    number_by_node = {}
+    for zone in DFD_ZONE_ORDER:
+        for node, data in visible_by_zone[zone]:
+            if data.get('external', False) or data.get('type') == 'Identity Provider':
+                number_by_node[node] = f'E{entity_number}'
+                entity_number += 1
+            elif _dfd_zone(data) == 'data':
+                number_by_node[node] = f'D{datastore_number}'
+                datastore_number += 1
+            else:
+                number_by_node[node] = f'{process_number}.0'
+                process_number += 1
+
+    lines = [
+        "%%{init: {'flowchart': {'htmlLabels': true, 'nodeSpacing': 32, 'rankSpacing': 64, 'curve': 'linear'}} }%%",
+        'flowchart TB',
+        '    %% DFD notation: E# external entity, #.0 process, D# data store',
+    ]
+    for zone in DFD_ZONE_ORDER:
+        nodes = visible_by_zone[zone]
+        if not nodes:
+            continue
+        zone_id = f'dfd_{zone}'
+        lines.append(f'    subgraph {zone_id}["{DFD_ZONE_TITLES[zone]}"]')
+        lines.append('        direction LR')
+        for node, data in nodes:
+            node_id = _sanitize_id(node)
+            lines.append(f'        {_format_node(node_id, _dfd_node_label(data, number_by_node[node]), _dfd_shape(data))}')
+        lines.append('    end')
+        lines.append(f'    style {zone_id} fill:#ffffff,stroke:#404040,stroke-width:2px,stroke-dasharray: 7 4')
+
+    for source, target, data in workflow_edges:
+        if source not in visible_nodes or target not in visible_nodes:
+            continue
+        protocol = str(data.get('protocol') or '').upper()
+        data_type = str(data.get('data_type') or '')
+        label = protocol or 'data flow'
+        if data_type in {'credentials', 'pii', 'financial', 'phi', 'secrets'}:
+            label = f'{protocol} / {data_type}' if protocol else data_type
+        arrow = '==>' if _dfd_zone(graph.nodes[source]) != _dfd_zone(graph.nodes[target]) else '-->'
+        lines.append(f'    {_sanitize_id(source)} {arrow}|{_sanitize_edge_label(label)}| {_sanitize_id(target)}')
+
+    lines.extend([
+        '    classDef dfdEntity fill:#ffffff,stroke:#202020,stroke-width:2px,color:#111111',
+        '    classDef dfdProcess fill:#ffffff,stroke:#202020,stroke-width:2px,color:#111111',
+        '    classDef dfdStore fill:#ffffff,stroke:#202020,stroke-width:2px,color:#111111',
+    ])
+    for node in visible_nodes:
+        data = graph.nodes[node]
+        class_name = 'dfdEntity' if data.get('external', False) or data.get('type') == 'Identity Provider' else 'dfdStore' if _dfd_zone(data) == 'data' else 'dfdProcess'
+        lines.append(f'    class {_sanitize_id(node)} {class_name}')
+    return '\n'.join(lines)
     
     mermaid_lines = ["graph TB"]  # Top to Bottom for better layering
     
@@ -517,6 +704,8 @@ def _format_node(node_id: str, label: str, shape: tuple) -> str:
         return f'{node_id}["{safe_label}"]'
     if shape == ('(', ')'):
         return f'{node_id}("{safe_label}")'
+    if shape == ('((', '))'):
+        return f'{node_id}(("{safe_label}"))'
     if shape == ('[(', ')]'):
         return f'{node_id}[("{safe_label}")]'
     if shape == ('([', '])'):

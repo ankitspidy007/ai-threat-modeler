@@ -9,6 +9,8 @@ class Component(BaseModel):
     trust_level: str = "internal"
     description: Optional[str] = ""
     properties: Dict[str, Any] = Field(default_factory=dict)
+    evidence: List[Dict[str, Any]] = Field(default_factory=list)
+    confidence: str = "Medium"
 
 
 class DataFlow(BaseModel):
@@ -18,6 +20,8 @@ class DataFlow(BaseModel):
     data_type: str = "application_data"
     assumed: bool = False
     properties: Dict[str, Any] = Field(default_factory=dict)
+    evidence: List[Dict[str, Any]] = Field(default_factory=list)
+    confidence: str = "Medium"
 
 
 class TrustBoundary(BaseModel):
@@ -25,6 +29,8 @@ class TrustBoundary(BaseModel):
     boundary_type: str
     components: List[str] = Field(default_factory=list)
     description: Optional[str] = ""
+    evidence: List[Dict[str, Any]] = Field(default_factory=list)
+    confidence: str = "Medium"
 
 
 class Asset(BaseModel):
@@ -34,6 +40,8 @@ class Asset(BaseModel):
     asset_type: str = "data"
     related_component_id: Optional[str] = None
     related_data_flows: List[str] = Field(default_factory=list)
+    evidence: List[Dict[str, Any]] = Field(default_factory=list)
+    confidence: str = "Medium"
 
 
 class SystemArchitecture(BaseModel):
@@ -48,6 +56,7 @@ class Threat(BaseModel):
     id: str
     category: str
     stride_category: Optional[str] = None
+    affected_stride_categories: List[str] = Field(default_factory=list)
     title: str
     description: str
     severity: str
@@ -55,9 +64,14 @@ class Threat(BaseModel):
     impact: Optional[str] = "Unknown"
     risk_score: Optional[int] = 0
     confidence: Optional[str] = "Medium"
+    confidence_score: Optional[float] = None
     tier: Optional[str] = "Potential"
     status: Optional[str] = "Identified"
     evidence: List[str] = Field(default_factory=list)
+    evidence_details: List[Dict[str, Any]] = Field(default_factory=list)
+    finding_type: str = "architecture"
+    risk_factors: Dict[str, Any] = Field(default_factory=dict)
+    preconditions: List[str] = Field(default_factory=list)
     mitigation: str
     component: Optional[str] = None
     data_flow: Optional[str] = None
@@ -113,3 +127,9 @@ class AnalysisResult(BaseModel):
     domain_context: Optional[Dict[str, Any]] = None
     ai_security_lens: Optional[Dict[str, Any]] = None
     priority_actions: Optional[List[Dict[str, Any]]] = None
+    system_model: Optional[Dict[str, Any]] = None
+    finding_groups: Optional[Dict[str, List[Threat]]] = None
+    risk_methodology: Optional[Dict[str, Any]] = None
+    stride_coverage: Optional[Dict[str, Any]] = None
+    engine_status: Optional[Dict[str, Any]] = None
+    architecture_validation: Optional[Dict[str, Any]] = None

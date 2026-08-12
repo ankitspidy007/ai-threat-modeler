@@ -47,6 +47,26 @@ MITIGATION_LIBRARY = {
         "implementation_detail": "Restrict sensitive fields before data leaves the trust boundary and explicitly approve which integrations may receive regulated or secret data.",
         "optional_config_example": "Example: mask PII fields before sending telemetry or third-party API payloads.",
     },
+    "redis_missing_auth": {
+        "specific_control": "Authenticated and isolated Redis session access",
+        "implementation_detail": "Require Redis ACL credentials, TLS, private network access, key-prefix isolation, and rotation of session-signing material.",
+        "optional_config_example": "Example: expose Redis only on a private subnet, require TLS and a least-privilege ACL user, and deny the default user.",
+    },
+    "redis_session_auth_unknown": {
+        "specific_control": "Document and verify Redis session-store protections",
+        "implementation_detail": "Confirm Redis ACL authentication, TLS, private subnet isolation, restricted security groups, and server-side session invalidation.",
+        "optional_config_example": "Validation question: which workload identity and Redis ACL user authenticate each session-store client?",
+    },
+    "fhir_partner_authentication": {
+        "specific_control": "Strong FHIR partner identity",
+        "implementation_detail": "Require OAuth2 client credentials with strict issuer, audience, and scope validation; use mTLS or sender-constrained tokens for partner systems and authorize each FHIR resource operation.",
+        "optional_config_example": "Example: map each partner certificate and OAuth client to permitted FHIR scopes and patient compartments.",
+    },
+    "oauth_token_lifecycle_unknown": {
+        "specific_control": "OAuth token lifecycle and replay protection",
+        "implementation_detail": "Use short access-token lifetimes, refresh-token rotation with reuse detection, revocation on security events, and step-up authentication for PHI access.",
+        "optional_config_example": "Validation question: what invalidates active access and refresh tokens after logout, role change, password reset, or account disablement?",
+    },
 }
 
 

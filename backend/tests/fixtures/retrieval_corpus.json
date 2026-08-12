@@ -1,0 +1,39 @@
+[
+  {
+    "id": "aws_s3_public_access",
+    "query": "AWS S3 object storage bucket permits public read access",
+    "component_type": "Object Storage",
+    "stride_category": "Information Disclosure",
+    "cloud_provider": "aws",
+    "top_k": 5,
+    "expected_ids": ["AWS-S3-001"],
+    "forbidden_ids": ["AI-002", "AI-RAG-002", "T-008"]
+  },
+  {
+    "id": "rag_indirect_prompt_injection",
+    "query": "RAG agent trusts retrieved support tickets containing indirect prompt injection",
+    "component_type": "ML Service",
+    "stride_category": "Tampering",
+    "top_k": 5,
+    "expected_ids": ["AI-RAG-002", "AI-002"],
+    "forbidden_ids": ["AWS-S3-001", "T-008", "DB-001"]
+  },
+  {
+    "id": "payment_webhook_integrity",
+    "query": "Payment API accepts Stripe webhook without signature verification",
+    "component_type": "API",
+    "stride_category": "Tampering",
+    "top_k": 5,
+    "expected_ids": ["T-008"],
+    "forbidden_ids": ["AWS-S3-001", "AI-RAG-002", "DB-001"]
+  },
+  {
+    "id": "database_sql_injection",
+    "query": "Database executes a concatenated SQL query with untrusted user input",
+    "component_type": "Database",
+    "stride_category": "Tampering",
+    "top_k": 5,
+    "expected_ids": ["DB-001"],
+    "forbidden_ids": ["AWS-S3-001", "AI-RAG-002", "T-008"]
+  }
+]

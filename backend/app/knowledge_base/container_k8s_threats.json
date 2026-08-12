@@ -491,6 +491,11 @@
                         "field": "containerized",
                         "op": "==",
                         "value": true
+                    },
+                    {
+                        "field": "container_image_scanning",
+                        "op": "==",
+                        "value": false
                     }
                 ]
             },

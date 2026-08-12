@@ -55,7 +55,7 @@ if (-not (Test-Path "node_modules")) {
 }
 
 # Check if backend dependencies are installed in the same Python used to run the backend
-Invoke-Expression "$PythonLaunch -c `"import fastapi, uvicorn, networkx, pydantic, yaml`"" > $null 2>&1
+Invoke-Expression "$PythonLaunch -c `"import fastapi, uvicorn, networkx, pydantic, yaml, docx, pypdf`"" > $null 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "    Installing backend dependencies..." -ForegroundColor Yellow
     Set-Location backend

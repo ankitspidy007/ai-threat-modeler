@@ -1,0 +1,282 @@
+[
+  {
+    "id": "healthcare_identity_fhir",
+    "domain": "healthcare",
+    "description": "A public React patient portal calls a Node.js REST API using OAuth2 through Azure AD. The API invokes an HL7 FHIR API used by external healthcare partners, stores PHI in PostgreSQL, and stores sessions in Redis. All application traffic uses TLS.\nKNOWN ISSUES:\n- FHIR partner client credentials are accepted without mTLS or audience validation.\n- Session tokens do not expire after a password change.\n- Break-glass access is not audited separately.",
+    "expected": {
+      "finding_ids": ["FHIR-PARTNER-SPOOFING-001", "AUTH-SESSION-REVOCATION-001", "HEALTH-BTG-AUDIT-001"],
+      "critical_finding_ids": ["HEALTH-BTG-AUDIT-001"],
+      "forbidden_finding_ids": ["AWS-S3-PUBLIC-ACL-001", "AI-INDIRECT-PROMPT-INJECTION-001"],
+      "component_terms": ["react", "fhir", "postgresql", "redis", "azure ad"],
+      "forbidden_component_terms": ["gin", "stripe", "sagemaker"],
+      "stride_categories": ["Spoofing", "Repudiation"],
+      "topology": {"components": {"min": 5, "max": 12}, "flows": {"min": 1, "max": 20}, "boundaries": {"min": 1, "max": 12}}
+    }
+  },
+  {
+    "id": "aws_serverless_data_platform",
+    "domain": "platform",
+    "description": "An AWS API Gateway invokes Lambda functions. Lambda stores exports in S3, reads secrets from Secrets Manager, writes records to DynamoDB, and publishes events to SNS. Cognito authenticates customers and CloudTrail records administrative events.\nKNOWN ISSUES:\n- A Terraform IAM policy grants s3:* on * to the deployment role.\n- The S3 export bucket has a public-read ACL.\n- CloudTrail S3 object data events are disabled.",
+    "expected": {
+      "finding_ids": ["AWS-IAM-WILDCARD-S3-001", "AWS-S3-PUBLIC-ACL-001", "AWS-CLOUDTRAIL-DATA-EVENTS-001"],
+      "critical_finding_ids": ["AWS-S3-PUBLIC-ACL-001"],
+      "forbidden_finding_ids": ["HEALTH-BTG-AUDIT-001", "PAYMENT-WEBHOOK-SIGNATURE-001"],
+      "component_terms": ["api gateway", "lambda", "s3", "dynamodb", "cognito"],
+      "forbidden_component_terms": ["azure ad", "stripe", "fhir"],
+      "stride_categories": ["Information Disclosure", "Elevation of Privilege", "Repudiation"],
+      "topology": {"components": {"min": 5, "max": 15}, "flows": {"min": 1, "max": 30}, "boundaries": {"min": 1, "max": 15}}
+    }
+  },
+  {
+    "id": "multi_tenant_saas",
+    "domain": "saas",
+    "description": "A public React tenant portal calls a Node.js GraphQL API using JWT authentication. The API reads tenant records from PostgreSQL and caches sessions in Redis. Okta authenticates administrators. Kubernetes runs the API behind an ingress.\nKNOWN ISSUES:\n- GraphQL search has no query depth or cost limit.\n- The API trusts a caller-supplied tenant_id when loading invoice records.\n- Session tokens do not expire on password change.",
+    "expected": {
+      "finding_ids": ["API-GRAPHQL-RESOURCE-CONSUMPTION-001", "API-BOLA-TENANT-CONTROL-001", "AUTH-SESSION-REVOCATION-001"],
+      "critical_finding_ids": ["API-BOLA-TENANT-CONTROL-001"],
+      "forbidden_finding_ids": ["AWS-KMS-BROAD-DECRYPT-001", "FHIR-PARTNER-SPOOFING-001"],
+      "component_terms": ["react", "graphql", "postgresql", "redis", "okta"],
+      "forbidden_component_terms": ["gin", "bedrock", "stripe"],
+      "stride_categories": ["Spoofing", "Denial of Service", "Elevation of Privilege"],
+      "topology": {"components": {"min": 5, "max": 14}, "flows": {"min": 1, "max": 25}, "boundaries": {"min": 1, "max": 14}}
+    }
+  },
+  {
+    "id": "rag_agent_mcp",
+    "domain": "ai",
+    "description": "A public Next.js application sends prompts to a FastAPI agent. The agent retrieves untrusted support tickets from an OpenSearch vector index, calls an LLM, and invokes GitHub and PostgreSQL tools through an MCP server. Vault stores tool credentials and OpenTelemetry captures traces.\nKNOWN ISSUES:\n- Retrieved ticket text can contain prompt injection instructions and is treated as trusted model context.\n- MCP tool calls do not require user approval or per-tool authorization.\n- The MCP client forwards a broad GitHub token to every MCP server.",
+    "expected": {
+      "finding_ids": ["AI-INDIRECT-PROMPT-INJECTION-001", "AI-TOOL-AUTHORIZATION-001", "MCP-CREDENTIAL-FORWARDING-001"],
+      "critical_finding_ids": ["MCP-CREDENTIAL-FORWARDING-001"],
+      "forbidden_finding_ids": ["PAYMENT-SENSITIVE-LOGGING-001", "FHIR-PARTNER-SPOOFING-001"],
+      "component_terms": ["next", "fastapi", "opensearch", "llm", "mcp", "vault"],
+      "forbidden_component_terms": ["stripe", "azure ad", "fhir"],
+      "stride_categories": ["Tampering", "Information Disclosure", "Elevation of Privilege"],
+      "topology": {"components": {"min": 5, "max": 18}, "flows": {"min": 1, "max": 35}, "boundaries": {"min": 1, "max": 18}}
+    }
+  },
+  {
+    "id": "payment_processing",
+    "domain": "fintech",
+    "description": "A public React checkout calls a Node.js payment API. The API creates payment intents with Stripe, stores order state in PostgreSQL, consumes Stripe webhooks, and uses Redis for idempotency. A worker sends receipts through SendGrid.\nKNOWN ISSUES:\n- Stripe webhooks are accepted without signature verification.\n- Payment provider payloads and tokens are written to application logs.\n- Refund retries can create duplicate refunds because no idempotency key is required.",
+    "expected": {
+      "finding_ids": ["PAYMENT-WEBHOOK-SIGNATURE-001", "PAYMENT-SENSITIVE-LOGGING-001", "PAYMENT-IDEMPOTENCY-001"],
+      "critical_finding_ids": ["PAYMENT-WEBHOOK-SIGNATURE-001", "PAYMENT-SENSITIVE-LOGGING-001"],
+      "forbidden_finding_ids": ["AI-RAG-TENANT-ISOLATION-001", "AWS-S3-PUBLIC-ACL-001"],
+      "component_terms": ["react", "stripe", "postgresql", "redis", "sendgrid"],
+      "forbidden_component_terms": ["fhir", "bedrock", "sagemaker"],
+      "stride_categories": ["Tampering", "Information Disclosure"],
+      "topology": {"components": {"min": 5, "max": 15}, "flows": {"min": 1, "max": 30}, "boundaries": {"min": 1, "max": 15}}
+    }
+  },
+  {
+    "id": "web_api_injection",
+    "domain": "saas",
+    "description": "A Vue browser application calls an Express REST API. The API queries MySQL, renders customer comments, and fetches user-provided image URLs through a preview worker.\nKNOWN ISSUES:\n- The SQL ORDER BY clause uses string interpolation with a caller-supplied sort field.\n- Rich-text comments are rendered without a server-side HTML sanitizer.\n- The preview worker fetches an arbitrary user-supplied URL and follows redirects without an IP allowlist.",
+    "expected": {
+      "finding_ids": ["WEB-SQL-INJECTION-ORDER-001", "WEB-STORED-XSS-001", "WEB-SSRF-URL-FETCH-001"],
+      "critical_finding_ids": [],
+      "forbidden_finding_ids": ["AWS-IAM-ADMIN-PASSROLE-001", "MCP-TOOL-COMMAND-INJECTION-001"],
+      "component_terms": ["vue", "express", "mysql"],
+      "forbidden_component_terms": ["stripe", "fhir", "bedrock"],
+      "stride_categories": ["Tampering", "Information Disclosure"],
+      "topology": {"components": {"min": 3, "max": 12}, "flows": {"min": 1, "max": 20}, "boundaries": {"min": 1, "max": 12}}
+    }
+  },
+  {
+    "id": "kubernetes_supply_chain",
+    "domain": "platform",
+    "description": "A Kubernetes ingress routes traffic to a Go API and background worker. The workloads use service accounts, pull images from a private registry, store data in PostgreSQL, and upload files to S3.\nKNOWN ISSUES:\n- A production deployment runs privileged and automatically mounts its service-account token.\n- Containers deploy the image tag latest without signature verification.\n- The worker service account has cluster-wide permission to list secrets and an IRSA role with broad S3 access.",
+    "expected": {
+      "finding_ids": ["K8S-PRIVILEGED-POD-TOKEN-001", "CONTAINER-UNVERIFIED-IMAGE-001", "K8S-RBAC-IRSA-ESCALATION-001"],
+      "critical_finding_ids": ["K8S-PRIVILEGED-POD-TOKEN-001", "K8S-RBAC-IRSA-ESCALATION-001"],
+      "forbidden_finding_ids": ["HEALTH-PHI-DLP-001", "PAYMENT-WEBHOOK-SIGNATURE-001"],
+      "component_terms": ["kubernetes", "postgresql", "s3"],
+      "forbidden_component_terms": ["fhir", "stripe", "azure ad"],
+      "stride_categories": ["Tampering", "Elevation of Privilege"],
+      "topology": {"components": {"min": 3, "max": 14}, "flows": {"min": 1, "max": 25}, "boundaries": {"min": 1, "max": 14}}
+    }
+  },
+  {
+    "id": "resilience_and_deletion",
+    "domain": "saas",
+    "description": "A public Angular application calls a Java REST API. PostgreSQL stores tenant records, OpenSearch provides search, Redis stores sessions, SQS runs asynchronous deletion jobs, and S3 stores exports.\nKNOWN ISSUES:\n- Restore testing excludes the OpenSearch vector index and agent configuration.\n- Interactive API requests and bulk exports share worker capacity with no workload-specific concurrency quota.\n- Tenant deletion does not propagate to search indexes, DLQs, exports, or evaluation sets with independent retention.",
+    "expected": {
+      "finding_ids": ["RECOVERY-COVERAGE-GAP-001", "WORKLOAD-STARVATION-001", "DATA-DELETION-PROPAGATION-001"],
+      "critical_finding_ids": [],
+      "forbidden_finding_ids": ["FHIR-PARTNER-SPOOFING-001", "PAYMENT-IDEMPOTENCY-001"],
+      "component_terms": ["angular", "postgresql", "opensearch", "redis", "sqs", "s3"],
+      "forbidden_component_terms": ["stripe", "fhir", "sagemaker"],
+      "stride_categories": ["Information Disclosure", "Denial of Service"],
+      "topology": {"components": {"min": 5, "max": 16}, "flows": {"min": 1, "max": 30}, "boundaries": {"min": 1, "max": 16}}
+    }
+  },
+  {
+    "id": "simple_node_keycloak_ec2_s3",
+    "domain": "general",
+    "description": "A public website built with Node.js. Authentication is managed by Keycloak. The backend is hosted on AWS EC2 and uses an S3 bucket for image storage.",
+    "expected": {
+      "finding_ids": [], "critical_finding_ids": [], "confirmed_finding_ids": [],
+      "forbidden_finding_ids": ["AI-INDIRECT-PROMPT-INJECTION-001", "FHIR-PARTNER-SPOOFING-001"],
+      "component_terms": ["web application", "node.js", "keycloak", "ec2", "s3"],
+      "forbidden_component_terms": ["rag", "fhir", "stripe"],
+      "stride_categories": ["Spoofing", "Tampering", "Repudiation", "Information Disclosure", "Denial of Service", "Elevation of Privilege"],
+      "topology": {"components": {"min": 5, "max": 7}, "flows": {"min": 3, "max": 8}, "boundaries": {"min": 2, "max": 8}}
+    }
+  },
+  {
+    "id": "customer_api_explicit_vulnerabilities",
+    "domain": "saas",
+    "description": "A public React frontend calls an Express REST API. Keycloak provides OIDC. PostgreSQL stores accounts and Redis stores sessions.\nKNOWN ISSUES:\n- Product search builds SQL by concatenating the q request parameter.\n- Session tokens remain valid after password change.\n- The account update endpoint trusts the userId supplied by the browser without an ownership check.\n- User profile biography is rendered as HTML without output encoding.",
+    "expected": {
+      "finding_ids": ["WEB-SQL-INJECTION-ORDER-001", "AUTH-SESSION-REVOCATION-001", "API-BOLA-OBJECT-OWNERSHIP-001", "WEB-STORED-XSS-001"],
+      "critical_finding_ids": ["WEB-SQL-INJECTION-ORDER-001", "API-BOLA-OBJECT-OWNERSHIP-001"],
+      "confirmed_finding_ids": ["WEB-SQL-INJECTION-ORDER-001", "AUTH-SESSION-REVOCATION-001", "API-BOLA-OBJECT-OWNERSHIP-001", "WEB-STORED-XSS-001"],
+      "known_issue_count": 4,
+      "finding_component_terms": {"AUTH-SESSION-REVOCATION-001": ["keycloak", "redis"], "WEB-STORED-XSS-001": ["react"]},
+      "forbidden_finding_ids": ["AI-RAG-TENANT-ISOLATION-001"],
+      "component_terms": ["react", "express", "keycloak", "postgresql", "redis"],
+      "forbidden_component_terms": ["rest api|rest_api", "fhir", "bedrock"],
+      "stride_categories": ["Spoofing", "Tampering", "Elevation of Privilege"],
+      "topology": {"components": {"min": 5, "max": 7}, "flows": {"min": 2, "max": 15}, "boundaries": {"min": 2, "max": 8}}
+    }
+  },
+  {
+    "id": "advanced_multi_tenant_saas",
+    "domain": "saas",
+    "description": "A multi-tenant SaaS has React, API Gateway, FastAPI, Auth0, PostgreSQL, Redis, S3, workers, and Stripe.\nKNOWN ISSUES:\n- API services trust the X-Tenant-ID header sent by the client.\n- Several object endpoints fetch records by object ID without checking tenant ownership.\n- Platform admin APIs use the same authentication policy as tenant APIs.\n- Stripe webhook signatures are not validated.\n- Report export jobs have no per-tenant quota or concurrency limit.",
+    "expected": {
+      "finding_ids": ["API-BOLA-TENANT-CONTROL-001", "API-BOLA-OBJECT-OWNERSHIP-001", "AUTH-ADMIN-SEPARATION-001", "PAYMENT-WEBHOOK-SIGNATURE-001", "API-RESOURCE-EXHAUSTION-001"],
+      "critical_finding_ids": ["API-BOLA-TENANT-CONTROL-001", "API-BOLA-OBJECT-OWNERSHIP-001", "PAYMENT-WEBHOOK-SIGNATURE-001"],
+      "confirmed_finding_ids": ["API-BOLA-TENANT-CONTROL-001", "API-BOLA-OBJECT-OWNERSHIP-001", "AUTH-ADMIN-SEPARATION-001", "PAYMENT-WEBHOOK-SIGNATURE-001", "API-RESOURCE-EXHAUSTION-001"],
+      "known_issue_count": 5,
+      "finding_component_terms": {"API-BOLA-TENANT-CONTROL-001": ["fastapi"], "PAYMENT-WEBHOOK-SIGNATURE-001": ["stripe"]},
+      "forbidden_finding_ids": ["FHIR-PARTNER-SPOOFING-001"],
+      "component_terms": ["react", "fastapi", "auth0", "postgresql", "redis", "s3", "stripe"],
+      "forbidden_component_terms": ["fhir", "bedrock", "azure ad"],
+      "stride_categories": ["Tampering", "Denial of Service", "Elevation of Privilege"],
+      "topology": {"components": {"min": 8, "max": 13}, "flows": {"min": 3, "max": 25}, "boundaries": {"min": 2, "max": 12}}
+    }
+  },
+  {
+    "id": "advanced_aws_serverless",
+    "domain": "platform",
+    "description": "AWS uses CloudFront, WAF, Cognito, API Gateway, Lambda, DynamoDB, S3, KMS, SQS, SNS, Secrets Manager, and CloudTrail.\nKNOWN ISSUES:\n- The upload S3 bucket policy permits public GetObject.\n- The thumbnail Lambda execution role has AdministratorAccess.\n- The Lambda role can call kms:Decrypt on every key.\n- API Gateway has no request throttling.\n- SQS has no dead-letter queue and messages can be retried indefinitely.\n- Presigned upload URLs do not restrict content type or object size.",
+    "expected": {
+      "finding_ids": ["AWS-S3-PUBLIC-ACL-001", "AWS-IAM-ADMIN-PASSROLE-001", "AWS-KMS-BROAD-DECRYPT-001", "API-RESOURCE-EXHAUSTION-001", "QUEUE-POISON-MESSAGE-001", "AWS-S3-PRESIGNED-URL-001"],
+      "critical_finding_ids": ["AWS-S3-PUBLIC-ACL-001", "AWS-IAM-ADMIN-PASSROLE-001", "AWS-KMS-BROAD-DECRYPT-001"],
+      "confirmed_finding_ids": ["AWS-S3-PUBLIC-ACL-001", "AWS-IAM-ADMIN-PASSROLE-001", "AWS-KMS-BROAD-DECRYPT-001", "API-RESOURCE-EXHAUSTION-001", "QUEUE-POISON-MESSAGE-001", "AWS-S3-PRESIGNED-URL-001"],
+      "known_issue_count": 6,
+      "finding_component_terms": {"AWS-S3-PUBLIC-ACL-001": ["s3"], "AWS-IAM-ADMIN-PASSROLE-001": ["lambda"], "QUEUE-POISON-MESSAGE-001": ["sqs"]},
+      "forbidden_finding_ids": ["AI-INDIRECT-PROMPT-INJECTION-001"],
+      "component_terms": ["cloudfront", "cognito", "api gateway", "lambda", "dynamodb", "s3", "kms", "sqs"],
+      "forbidden_component_terms": ["fhir", "stripe", "rag"],
+      "stride_categories": ["Information Disclosure", "Denial of Service", "Elevation of Privilege"],
+      "topology": {"components": {"min": 10, "max": 16}, "flows": {"min": 2, "max": 25}, "boundaries": {"min": 2, "max": 15}}
+    }
+  },
+  {
+    "id": "advanced_aws_eks_supply_chain",
+    "domain": "platform",
+    "description": "An ALB with WAF routes to EKS. Services use IRSA, RDS PostgreSQL, ElastiCache Redis, S3, ECR, Secrets Manager, CloudWatch, and CloudTrail. GitHub Actions deploys through Argo CD.\nKNOWN ISSUES:\n- The EKS Kubernetes API endpoint is publicly reachable from 0.0.0.0/0.\n- One workload runs privileged with hostPath mounted.\n- Its IRSA policy allows s3:* on all resources.\n- RDS is publicly accessible.\n- ECR tags are mutable and image scanning is disabled.\n- Database credentials are copied into plain environment variables.\n- Argo CD accepts unsigned deployment manifests.",
+    "expected": {
+      "finding_ids": ["K8S-PUBLIC-CONTROL-PLANE-001", "K8S-PRIVILEGED-HOSTPATH-001", "K8S-RBAC-IRSA-ESCALATION-001", "AWS-RDS-PUBLIC-ACCESS-001", "CONTAINER-UNVERIFIED-IMAGE-001", "SECRET-ENVIRONMENT-EXPOSURE-001", "SUPPLY-CHAIN-UNSIGNED-MANIFEST-001"],
+      "critical_finding_ids": ["K8S-PUBLIC-CONTROL-PLANE-001", "K8S-PRIVILEGED-HOSTPATH-001", "K8S-RBAC-IRSA-ESCALATION-001", "AWS-RDS-PUBLIC-ACCESS-001"],
+      "confirmed_finding_ids": ["K8S-PUBLIC-CONTROL-PLANE-001", "K8S-PRIVILEGED-HOSTPATH-001", "K8S-RBAC-IRSA-ESCALATION-001", "AWS-RDS-PUBLIC-ACCESS-001", "CONTAINER-UNVERIFIED-IMAGE-001", "SECRET-ENVIRONMENT-EXPOSURE-001", "SUPPLY-CHAIN-UNSIGNED-MANIFEST-001"],
+      "known_issue_count": 7,
+      "finding_component_terms": {"K8S-PUBLIC-CONTROL-PLANE-001": ["eks"], "CONTAINER-UNVERIFIED-IMAGE-001": ["ecr"], "SUPPLY-CHAIN-UNSIGNED-MANIFEST-001": ["argo cd"]},
+      "forbidden_finding_ids": ["AI-RAG-TENANT-ISOLATION-001"],
+      "component_terms": ["eks", "ecr", "rds", "elasticache", "github actions", "argo cd"],
+      "forbidden_component_terms": ["fhir", "stripe", "bedrock"],
+      "stride_categories": ["Tampering", "Information Disclosure", "Elevation of Privilege"],
+      "topology": {"components": {"min": 11, "max": 18}, "flows": {"min": 1, "max": 25}, "boundaries": {"min": 2, "max": 15}}
+    }
+  },
+  {
+    "id": "advanced_multi_tenant_rag",
+    "domain": "ai",
+    "description": "React and Node.js use Okta, Azure OpenAI, RAG, Pinecone, S3, PostgreSQL, Redis, and Datadog.\nKNOWN ISSUES:\n- Retrieved documents are inserted into the system prompt without separating instructions from data.\n- Vector retrieval does not apply a tenant_id filter.\n- The model can call a tool and its arguments are not schema validated.\n- Full prompts, retrieved passages, access tokens, and model responses are written to logs.\n- Uploaded documents are indexed without malware scanning or source trust validation.\n- There is no output filtering before model responses are shown to users.",
+    "expected": {
+      "finding_ids": ["AI-INDIRECT-PROMPT-INJECTION-001", "AI-RAG-TENANT-ISOLATION-001", "MCP-TOOL-COMMAND-INJECTION-001", "SENSITIVE-DEBUG-LOGGING-001", "UPLOAD-MALWARE-QUARANTINE-001", "AI-OUTPUT-VALIDATION-001"],
+      "critical_finding_ids": ["AI-RAG-TENANT-ISOLATION-001", "MCP-TOOL-COMMAND-INJECTION-001", "SENSITIVE-DEBUG-LOGGING-001"],
+      "confirmed_finding_ids": ["AI-INDIRECT-PROMPT-INJECTION-001", "AI-RAG-TENANT-ISOLATION-001", "MCP-TOOL-COMMAND-INJECTION-001", "SENSITIVE-DEBUG-LOGGING-001", "UPLOAD-MALWARE-QUARANTINE-001", "AI-OUTPUT-VALIDATION-001"],
+      "known_issue_count": 6,
+      "finding_component_terms": {"AI-RAG-TENANT-ISOLATION-001": ["pinecone", "rag"], "SENSITIVE-DEBUG-LOGGING-001": ["azure openai", "rag"]},
+      "forbidden_finding_ids": ["FHIR-PARTNER-SPOOFING-001"],
+      "forbidden_ai_component_types": ["API Gateway", "WebClient", "Database"],
+      "component_terms": ["node.js", "okta", "azure openai", "rag", "pinecone", "s3"],
+      "forbidden_component_terms": ["fhir", "stripe", "sagemaker"],
+      "stride_categories": ["Tampering", "Information Disclosure", "Elevation of Privilege"],
+      "topology": {"components": {"min": 9, "max": 15}, "flows": {"min": 3, "max": 30}, "boundaries": {"min": 2, "max": 15}}
+    }
+  },
+  {
+    "id": "advanced_agent_mcp",
+    "domain": "ai",
+    "description": "A web application uses AI agents, an orchestration API, an LLM, Vault, and MCP servers for GitHub, Jira, PostgreSQL, a filesystem, and a shell executor.\nKNOWN ISSUES:\n- The agent can select shell and filesystem tools based only on model output.\n- MCP tool arguments are not validated against an allowlist.\n- The GitHub MCP token has organization owner permissions.\n- Retrieved Jira issue text is treated as trusted agent instruction.\n- Approval checks occur only in the user interface but are not enforced by the API.\n- Tool outputs and OAuth tokens are retained in debug logs.\n- MCP server identity and response signatures are not verified.",
+    "expected": {
+      "finding_ids": ["MCP-TOOL-COMMAND-INJECTION-001", "MCP-DELEGATED-AUTHORIZATION-001", "AI-INDIRECT-PROMPT-INJECTION-001", "AI-AGENT-APPROVAL-BYPASS-001", "SENSITIVE-DEBUG-LOGGING-001", "MCP-SERVER-IDENTITY-001"],
+      "critical_finding_ids": ["MCP-TOOL-COMMAND-INJECTION-001", "MCP-DELEGATED-AUTHORIZATION-001", "AI-AGENT-APPROVAL-BYPASS-001", "SENSITIVE-DEBUG-LOGGING-001"],
+      "confirmed_finding_ids": ["MCP-TOOL-COMMAND-INJECTION-001", "MCP-DELEGATED-AUTHORIZATION-001", "AI-INDIRECT-PROMPT-INJECTION-001", "AI-AGENT-APPROVAL-BYPASS-001", "SENSITIVE-DEBUG-LOGGING-001", "MCP-SERVER-IDENTITY-001"],
+      "known_issue_count": 7,
+      "finding_component_terms": {"MCP-DELEGATED-AUTHORIZATION-001": ["mcp"], "MCP-SERVER-IDENTITY-001": ["mcp"]},
+      "forbidden_finding_ids": ["PAYMENT-WEBHOOK-SIGNATURE-001"],
+      "component_terms": ["ai agent", "llm", "github mcp", "jira mcp", "postgresql mcp", "filesystem mcp", "shell mcp"],
+      "forbidden_component_terms": ["stripe", "fhir", "sagemaker"],
+      "stride_categories": ["Spoofing", "Tampering", "Information Disclosure", "Elevation of Privilege"],
+      "topology": {"components": {"min": 9, "max": 15}, "flows": {"min": 2, "max": 30}, "boundaries": {"min": 2, "max": 15}}
+    }
+  },
+  {
+    "id": "advanced_payment_commerce",
+    "domain": "fintech",
+    "description": "React and mobile clients call API Gateway and Node.js with Keycloak, PostgreSQL, MongoDB, Redis, Kafka, S3, Stripe, and SendGrid.\nKNOWN ISSUES:\n- Stripe webhook signatures are not validated.\n- Payment creation trusts amount and currency supplied by the browser.\n- Payment requests have no idempotency key.\n- Session tokens remain valid after password change or account disablement.\n- Full payment request bodies and customer email addresses are written to logs.\n- Order lookup accepts an order ID without checking ownership.\n- Product search has no GraphQL depth or cost limit.",
+    "expected": {
+      "finding_ids": ["PAYMENT-WEBHOOK-SIGNATURE-001", "PAYMENT-AMOUNT-INTEGRITY-001", "PAYMENT-IDEMPOTENCY-001", "AUTH-SESSION-REVOCATION-001", "SENSITIVE-DEBUG-LOGGING-001", "API-BOLA-OBJECT-OWNERSHIP-001", "API-GRAPHQL-RESOURCE-CONSUMPTION-001"],
+      "critical_finding_ids": ["PAYMENT-WEBHOOK-SIGNATURE-001", "PAYMENT-AMOUNT-INTEGRITY-001", "SENSITIVE-DEBUG-LOGGING-001", "API-BOLA-OBJECT-OWNERSHIP-001"],
+      "confirmed_finding_ids": ["PAYMENT-WEBHOOK-SIGNATURE-001", "PAYMENT-AMOUNT-INTEGRITY-001", "PAYMENT-IDEMPOTENCY-001", "AUTH-SESSION-REVOCATION-001", "SENSITIVE-DEBUG-LOGGING-001", "API-BOLA-OBJECT-OWNERSHIP-001", "API-GRAPHQL-RESOURCE-CONSUMPTION-001"],
+      "known_issue_count": 7,
+      "finding_component_terms": {"PAYMENT-AMOUNT-INTEGRITY-001": ["node.js"], "AUTH-SESSION-REVOCATION-001": ["keycloak", "redis"], "API-GRAPHQL-RESOURCE-CONSUMPTION-001": ["node.js"]},
+      "forbidden_finding_ids": ["AI-RAG-TENANT-ISOLATION-001"],
+      "component_terms": ["react", "mobile", "node.js", "keycloak", "stripe", "kafka"],
+      "forbidden_component_terms": ["fhir", "bedrock", "azure ad"],
+      "stride_categories": ["Spoofing", "Tampering", "Information Disclosure", "Denial of Service", "Elevation of Privilege"],
+      "topology": {"components": {"min": 11, "max": 17}, "flows": {"min": 5, "max": 35}, "boundaries": {"min": 2, "max": 16}}
+    }
+  },
+  {
+    "id": "advanced_hybrid_healthcare",
+    "domain": "healthcare",
+    "description": "React, Azure AD, API Gateway, Node.js, HL7 FHIR API, Redis, PostgreSQL, S3, Kafka, and Snowflake support patient records.\nKNOWN ISSUES:\n- FHIR partner connections do not require mutual TLS or sender-constrained tokens.\n- OAuth refresh tokens are not rotated and are not revoked after password reset.\n- Break-glass access is not separately audited or reviewed.\n- FHIR response bodies containing PHI are copied to application logs.\n- Analytics exports are not de-identified before loading Snowflake.\n- Redis does not require TLS or ACL authentication.\n- Medical document download URLs remain valid for seven days.",
+    "expected": {
+      "finding_ids": ["FHIR-PARTNER-SPOOFING-001", "AUTH-SESSION-REVOCATION-001", "HEALTH-BTG-AUDIT-001", "SENSITIVE-DEBUG-LOGGING-001", "HEALTH-ANALYTICS-DEIDENTIFICATION-001", "REDIS-SESSION-AUTH-001", "DOWNLOAD-LINK-LIFETIME-001"],
+      "critical_finding_ids": ["FHIR-PARTNER-SPOOFING-001", "HEALTH-BTG-AUDIT-001", "SENSITIVE-DEBUG-LOGGING-001", "HEALTH-ANALYTICS-DEIDENTIFICATION-001"],
+      "confirmed_finding_ids": ["FHIR-PARTNER-SPOOFING-001", "AUTH-SESSION-REVOCATION-001", "HEALTH-BTG-AUDIT-001", "SENSITIVE-DEBUG-LOGGING-001", "HEALTH-ANALYTICS-DEIDENTIFICATION-001", "REDIS-SESSION-AUTH-001", "DOWNLOAD-LINK-LIFETIME-001"],
+      "known_issue_count": 7,
+      "finding_component_terms": {"FHIR-PARTNER-SPOOFING-001": ["fhir"], "AUTH-SESSION-REVOCATION-001": ["azure ad", "redis"], "HEALTH-ANALYTICS-DEIDENTIFICATION-001": ["snowflake"], "REDIS-SESSION-AUTH-001": ["redis"], "DOWNLOAD-LINK-LIFETIME-001": ["s3"]},
+      "forbidden_finding_ids": ["PAYMENT-WEBHOOK-SIGNATURE-001"],
+      "component_terms": ["react", "azure ad", "node.js", "fhir", "redis", "postgresql", "snowflake"],
+      "forbidden_component_terms": ["stripe", "bedrock", "sagemaker"],
+      "stride_categories": ["Spoofing", "Repudiation", "Information Disclosure"],
+      "topology": {"components": {"min": 10, "max": 14}, "flows": {"min": 5, "max": 30}, "boundaries": {"min": 2, "max": 14}}
+    }
+  },
+  {
+    "id": "advanced_multicloud_agentic_saas",
+    "domain": "ai",
+    "description": "Cloudflare, AWS API Gateway, EKS, Keycloak, Aurora PostgreSQL, DynamoDB, Redis, S3, Kafka, KMS, Secrets Manager, Azure OpenAI, RAG, Pinecone, MCP tools for Salesforce and GitHub, BigQuery, Stripe, GitHub Actions, Argo CD, and SIEM form a global SaaS.\nKNOWN ISSUES:\n- The API trusts tenant IDs from JWT custom claims without verifying issuer-specific claim mappings.\n- An image import endpoint fetches arbitrary user-supplied URLs from the EKS network.\n- The RAG retriever can return chunks belonging to another tenant.\n- Retrieved content can instruct the agent to invoke MCP tools.\n- MCP tools inherit a shared service account with write access to every tenant.\n- Azure OpenAI prompts include raw customer secrets and are logged.\n- The EKS deployment role has wildcard iam:PassRole.\n- GitHub Actions uses unpinned third-party actions.\n- Stripe webhooks are processed without signature validation or idempotency.\n- Deletion requests do not propagate to Pinecone, BigQuery, backups, or model evaluation datasets.\n- Cross-cloud data transfers are not represented in the audit trail.\n- Kafka consumers retry poison messages without a dead-letter topic.",
+    "expected": {
+      "finding_ids": ["AUTH-JWT-CLAIM-CONFUSION-001", "WEB-SSRF-URL-FETCH-001", "AI-RAG-TENANT-ISOLATION-001", "AI-INDIRECT-PROMPT-INJECTION-001", "MCP-DELEGATED-AUTHORIZATION-001", "SENSITIVE-DEBUG-LOGGING-001", "AWS-IAM-ADMIN-PASSROLE-001", "SUPPLY-CHAIN-UNPINNED-ACTION-001", "PAYMENT-WEBHOOK-SIGNATURE-001", "DATA-DELETION-PROPAGATION-001", "CLOUD-CROSS-BOUNDARY-AUDIT-001", "QUEUE-POISON-MESSAGE-001"],
+      "critical_finding_ids": ["AUTH-JWT-CLAIM-CONFUSION-001", "WEB-SSRF-URL-FETCH-001", "AI-RAG-TENANT-ISOLATION-001", "MCP-DELEGATED-AUTHORIZATION-001", "SENSITIVE-DEBUG-LOGGING-001", "AWS-IAM-ADMIN-PASSROLE-001", "PAYMENT-WEBHOOK-SIGNATURE-001"],
+      "confirmed_finding_ids": ["AUTH-JWT-CLAIM-CONFUSION-001", "WEB-SSRF-URL-FETCH-001", "AI-RAG-TENANT-ISOLATION-001", "AI-INDIRECT-PROMPT-INJECTION-001", "MCP-DELEGATED-AUTHORIZATION-001", "SENSITIVE-DEBUG-LOGGING-001", "AWS-IAM-ADMIN-PASSROLE-001", "SUPPLY-CHAIN-UNPINNED-ACTION-001", "PAYMENT-WEBHOOK-SIGNATURE-001", "DATA-DELETION-PROPAGATION-001", "CLOUD-CROSS-BOUNDARY-AUDIT-001", "QUEUE-POISON-MESSAGE-001"],
+      "known_issue_count": 12,
+      "finding_component_terms": {"AI-RAG-TENANT-ISOLATION-001": ["rag", "pinecone"], "MCP-DELEGATED-AUTHORIZATION-001": ["mcp"], "AWS-IAM-ADMIN-PASSROLE-001": ["eks"], "SUPPLY-CHAIN-UNPINNED-ACTION-001": ["github actions"], "QUEUE-POISON-MESSAGE-001": ["kafka"]},
+      "forbidden_finding_ids": ["FHIR-PARTNER-SPOOFING-001"],
+      "forbidden_ai_component_types": ["API Gateway", "WebClient", "Database"],
+      "component_terms": ["cloudflare", "api gateway", "eks", "aurora", "kms", "azure openai", "rag", "pinecone", "mcp", "bigquery", "github actions", "argo cd"],
+      "forbidden_component_terms": ["fhir", "sagemaker", "azure ad"],
+      "stride_categories": ["Spoofing", "Tampering", "Repudiation", "Information Disclosure", "Denial of Service", "Elevation of Privilege"],
+      "topology": {"components": {"min": 18, "max": 28}, "flows": {"min": 5, "max": 45}, "boundaries": {"min": 2, "max": 22}}
+    }
+  }
+]

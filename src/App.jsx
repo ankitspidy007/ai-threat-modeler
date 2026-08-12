@@ -46,7 +46,7 @@ function App() {
         const result = await analyzeDocuments(uploadedFiles, name, useLocalSlm, options);
         setData(result);
         saveAnalysis(name, result);
-        toast.success(`Document analysis complete! Found ${result.threats.length} potential threats.`, 'Success');
+        toast.success(`Document analysis complete! Found ${result.threats.length} security findings.`, 'Success');
         return;
       }
 
@@ -54,7 +54,7 @@ function App() {
       const result = await streaming.analyze(description, name, useLocalSlm, options);
       setData(result);
       saveAnalysis(name, result);
-      toast.success(`Analysis complete! Found ${result.threats.length} potential threats.`, 'Success');
+      toast.success(`Analysis complete! Found ${result.threats.length} security findings.`, 'Success');
     } catch (wsError) {
       // Fallback to REST API
       console.warn('WebSocket failed, falling back to REST:', wsError.message);
@@ -62,7 +62,7 @@ function App() {
         const result = await analyzeSystem(description, name, useLocalSlm, options);
         setData(result);
         saveAnalysis(name, result);
-        toast.success(`Analysis complete! Found ${result.threats.length} potential threats.`, 'Success');
+        toast.success(`Analysis complete! Found ${result.threats.length} security findings.`, 'Success');
       } catch (error) {
         console.error('Analysis failed', error);
         toast.error(
@@ -84,7 +84,7 @@ function App() {
         const result = await analyzeIac(iacContent, name, formatHint);
         setData(result);
         saveAnalysis(name, result);
-        toast.success(`IaC Analysis complete! Found ${result.threats.length} potential threats.`, 'Success');
+        toast.success(`IaC Analysis complete! Found ${result.threats.length} security findings.`, 'Success');
     } catch (error) {
         console.error('IaC Analysis failed', error);
         toast.error(
@@ -104,7 +104,7 @@ function App() {
       const result = await analyzeCode(codeContent, name, language);
       setData(result);
       saveAnalysis(name, result);
-      toast.success(`Code analysis complete! Found ${result.threats.length} potential threats.`, 'Success');
+      toast.success(`Code analysis complete! Found ${result.threats.length} security findings.`, 'Success');
     } catch (error) {
       console.error('Code analysis failed', error);
       toast.error(error.message || 'Failed to analyze source code.', 'Analysis Failed');
@@ -160,27 +160,28 @@ function App() {
       <div className={`${sidebarCollapsed ? 'ml-[68px]' : 'ml-[220px]'} transition-all duration-300`}>
         {/* Top Bar */}
         <header className="sticky top-0 z-40 border-b border-brand-200 bg-white/95 dark:border-brand-700 dark:bg-brand-900/95">
-          <div className="mx-auto flex max-w-[1440px] items-center justify-between px-8 py-3.5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 dark:border-brand-700 dark:bg-brand-800">
+          <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-2 px-3 py-3 sm:px-8 sm:py-3.5">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 dark:border-brand-700 dark:bg-brand-800 sm:flex">
                 <PageIcon className={`w-5 h-5 ${currentPage.color}`} />
               </div>
-              <div>
-                <h1 className="text-lg font-semibold text-brand-950 dark:text-white">{currentPage.title}</h1>
-                <p className="text-xs text-brand-500 dark:text-brand-400">{currentPage.subtitle}</p>
+              <div className="min-w-0">
+                <h1 className="text-base font-semibold text-brand-950 dark:text-white sm:text-lg">{currentPage.title}</h1>
+                <p className="hidden text-xs text-brand-500 dark:text-brand-400 md:block">{currentPage.subtitle}</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
               {data && (
                 <button
                   onClick={handleNewAnalysis}
-                  className="ui-button-secondary"
+                  className="ui-button-secondary h-9 px-2 sm:px-3.5"
+                  title="Start a new analysis"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  New Analysis
+                  <span className="hidden sm:inline">New Analysis</span>
                 </button>
               )}
-              <div className="ui-chip font-mono">
+              <div className="ui-chip hidden font-mono sm:inline-flex">
                 v2.0.0
               </div>
             </div>
@@ -188,7 +189,7 @@ function App() {
         </header>
 
         {/* Page Content */}
-        <main className="mx-auto max-w-[1440px] px-8 py-7">
+        <main className="mx-auto max-w-[1440px] px-3 py-5 sm:px-8 sm:py-7">
           {activeTab === 'static' ? (
             <>
               {!data && !isAnalyzing && (

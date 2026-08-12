@@ -163,8 +163,10 @@ class TestAPI:
         assert response.status_code == 200
         data = response.json()
         
-        # Should detect multiple threats
-        assert len(data["threats"]) > 0
+        # The input states controls but no weakness. Unknown details belong in
+        # the STRIDE matrix and must not be converted into fake findings.
+        assert data["stride_coverage"]["assessment_percent"] == 100.0
+        assert data["engine_status"]["quality_gate"]["confirmed_without_evidence"] == 0
         
         # Should have architecture information
         assert "architecture" in data

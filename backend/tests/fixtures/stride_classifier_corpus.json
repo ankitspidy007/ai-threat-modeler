@@ -1,0 +1,20 @@
+[
+  {"id":"spoof-jwt","text":"Stolen JWT lets an attacker impersonate another user.","stride_category":"Spoofing"},
+  {"id":"spoof-saml","text":"A forged SAML assertion authenticates the attacker as an administrator.","stride_category":"Spoofing"},
+  {"id":"spoof-stuffing","text":"Credential stuffing compromises customer accounts.","stride_category":"Spoofing"},
+  {"id":"tamper-sqli","text":"SQL injection modifies database records.","stride_category":"Tampering"},
+  {"id":"tamper-webhook","text":"An unsigned webhook payload alters payment state.","stride_category":"Tampering"},
+  {"id":"tamper-xss","text":"Stored XSS injects malicious script into customer comments.","stride_category":"Tampering"},
+  {"id":"repud-admin","text":"Administrator actions have no audit trail.","stride_category":"Repudiation"},
+  {"id":"repud-identity","text":"Users can deny transactions because logs lack identity attribution.","stride_category":"Repudiation"},
+  {"id":"repud-mutable","text":"Mutable audit logs permit operators to erase evidence.","stride_category":"Repudiation"},
+  {"id":"disclose-s3","text":"A public S3 bucket exposes customer records.","stride_category":"Information Disclosure"},
+  {"id":"disclose-logs","text":"The API writes access tokens and secrets to application logs.","stride_category":"Information Disclosure"},
+  {"id":"disclose-phi","text":"Unencrypted PHI is readable from database backups.","stride_category":"Information Disclosure"},
+  {"id":"dos-graphql","text":"GraphQL has no depth limit and permits resource exhaustion.","stride_category":"Denial of Service"},
+  {"id":"dos-agent","text":"An unbounded agent tool loop exhausts compute quota.","stride_category":"Denial of Service"},
+  {"id":"dos-queue","text":"A queue flood makes the worker unavailable.","stride_category":"Denial of Service"},
+  {"id":"eop-iam","text":"A wildcard IAM role grants administrator privileges.","stride_category":"Elevation of Privilege"},
+  {"id":"eop-pod","text":"A privileged Kubernetes pod gains host root access.","stride_category":"Elevation of Privilege"},
+  {"id":"eop-bola","text":"Missing object authorization lets one tenant access administrator data.","stride_category":"Elevation of Privilege"}
+]

@@ -9,6 +9,9 @@ export function mapAnalysisResult(result) {
       id: t.id,
       category: t.category,
       stride_category: t.stride_category || t.category,
+      affected_stride_categories: t.affected_stride_categories?.length
+        ? t.affected_stride_categories
+        : [t.stride_category || t.category],
       title: t.title,
       severity: t.severity,
       likelihood: t.likelihood || 'Medium',
@@ -16,6 +19,10 @@ export function mapAnalysisResult(result) {
       tier: t.tier || 'Potential',
       status: t.status || 'Identified',
       evidence: t.evidence || [],
+      evidence_details: t.evidence_details || [],
+      finding_type: t.finding_type || 'architecture',
+      risk_factors: t.risk_factors || {},
+      preconditions: t.preconditions || [],
       description: t.description,
       impact: t.impact || 'Unknown',
       mitigation: t.mitigation,
@@ -57,5 +64,11 @@ export function mapAnalysisResult(result) {
     ml_enhanced: result.ml_enhanced || null,
     attack_chains: result.attack_chains || null,
     architecture_insights: result.architecture_insights || [],
+    system_model: result.system_model || null,
+    finding_groups: result.finding_groups || {},
+    risk_methodology: result.risk_methodology || null,
+    stride_coverage: result.stride_coverage || null,
+    engine_status: result.engine_status || null,
+    architecture_validation: result.architecture_validation || null,
   };
 }
