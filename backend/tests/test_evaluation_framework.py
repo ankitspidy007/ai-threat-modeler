@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from app.evaluation import (
     assert_thresholds, evaluate_corpus, evaluate_retrieval_corpus,
     evaluate_stride_classifier_corpus, load_classifier_corpus, load_corpus, load_retrieval_corpus,
@@ -11,6 +13,7 @@ RETRIEVAL_CORPUS = Path(__file__).parent / "fixtures" / "retrieval_corpus.json"
 CLASSIFIER_CORPUS = Path(__file__).parent / "fixtures" / "stride_classifier_corpus.json"
 
 
+@pytest.mark.slow
 def test_evaluation_corpus_meets_release_gate():
     report = evaluate_corpus(load_corpus(CORPUS))
 

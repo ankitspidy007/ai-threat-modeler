@@ -11,7 +11,7 @@ import { useStreamingAnalysis } from './hooks/useStreamingAnalysis';
 import { saveAnalysis } from './utils/storage';
 import { mapAnalysisResult } from './utils/analysisMapper';
 import { RotateCcw, Zap, Sparkles, Clock, FileCode2 } from 'lucide-react';
-import { useToast } from './components/Toast';
+import { useToast } from './hooks/useToast';
 
 function App() {
   const [data, setData] = useState(null);
@@ -127,6 +127,13 @@ function App() {
     toast.success('Analysis loaded from history');
   };
 
+  // Re-running an edited model is the ordinary analysis path with the model as
+  // its input; the structured format parses without inference, so only what the
+  // reviewer changed changes.
+  const handleReanalyze = (architectureDocument) => {
+    handleAnalyze(architectureDocument, projectName || 'Untitled', true);
+  };
+
   const handleNewAnalysis = () => {
     setData(null);
     setProjectName('');
@@ -182,7 +189,7 @@ function App() {
                 </button>
               )}
               <div className="ui-chip hidden font-mono sm:inline-flex">
-                v2.0.0
+                v2.3.1
               </div>
             </div>
           </div>
@@ -237,7 +244,13 @@ function App() {
 
               {data && (
                 <div className="w-full">
-                  <ThreatDashboard data={data} projectName={projectName} />
+                  <ThreatDashboard
+                    data={data}
+                    projectName={projectName}
+                    darkMode={darkMode}
+                    onReanalyze={handleReanalyze}
+                    isAnalyzing={isAnalyzing || streaming.isAnalyzing}
+                  />
                 </div>
               )}
             </>
@@ -250,7 +263,13 @@ function App() {
                   Analyzing source code...
                 </div>
               )}
-              {data && <div className="w-full"><ThreatDashboard data={data} projectName={projectName} /></div>}
+              {data && <div className="w-full"><ThreatDashboard
+                    data={data}
+                    projectName={projectName}
+                    darkMode={darkMode}
+                    onReanalyze={handleReanalyze}
+                    isAnalyzing={isAnalyzing || streaming.isAnalyzing}
+                  /></div>}
             </>
           ) : activeTab === 'iac' ? (
             <>
@@ -279,7 +298,13 @@ function App() {
 
               {data && (
                 <div className="w-full">
-                  <ThreatDashboard data={data} projectName={projectName} />
+                  <ThreatDashboard
+                    data={data}
+                    projectName={projectName}
+                    darkMode={darkMode}
+                    onReanalyze={handleReanalyze}
+                    isAnalyzing={isAnalyzing || streaming.isAnalyzing}
+                  />
                 </div>
               )}
             </>
@@ -290,7 +315,13 @@ function App() {
               )}
               {data && (
                 <div className="w-full">
-                  <ThreatDashboard data={data} projectName={projectName} />
+                  <ThreatDashboard
+                    data={data}
+                    projectName={projectName}
+                    darkMode={darkMode}
+                    onReanalyze={handleReanalyze}
+                    isAnalyzing={isAnalyzing || streaming.isAnalyzing}
+                  />
                 </div>
               )}
             </>
@@ -301,7 +332,7 @@ function App() {
 
         {/* Footer */}
         <footer className="mt-auto border-t border-brand-200 py-4 text-center text-xs text-brand-400 dark:border-brand-700 dark:text-brand-500">
-          <p>&copy; 2026 AITM v2.0 • NLP &bull; Semantic Search &bull; Attack Chains &bull; Multi-LLM</p>
+          <p>&copy; 2026 AITM v2.3.1 • NLP &bull; Semantic Search &bull; Attack Chains &bull; Multi-LLM</p>
         </footer>
       </div>
     </div>

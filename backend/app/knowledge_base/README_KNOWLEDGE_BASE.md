@@ -1,101 +1,89 @@
-# Comprehensive Threat Knowledge Base - Implementation Guide
+# Threat Knowledge Base
 
-## Overview
-This document outlines the modular structure for the comprehensive threat knowledge base.
+Rule packs in this directory supply the deterministic findings the report
+publishes. 21 modules load into a single database of roughly 180 rules.
 
-## Module Structure
+## Modules
 
-### Core Modules (Created)
-1. **enhanced_schema.json** - Schema definition with all required fields
-2. **cloud_aws_threats.json** - AWS-specific threats (S3, EC2, Lambda, IAM, RDS, etc.)
-3. **cloud_azure_threats.json** - Azure-specific threats
-4. **cloud_gcp_threats.json** - GCP-specific threats
-5. **owasp_web_top10.json** - OWASP Top 10 Web Application threats
-6. **owasp_api_top10.json** - OWASP API Security Top 10
-7. **owasp_serverless_top10.json** - OWASP Serverless Top 10
-8. **container_k8s_threats.json** - Container and Kubernetes threats
-9. **auth_authz_threats.json** - Authentication and Authorization threats
-10. **infrastructure_threats.json** - Infrastructure component threats
-11. **database_threats.json** - Database-specific threats
-12. **supply_chain_threats.json** - Supply chain and CI/CD threats
-13. **emerging_threats.json** - Recent and emerging threat patterns
-14. **mitre_attack_mapping.json** - MITRE ATT&CK technique mappings
-15. **ai_agent_threats.json** - AI agent tool-use, memory, autonomy, and trace leakage threats
-16. **rag_vector_store_threats.json** - RAG, vector store, retrieval, and embedding-corpus threats
-17. **serverless_threats.json** - Serverless function trigger, IAM, event, secret, and concurrency threats
-18. **identity_zero_trust_threats.json** - Workload identity, OAuth scope, step-up auth, and tenant isolation threats
-19. **data_pipeline_threats.json** - ETL, analytics, stream, warehouse, and orchestration threats
-20. **secrets_management_threats.json** - Source, CI/CD, cloud key, vector index, and rotation secret risks
+Loading is handled by `ThreatKnowledgeBase` in [loader.py](loader.py). Every
+`*.json` file here is discovered automatically except those in
+`EXCLUDED_KB_FILES`; a new pack needs no registration. Files named in the
+loader's priority order load first and everything else follows alphabetically.
 
-## Loading Strategy
+Two packs using the same threat ID are merged into one canonical record rather
+than one silently replacing the other, and the collision is recorded in
+`validation_issues`. Rules that fail schema validation are dropped and reported
+the same way, so check that list after editing a pack.
 
-The system will load all modules at startup and merge them into a unified threat database.
+| Module | Scope |
+| --- | --- |
+| `cloud_aws_threats.json` | S3, EC2, Lambda, IAM, RDS, and other AWS services |
+| `cloud_azure_threats.json` | Azure services |
+| `cloud_gcp_threats.json` | GCP services |
+| `owasp_web_top10.json` | OWASP Top 10 for web applications |
+| `owasp_api_top10.json` | OWASP API Security Top 10 |
+| `container_k8s_threats.json` | Containers and Kubernetes |
+| `auth_authz_threats.json` | Authentication and authorization |
+| `infrastructure_threats.json` | Infrastructure components |
+| `database_threats.json` | Databases |
+| `supply_chain_threats.json` | Supply chain and CI/CD |
+| `emerging_threats.json` | Recent and emerging patterns |
+| `custom_ai_llm_threats.json` | Prompt injection, jailbreaks, model extraction |
+| `domain_threats.json` | Domain-profile threats |
+| `threats.json` | Base catalog |
+| `ai_agent_threats.json` | Agent tool use, memory, autonomy, trace leakage |
+| `rag_vector_store_threats.json` | RAG, retrieval, embedding corpora |
+| `serverless_threats.json` | Function triggers, IAM, events, concurrency |
+| `identity_zero_trust_threats.json` | Workload identity, OAuth scope, tenant isolation |
+| `data_pipeline_threats.json` | ETL, analytics, streaming, orchestration |
+| `secrets_management_threats.json` | Source, CI/CD, cloud key, and rotation risks |
+| `professional_threat_catalog.json` | Cross-cutting professional catalog |
 
-**File: backend/app/knowledge_base/loader.py**
-```python
-import json
-import glob
-from pathlib import Path
+`schema.json` and `enhanced_schema.json` define the rule fields. They are the two
+files excluded from discovery, so they are the only `*.json` here that are not
+loaded as rules. MITRE ATT&CK techniques are carried on the rules themselves
+rather than in a separate mapping file.
 
-def load_comprehensive_knowledge_base():
-    kb_dir = Path(__file__).parent
-    all_threats = []
-    
-    # Load all threat modules
-    for threat_file in kb_dir.glob("*_threats.json"):
-        with open(threat_file) as f:
-            threats = json.load(f)
-            all_threats.extend(threats)
-    
-    # Load OWASP modules
-    for owasp_file in kb_dir.glob("owasp_*.json"):
-        with open(owasp_file) as f:
-            threats = json.load(f)
-            all_threats.extend(threats)
-    
-    return all_threats
+## Writing a rule
+
+Match on architecture facts rather than wording. A rule fires against the
+canonical model the parser produced, not the sentence the analyst typed.
+
+**`resource_types` is matched loosely.** Comparison ignores spacing and casing,
+so `StorageBucket`, `Storage Bucket`, and `Object Storage` all reach the same
+components. A rule will not silently miss because a type is spelled as one word
+in the pack and two in the model.
+
+**Name the control the rule is about.** A rule that carries `controls` is
+recognized as being about that control, so when a contextual pattern and the
+description itself report the same absent control on the same component, the
+analyzer keeps one finding and folds the others' CWE, OWASP, and MITRE mappings
+into it. Without `controls`, the same gap can be reported more than once.
+
+**Keep CWE and OWASP consistent.** Where a rule omits an OWASP category, one is
+derived from its primary CWE by `owasp_for` in
+[`../engine/owasp_mapping.py`](../engine/owasp_mapping.py). Where a rule declares
+both, make them agree with that mapping: a rule stating a logging CWE but an
+access-control category will contradict the rest of the report. The equivalent
+generic weakness rules are held to this by
+`test_declared_owasp_agrees_with_the_cwe_mapping`.
+
+## After changing a pack
+
+Reload the database and rebuild the local artifacts that depend on it:
+
+```bash
+cd backend
+python scripts/retrain_local_models.py
 ```
 
-## Statistics (Target)
+`POST /admin/retrain-local-models` does the same thing on a running server. The
+classifier's training corpus is derived from these packs, so skipping this step
+leaves it stale and the analyzer will say so.
 
-- **Total Threats**: 800-1000+
-- **Current Threats**: 161
-- **Cloud Platform Coverage**: 200+ (AWS: 80, Azure: 60, GCP: 60)
-- **OWASP Coverage**: 30+ (Web: 10, API: 10, Serverless: 10)
-- **Container/K8s**: 50+
-- **Auth/AuthZ**: 40+
-- **Infrastructure**: 60+
-- **Database**: 50+
-- **Supply Chain**: 30+
-- **Emerging**: 20+
-- **AI/Agent/RAG**: 50+
-- **Data Pipeline and Analytics**: 40+
-- **Secrets Management**: 40+
-- **MITRE ATT&CK**: 100+ technique mappings
+Then confirm the change did what you meant:
 
-## Implementation Progress
-
-- [x] Enhanced schema created
-- [/] AWS threats module (in progress)
-- [ ] Azure threats module
-- [ ] GCP threats module
-- [ ] OWASP modules
-- [ ] Container/K8s threats
-- [ ] Auth/AuthZ threats
-- [ ] Infrastructure threats
-- [ ] Database threats
-- [ ] Supply chain threats
-- [ ] Emerging threats
-- [x] AI agent threats
-- [x] RAG and vector store threats
-- [x] Serverless threats
-- [x] Identity and zero-trust threats
-- [x] Data pipeline threats
-- [x] Secrets management threats
-- [ ] MITRE ATT&CK mappings
-- [x] Loader implementation
-- [x] Integration with existing system
-
-## Next Steps
-
-Due to the size, I'm creating this in batches. Each module will be comprehensive and production-ready.
+```bash
+python -m pytest -q
+python scripts/evaluate_threat_model.py
+```

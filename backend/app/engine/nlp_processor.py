@@ -15,6 +15,8 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
+from . import control_statements, model_policy, technology_catalog
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -36,185 +38,10 @@ except Exception:
 
 NER_MODEL = os.getenv("AEGIS_THREAT_NER_MODEL", "dslim/bert-base-NER")
 
-TECH_COMPONENT_MAP = {
-    "postgresql": "Database",
-    "postgres": "Database",
-    "mysql": "Database",
-    "mongodb": "Database",
-    "mongo": "Database",
-    "redis": "Database",
-    "dynamodb": "Database",
-    "cassandra": "Database",
-    "mariadb": "Database",
-    "oracle": "Database",
-    "mssql": "Database",
-    "cosmosdb": "Database",
-    "firestore": "Database",
-    "documentdb": "Database",
-    "elasticsearch": "Database",
-    "opensearch": "Database",
-    "snowflake": "Database",
-    "redshift": "Database",
-    "bigquery": "Database",
-    "sqlite": "Database",
-    "cockroachdb": "Database",
-    "neo4j": "Database",
-    "influxdb": "Database",
-    "timescaledb": "Database",
-    "supabase": "Database",
-    "planetscale": "Database",
-    "neon": "Database",
-    "turso": "Database",
-    "valkey": "Database",
-    "dragonfly": "Database",
-    "dragonflydb": "Database",
-    "memcached": "Database",
-    "couchdb": "Database",
-    "rethinkdb": "Database",
-    "vector database": "Database",
-    "vector db": "Database",
-    "vector store": "Database",
-    "pinecone": "Database",
-    "weaviate": "Database",
-    "qdrant": "Database",
-    "milvus": "Database",
-    "express": "API",
-    "fastapi": "API",
-    "django": "API",
-    "flask": "API",
-    "spring boot": "API",
-    "spring": "API",
-    "rails": "API",
-    "laravel": "API",
-    "gin": "API",
-    "fiber": "API",
-    "actix": "API",
-    "nest": "API",
-    "nestjs": "API",
-    "graphql": "API",
-    "rest api": "API",
-    "grpc": "API",
-    "api server": "API",
-    "web service": "API",
-    "koa": "API",
-    "hapi": "API",
-    "adonisjs": "API",
-    "node.js": "API",
-    "nodejs": "API",
-    "llm gateway": "API Gateway",
-    "react": "WebClient",
-    "vue": "WebClient",
-    "angular": "WebClient",
-    "svelte": "WebClient",
-    "next.js": "WebClient",
-    "nextjs": "WebClient",
-    "nuxt": "WebClient",
-    "gatsby": "WebClient",
-    "remix": "WebClient",
-    "astro": "WebClient",
-    "spa": "WebClient",
-    "frontend": "WebClient",
-    "mobile app": "WebClient",
-    "ios": "WebClient",
-    "android": "WebClient",
-    "flutter": "WebClient",
-    "react native": "WebClient",
-    "kiosk": "WebClient",
-    "nginx": "Load Balancer",
-    "haproxy": "Load Balancer",
-    "alb": "Load Balancer",
-    "nlb": "Load Balancer",
-    "elb": "Load Balancer",
-    "traefik": "Load Balancer",
-    "kong": "API Gateway",
-    "apigee": "API Gateway",
-    "api gateway": "API Gateway",
-    "aws api gateway": "API Gateway",
-    "azure api management": "API Gateway",
-    "service mesh": "Service",
-    "istio": "Service",
-    "linkerd": "Service",
-    "kafka": "Queue",
-    "rabbitmq": "Queue",
-    "sqs": "Queue",
-    "sns": "Queue",
-    "pubsub": "Queue",
-    "nats": "Queue",
-    "mqtt": "Queue",
-    "activemq": "Queue",
-    "celery": "Queue",
-    "bull": "Queue",
-    "sidekiq": "Queue",
-    "s3": "Object Storage",
-    "azure blob": "Object Storage",
-    "gcs": "Object Storage",
-    "minio": "Object Storage",
-    "cloudflare r2": "Object Storage",
-    "aws kms": "Key Management",
-    "kms": "Key Management",
-    "route 53": "DNS",
-    "route53": "DNS",
-    "eks": "Container Platform",
-    "ecr": "Container Registry",
-    "rds": "Database",
-    "aurora": "Database",
-    "elasticache": "Database",
-    "cloudfront": "CDN",
-    "cloudflare": "CDN",
-    "akamai": "CDN",
-    "fastly": "CDN",
-    "auth0": "Identity Provider",
-    "okta": "Identity Provider",
-    "cognito": "Identity Provider",
-    "keycloak": "Identity Provider",
-    "azure ad": "Identity Provider",
-    "firebase auth": "Identity Provider",
-    "datadog": "Monitoring",
-    "splunk": "Monitoring",
-    "grafana": "Monitoring",
-    "prometheus": "Monitoring",
-    "new relic": "Monitoring",
-    "elk": "Monitoring",
-    "cloudwatch": "Monitoring",
-    "sentry": "Monitoring",
-    "lambda": "Service",
-    "ec2": "Compute",
-    "cloud function": "Service",
-    "azure function": "Service",
-    "github actions": "CI/CD",
-    "argo cd": "CI/CD",
-    "argocd": "CI/CD",
-    "github mcp": "MCP Server",
-    "jira mcp": "MCP Server",
-    "salesforce mcp": "MCP Server",
-    "mcp server": "MCP Server",
-    "shell executor": "Tool",
-    "filesystem": "Tool",
-    "iot device": "IoT Device",
-    "sensor": "IoT Device",
-    "medical device": "IoT Device",
-    "smart device": "IoT Device",
-    "guardduty": "Threat Detection",
-    "security hub": "Threat Detection",
-    "waf": "Threat Detection",
-    "vault": "Secrets Manager",
-    "key vault": "Secrets Manager",
-    "secrets manager": "Secrets Manager",
-    "openai": "ML Service",
-    "azure openai": "ML Service",
-    "anthropic": "ML Service",
-    "claude": "ML Service",
-    "gemini": "ML Service",
-    "vertex ai": "ML Service",
-    "sagemaker": "ML Service",
-    "bedrock": "ML Service",
-    "ollama": "ML Service",
-    "llm": "ML Service",
-    "rag": "ML Service",
-    "embedding model": "ML Service",
-    "model serving": "ML Service",
-    "orchestration agent": "ML Service",
-}
+# The vendor catalog is data, not code. Kept under its historical name because
+# several passes import it directly; new code should prefer the catalog's own
+# helpers, which match the longest term rather than the first one listed.
+TECH_COMPONENT_MAP = technology_catalog.TECHNOLOGY_TYPES
 
 FLOW_VERBS = {
     "send",
@@ -323,12 +150,17 @@ class NLPProcessor:
                 "token-classification",
                 model=NER_MODEL,
                 aggregation_strategy="simple",
-                local_files_only=True,
+                **model_policy.transformers_kwargs(NER_MODEL),
             )
             logger.info("Transformers NER pipeline initialized.")
+            model_policy.note_model(NER_MODEL, "named_entity_recognition", loaded=True)
         except Exception as exc:
             logger.info("Transformers NER pipeline unavailable: %s", exc)
             self.ner_pipeline = None
+            model_policy.note_model(
+                NER_MODEL, "named_entity_recognition", loaded=False, error=str(exc),
+                fallback="rule_based_extraction",
+            )
 
     def _split_sentences(self, text: str) -> List[str]:
         if not text:
@@ -414,11 +246,11 @@ class NLPProcessor:
         text_lower = text.lower()
         seen = set()
 
-        for tech in sorted(TECH_COMPONENT_MAP, key=len, reverse=True):
+        for tech in technology_catalog.terms_longest_first():
             comp_type = TECH_COMPONENT_MAP[tech]
             # Technologies are terms, not arbitrary substrings. Without token
             # boundaries, "gin" matched words such as "logging".
-            if re.search(r'(?<![a-z0-9])' + re.escape(tech) + r'(?![a-z0-9])', text_lower) and tech not in seen:
+            if technology_catalog.mentions(text_lower, tech) and tech not in seen:
                 seen.add(tech)
                 result["technologies"].append(
                     {
@@ -560,7 +392,7 @@ class NLPProcessor:
         for name, cid in component_names.items():
             if name in text or text in name:
                 return cid
-        for tech in TECH_COMPONENT_MAP:
+        for tech in technology_catalog.terms_longest_first():
             if tech in text:
                 for name, cid in component_names.items():
                     if tech in name:
@@ -586,9 +418,12 @@ class NLPProcessor:
 
     def classify_component_type(self, text: str) -> str:
         text_lower = text.lower()
-        for tech, comp_type in TECH_COMPONENT_MAP.items():
-            if tech in text_lower:
-                return comp_type
+        # Most specific term wins: an "Azure OpenAI gateway" is classified by
+        # the phrase the design used, not by whichever fragment of it the
+        # catalog happened to list first.
+        catalogued = technology_catalog.classify(text_lower)
+        if catalogued:
+            return catalogued
         if any(word in text_lower for word in ["database", "db", "sql", "store"]):
             return "Database"
         if any(word in text_lower for word in ["api", "endpoint", "rest", "backend"]):
@@ -642,45 +477,14 @@ class NLPProcessor:
                 props["auth_type"] = auth_type
                 break
 
-        if any(word in text_lower for word in ["encrypted", "encrypts", "encryption at rest", "tde", "kms"]):
-            props["encryption_at_rest"] = True
-        if any(word in text_lower for word in ["https", "tls", "ssl"]):
-            props["encryption_in_transit"] = True
-        if "mtls" in text_lower or "mutual tls" in text_lower:
-            props["mtls_enabled"] = True
-
-        if any(word in text_lower for word in ["logging", "logs", "audit"]):
-            props["logging_enabled"] = True
-        if any(word in text_lower for word in ["cloudwatch", "datadog", "splunk", "elk"]):
-            props["centralized_logging"] = True
-            props["logging_enabled"] = True
-
-        if any(word in text_lower for word in ["waf", "web application firewall"]):
-            props["waf_enabled"] = True
-        if any(word in text_lower for word in ["rate limit", "throttling"]):
-            props["rate_limiting"] = True
-        if any(word in text_lower for word in ["query depth limit", "query depth limiting", "depth limiting"]):
-            props["query_depth_limiting"] = True
-        if any(word in text_lower for word in ["input validation", "sanitization"]):
-            props["input_validation"] = True
-        if any(word in text_lower for word in ["rbac", "role-based"]):
-            props["rbac_enabled"] = True
-        if any(word in text_lower for word in ["mfa", "multi-factor", "2fa"]):
-            props["mfa_enabled"] = True
-        if any(word in text_lower for word in ["service mesh", "istio", "linkerd"]):
-            props["service_mesh"] = True
-        if any(word in text_lower for word in ["zero trust", "zero-trust"]):
-            props["zero_trust"] = True
-        if any(word in text_lower for word in ["private subnet", "private network"]):
-            props["private_subnet"] = True
-        if any(word in text_lower for word in ["signed url", "signed urls", "pre-signed"]):
-            props["signed_urls"] = True
-        if any(word in text_lower for word in ["webhook signature", "signature validation", "hmac signature"]):
-            props["webhook_signature_validation"] = True
-        if any(word in text_lower for word in ["dlp", "data loss prevention"]):
-            props["dlp_enabled"] = True
-        if any(word in text_lower for word in ["vault", "key vault", "secrets manager", "secret store"]):
-            props["secrets_management"] = True
+        # One vocabulary decides both whether a control is named and whether the
+        # sentence claimed it or denied it, so "no MFA" cannot arrive here as
+        # evidence that MFA is enforced.
+        reading = control_statements.read(text)
+        for control in control_statements.CONTROL_TERMS:
+            stated = reading.value(control)
+            if stated is not None:
+                props[control] = stated
 
         if any(word in text_lower for word in ["hipaa", "phi"]):
             props["compliance_frameworks"].append("HIPAA")
@@ -720,16 +524,12 @@ class NLPProcessor:
         return props
 
     def _apply_negation_signals(self, text_lower: str, props: Dict[str, Any]) -> None:
-        negation_checks = [
-            (r"(does not|do not|doesn't|no|without).{0,40}(validate|validation).{0,20}(jwt|token)", lambda: props.update({"jwt_validation": False})),
-            (r"(does not|do not|doesn't|no|without).{0,30}(rate limit|throttl)", lambda: props.update({"rate_limiting": False})),
-            (r"(does not|do not|doesn't|no|without).{0,30}(encrypt|encryption)", lambda: props.update({"encryption_at_rest": False})),
-            (r"(does not|do not|doesn't|no|without).{0,30}(log|logging|audit)", lambda: props.update({"logging_enabled": False})),
-            (r"(does not|do not|doesn't|no|without).{0,30}(input validation|sanitize)", lambda: props.update({"input_validation": False})),
-        ]
-        for pattern, action in negation_checks:
-            if re.search(pattern, text_lower):
-                action()
+        """Denials the control vocabulary does not model as a property of its own."""
+        if re.search(
+            r"(does not|do not|doesn't|no|without).{0,40}(validate|validation).{0,20}(jwt|token)",
+            text_lower,
+        ):
+            props["jwt_validation"] = False
 
 
 _nlp_instance: Optional[NLPProcessor] = None

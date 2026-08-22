@@ -1,43 +1,69 @@
 name: CI/CD Pipeline
 
+# Actions are pinned to commit digests rather than tags. A tag can be moved to
+# point at different code; a digest cannot. Dependabot keeps them current.
+
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
 
+permissions:
+  contents: read
+
 jobs:
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-      
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
-      
+
       - name: Cache Python dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements*.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
-      
+
       - name: Install dependencies
         run: |
           cd backend
           pip install --upgrade pip
-          pip install -r requirements.txt
-      
+          if [ -f requirements.lock.txt ]; then
+            pip install --require-hashes -r requirements.lock.txt
+          else
+            echo "::warning::No requirements.lock.txt; installing unpinned dependencies."
+            pip install -r requirements.txt
+          fi
+
+      # Analysis must not reach the network, so the tests run without model
+      # downloads. A model that is missing has to degrade, not fail.
+      #
+      # Two lanes: the fast one fails a broken change in well under a
+      # minute, and the release gate re-analyzes the corpora. Both run on
+      # every push, but the fast one reports first.
       - name: Run tests
+        env:
+          AEGIS_THREAT_ALLOW_MODEL_DOWNLOAD: '0'
         run: |
           cd backend
-          pytest tests/ -v --tb=short
+          pytest -m "not slow" -q -n auto --tb=short
+
+      - name: Run release gate
+        env:
+          AEGIS_THREAT_ALLOW_MODEL_DOWNLOAD: '0'
+        run: |
+          cd backend
+          pytest -m slow -v --tb=short
 
       - name: Run threat-model quality gate
         run: |
@@ -45,69 +71,155 @@ jobs:
           python scripts/evaluate_threat_model.py --output threat-evaluation.json
 
       - name: Upload threat-model evaluation
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: threat-model-evaluation
           path: backend/threat-evaluation.json
-      
+
       - name: Test coverage
         run: |
           cd backend
           pytest tests/ --cov=app --cov-report=xml --cov-report=term
-      
+
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
         with:
-          file: ./backend/coverage.xml
+          files: ./backend/coverage.xml
           flags: backend
           name: backend-coverage
 
   frontend-tests:
     name: Frontend Tests
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-      
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
-      
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Run linter
         run: npm run lint
-      
+
       - name: Build
         run: npm run build
-      
+
       - name: Check build size
+        run: du -sh dist/
+
+  diagram-render:
+    name: Diagram Render Check
+    runs-on: ubuntu-latest
+
+    # Diagram text can look correct and still fail to render in the browser,
+    # which takes the whole report down. Parse it with the Mermaid build the
+    # app actually loads.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
         run: |
-          echo "Build completed successfully"
-          du -sh dist/
+          npm ci
+          pip install -r backend/requirements.txt
+
+      - name: Parse every generated diagram
+        run: npm run check:diagrams
+
+  supply-chain:
+    name: Dependency Lock and SBOM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Compiled on Linux because that is where the artifact is installed; a
+      # lock produced on another platform pins wheels that do not apply.
+      - name: Compile a hashed dependency lock
+        run: |
+          pip install pip-tools
+          cd backend
+          pip-compile --generate-hashes --strip-extras --output-file requirements.lock.generated.txt requirements.txt
+
+      - name: Report whether the committed lock is current
+        run: |
+          cd backend
+          if [ ! -f requirements.lock.txt ]; then
+            echo "::warning::No requirements.lock.txt is committed. Download requirements.lock.generated.txt from this run's artifacts and commit it."
+          elif ! diff -q requirements.lock.txt requirements.lock.generated.txt > /dev/null; then
+            echo "::error::requirements.lock.txt is out of date. Replace it with the generated lock from this run."
+            exit 1
+          fi
+
+      - name: Generate SBOMs
+        run: |
+          npm ci
+          npm sbom --sbom-format cyclonedx --omit dev > frontend-sbom.cdx.json
+          pip install cyclonedx-bom
+          cd backend
+          pip install -r requirements.txt
+          cyclonedx-py environment --output-format json --outfile ../backend-sbom.cdx.json
+
+      - name: Upload supply-chain artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: supply-chain
+          path: |
+            backend/requirements.lock.generated.txt
+            frontend-sbom.cdx.json
+            backend-sbom.cdx.json
 
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: read
+      security-events: write
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-      
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
-      
+
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@f3712979fa5f215279b101dd0a2e3bdfb4353324 # v3
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -115,32 +227,34 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: [backend-tests, frontend-tests]
-    
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-      
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
-      
+
       - name: Install backend dependencies
         run: |
           cd backend
           pip install -r requirements.txt
-      
+
       - name: Start backend server
         run: |
           cd backend
-          python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
-          sleep 5
-      
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          for attempt in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/health && break
+            sleep 2
+          done
+
       - name: Test API health
-        run: |
-          curl -f http://localhost:8000/health || exit 1
-      
+        run: curl -f http://127.0.0.1:8000/health
+
       - name: Run integration tests
         run: |
           cd backend
-          pytest tests/test_api.py -v
+          pytest tests/test_api.py tests/test_transport_parity.py -v

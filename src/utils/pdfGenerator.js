@@ -35,8 +35,13 @@ export const generateReport = async (data, projectName) => {
             return;
         }
         const qualityGate = data.engine_status?.quality_gate || {};
-        if (qualityGate.status === 'fail' || qualityGate.publication_status === 'blocked') {
-            throw new Error('Final report publication is blocked by unresolved quality-gate failures.');
+        if (qualityGate.status === 'blocked' || qualityGate.publication_status === 'blocked') {
+            const reasons = (qualityGate.integrity_violations || [])
+                .map((item) => item.detail)
+                .join(' ');
+            throw new Error(
+                `Report publication is blocked because the model contradicts itself. ${reasons}`.trim()
+            );
         }
 
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -112,8 +117,6 @@ export const generateReport = async (data, projectName) => {
         const drawMetricCards = () => {
             const critical = allThreats.filter((t) => t.severity === 'Critical').length;
             const high = allThreats.filter((t) => t.severity === 'High').length;
-            const medium = allThreats.filter((t) => t.severity === 'Medium').length;
-            const low = allThreats.filter((t) => t.severity === 'Low').length;
 
             const cards = [
                 { label: 'Critical findings', value: critical, color: COLORS.danger },
@@ -484,6 +487,39 @@ export const generateReport = async (data, projectName) => {
             });
         };
 
+        // What the analyst still needs from the architecture owner. Grouped by the
+        // control each question resolves, so the reader gets a handful of asks
+        // rather than one line per unresolved STRIDE cell.
+        const drawEvidenceRequests = () => {
+            const evidence = data.evidence_requests || {};
+            const requests = evidence.requests || [];
+            if (!requests.length) return;
+
+            drawSectionTitle('Evidence Requests', evidence.summary || 'Questions that would resolve the unassessed parts of this model.');
+
+            requests.forEach((request) => {
+                checkPageBreak(30);
+                const theme = SEVERITY_THEME[request.priority] || SEVERITY_THEME.Low;
+
+                doc.setFillColor(...theme.fill);
+                doc.roundedRect(left, y, 3, 9, 1, 1, 'F');
+                writeText(`${request.rank}. ${request.title} (${request.priority})`, {
+                    size: 9.5, style: 'bold', color: COLORS.brand, x: left + 5.5, maxWidth: contentWidth - 5.5,
+                });
+                writeText(request.question, { size: 8.6, color: COLORS.ink, x: left + 5.5, maxWidth: contentWidth - 5.5 });
+                writeText(
+                    `Resolves ${request.resolves_cells} STRIDE cell(s) across ${request.elements.length} element(s): `
+                    + request.elements.slice(0, 8).map((element) => element.label).join(', ')
+                    + (request.elements.length > 8 ? `, and ${request.elements.length - 8} more` : ''),
+                    { size: 7.8, color: COLORS.muted, x: left + 5.5, maxWidth: contentWidth - 5.5 },
+                );
+                writeText(`Evidence that closes it: ${request.accepted_evidence.join('; ')}`, {
+                    size: 7.8, color: COLORS.muted, x: left + 5.5, maxWidth: contentWidth - 5.5,
+                });
+                y += 2;
+            });
+        };
+
         const drawFooterOnAllPages = () => {
             const pages = doc.internal.getNumberOfPages();
             for (let i = 1; i <= pages; i += 1) {
@@ -511,6 +547,7 @@ export const generateReport = async (data, projectName) => {
 
         drawThreatSection('Confirmed Risks', confirmed, COLORS.brand);
         drawThreatSection('Potential Risks', potential, COLORS.warning);
+        drawEvidenceRequests();
 
         drawFooterOnAllPages();
         doc.save(`${(projectName || 'Aegis_Threat_Report').replace(/\s+/g, '_')}.pdf`);

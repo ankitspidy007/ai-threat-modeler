@@ -583,6 +583,7 @@ class RuleEngine:
             title=title,
             description=threat_info.get('description', rule.get('description', '')),
             severity=risk_info.get('severity', rule.get('severity', 'Medium')),
+            severity_source="rule",
             likelihood=risk_info.get('likelihood', 'Unknown'),
             impact=risk_info.get('impact', 'Unknown'),
             risk_score=int(risk_info.get('risk_score', 0)),

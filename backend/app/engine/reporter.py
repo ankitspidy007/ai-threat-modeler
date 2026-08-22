@@ -23,6 +23,7 @@ class ReportGenerator:
         lines.extend(ReportGenerator._attack_paths(result))
         lines.extend(ReportGenerator._risk_table(result))
         lines.extend(ReportGenerator._stride_coverage(result))
+        lines.extend(ReportGenerator._evidence_requests(result))
         lines.extend(ReportGenerator._engine_status(result))
         lines.extend(ReportGenerator._mitigations(result))
         lines.extend(ReportGenerator._missing_information(result))
@@ -39,8 +40,28 @@ class ReportGenerator:
             f"- Assets classified: {len(result.architecture.assets)}",
             f"- Confirmed findings: {confirmed}",
             f"- Risk model: {(result.risk_methodology or {}).get('version', 'technical-v1')}",
+            *ReportGenerator._unread_sources(result),
             "",
         ]
+
+    @staticmethod
+    def _unread_sources(result: AnalysisResult) -> List[str]:
+        """Say up front which uploaded content the model never saw.
+
+        Stated beside the scope counts rather than in a footnote, because it
+        qualifies every count above it.
+        """
+        gate = (result.engine_status or {}).get("quality_gate") or {}
+        unread = gate.get("unread_document_content") or []
+        if not unread:
+            return []
+
+        lines = ["- Documents not fully read:"]
+        for record in unread:
+            pages = record.get("unread_pages") or []
+            where = f"pages {', '.join(pages)}" if pages else record.get("detail", "")
+            lines.append(f"  - {record.get('document')}: {where}")
+        return lines
 
     @staticmethod
     def _architecture_model(result: AnalysisResult) -> List[str]:
@@ -77,12 +98,47 @@ class ReportGenerator:
         unknown = [cell for cell in coverage.get("cells", []) if cell.get("status") == "unknown"]
         if unknown:
             lines.append("")
-            lines.append("### Unresolved STRIDE Cells")
-            for cell in unknown[:50]:
-                lines.append(
-                    f"- {cell.get('element_name')} / {cell.get('category')}: {cell.get('rationale')}"
-                )
+            lines.append(
+                f"{len(unknown)} cells are unresolved because the design does not state the "
+                "relevant control. Section 8a groups them into the questions that would resolve them."
+            )
         lines.append("")
+        return lines
+
+    @staticmethod
+    def _evidence_requests(result: AnalysisResult) -> List[str]:
+        """The questions to take back to the architect, ordered by what they unblock."""
+        evidence = result.evidence_requests or {}
+        requests = evidence.get("requests", [])
+        if not requests:
+            return []
+
+        lines = [
+            "## 8a. Evidence Requests",
+            evidence.get("summary", ""),
+            "",
+        ]
+        for request in requests:
+            lines.append(f"### {request['rank']}. {request['title']} [{request['priority']}]")
+            lines.append(f"**Question:** {request['question']}")
+            lines.append(
+                f"- Resolves {request['resolves_cells']} STRIDE cell(s) across "
+                f"{len(request['elements'])} element(s): {', '.join(request['stride_categories'])}"
+            )
+            shown = request["elements"][:10]
+            for element in shown:
+                lines.append(
+                    f"  - {element['label']} [{element['exposure'].replace('_', ' ')}]: "
+                    f"{', '.join(element['stride_categories'])}"
+                )
+            remaining = len(request["elements"]) - len(shown)
+            if remaining:
+                lines.append(f"  - and {remaining} further element(s) waiting on the same answer")
+            lines.append("- Evidence that would close this:")
+            for item in request["accepted_evidence"]:
+                lines.append(f"  - {item}")
+            lines.append(f"- Why it matters: {request['why_it_matters']}")
+            lines.append("")
         return lines
 
     @staticmethod
@@ -139,6 +195,28 @@ class ReportGenerator:
         return lines
 
     @staticmethod
+    def _format_flows(threat: Threat) -> str:
+        """The flows this finding is about, or the paths that reach its component.
+
+        Where neither exists the reason is written out, because "n/a" reads the
+        same whether the finding is local to one component or the architecture
+        never described a single path.
+        """
+        scoped = threat.affected_data_flows or ([threat.data_flow] if threat.data_flow else [])
+        if scoped:
+            return ', '.join(scoped)
+        explanation = threat.explanation or {}
+        related = explanation.get('component_flows') or []
+        if related:
+            return (
+                'none specific to this finding; paths touching the component: '
+                + ', '.join(f"{flow['label']} ({flow['direction']})" for flow in related)
+            )
+        if explanation.get('flow_context') == 'no_flows_modeled':
+            return 'no data flows are modeled for this architecture'
+        return 'n/a'
+
+    @staticmethod
     def _format_threat(threat: Threat) -> List[str]:
         lines = [
             f"### {threat.title}",
@@ -149,7 +227,7 @@ class ReportGenerator:
             f"- Likelihood: {threat.likelihood}",
             f"- Impact: {threat.impact}",
             f"- Components: {', '.join(threat.affected_components or ([threat.component] if threat.component else [])) or 'n/a'}",
-            f"- Data flows: {', '.join(threat.affected_data_flows or ([threat.data_flow] if threat.data_flow else [])) or 'n/a'}",
+            f"- Data flows: {ReportGenerator._format_flows(threat)}",
             f"- Assets: {', '.join(threat.affected_assets or ([threat.asset] if threat.asset else [])) or 'n/a'}",
             f"- Root cause: {threat.root_cause or 'n/a'}",
             f"- Attack scenario: {threat.attack_scenario or threat.realistic_attack_scenario or threat.description}",
@@ -159,9 +237,12 @@ class ReportGenerator:
         if threat.evidence_details:
             lines.append("- Evidence:")
             for item in threat.evidence_details:
-                reference = item.get("source_ref", "architecture input")
-                line = f":{item['line']}" if item.get("line") else ""
-                lines.append(f"  - [{item.get('source_type', 'architecture')}] {reference}{line}: {item.get('statement', '')}")
+                # A cited record names the document, page and line it came from.
+                # Anything else falls back to the element the evidence points at.
+                reference = item.get("cite") or item.get("source_ref", "architecture input")
+                if not item.get("cite") and item.get("line"):
+                    reference = f"{reference}:{item['line']}"
+                lines.append(f"  - [{item.get('source_type', 'architecture')}] {reference}: {item.get('statement', '')}")
         if threat.preconditions:
             lines.append(f"- Preconditions: {' '.join(threat.preconditions)}")
         if threat.attack_path:

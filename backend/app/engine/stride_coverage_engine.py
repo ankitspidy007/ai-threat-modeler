@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from ..models import Threat
+from . import graph
 
 
 STRIDE_CATEGORIES = (
@@ -60,7 +61,7 @@ class StrideCoverageEngine:
                 # confirmed vulnerability.
                 should_surface_unknown = (
                     control_state == "unknown"
-                    and unknown_candidate_targets.get(category) == element["id"]
+                    and (element["id"], category) in unknown_candidate_targets
                 )
                 if generate_candidates and (control_state == "absent" or should_surface_unknown):
                     candidate = _candidate_threat(element, category, control_state, controls)
@@ -81,7 +82,7 @@ class StrideCoverageEngine:
         resolved = status_counts.get("finding", 0) + status_counts.get("control_present", 0)
         unresolved = status_counts.get("unknown", 0) + status_counts.get("potential", 0)
         coverage = {
-            "version": "stride-coverage-3.0",
+            "version": "stride-coverage-3.1",
             "categories": list(STRIDE_CATEGORIES),
             "elements_assessed": len(elements),
             "applicable_cells": assessed,
@@ -96,7 +97,16 @@ class StrideCoverageEngine:
             "category_summary": category_summary,
             "elements": elements,
             "cells": cells,
-            "guarantee": "Every modeled element was evaluated for every STRIDE category; selected unknown-control cells are visible only as Potential architecture threats, never as confirmed vulnerabilities.",
+            "guarantee": (
+                "Every modeled element was evaluated for every STRIDE category. Cells whose "
+                "controls are unspecified are raised as Potential architecture threats, never "
+                f"as confirmed vulnerabilities, and at most {UNKNOWN_CANDIDATE_BUDGET} of them "
+                "are raised: the strongest candidate in each category first, then the "
+                "highest-risk cells remaining. One element supplies no more than "
+                f"{MAX_CATEGORIES_PER_ELEMENT} categories while another element still has a "
+                "candidate to offer. Every unresolved cell left over is listed in the evidence "
+                "requests."
+            ),
         }
         return candidates, coverage
 
@@ -296,12 +306,32 @@ def _risk_relevant(element: Dict[str, Any], category: str) -> bool:
     return False
 
 
+#: How many unresolved cells are worth asking about. A review that asks about
+#: everything is not read, and one that asks about six things chosen by category
+#: alone asks five of them about whichever element happened to rank highest.
+UNKNOWN_CANDIDATE_BUDGET = 12
+
+#: How many categories one element may account for. Without this the single
+#: highest-scoring flow took a slot in every category, so a report on a payments
+#: architecture asked five questions about one internal hop and none about the
+#: path to the card processor.
+MAX_CATEGORIES_PER_ELEMENT = 2
+
+
 def _select_unknown_candidate_targets(
     elements: List[Dict[str, Any]],
     existing_index: Dict[Tuple[str, str], List[Threat]],
-) -> Dict[str, str]:
-    """Choose one representative unresolved element for each STRIDE category."""
-    selected: Dict[str, Tuple[int, str]] = {}
+) -> Set[Tuple[str, str]]:
+    """Choose which unresolved cells are worth raising as questions.
+
+    Every category gets its strongest candidate first, so no part of STRIDE goes
+    unmentioned. The rest of the budget then goes to the highest-risk cells
+    wherever they are, capped per element so one exposed hop cannot crowd out the
+    rest of the architecture.
+
+    Returns the (element id, category) pairs to surface.
+    """
+    ranked: List[Tuple[int, str, str]] = []
     for element in elements:
         for category in STRIDE_CATEGORIES:
             applicable, _ = _applicability(element, category)
@@ -310,25 +340,66 @@ def _select_unknown_candidate_targets(
             state, _, _ = _control_state(element, category)
             if state != "unknown" or not _risk_relevant(element, category):
                 continue
-            score = _unknown_candidate_priority(element, category)
-            current = selected.get(category)
-            if current is None or score > current[0]:
-                selected[category] = (score, element["id"])
-    return {category: item[1] for category, item in selected.items()}
+            ranked.append((_unknown_candidate_priority(element, category), element["id"], category))
+    # Sorted by score, then by name so the same architecture always produces the
+    # same report.
+    ranked.sort(key=lambda entry: (-entry[0], entry[1], entry[2]))
+
+    selected: Set[Tuple[str, str]] = set()
+    per_element: Counter = Counter()
+
+    def take(entry: Tuple[int, str, str]) -> None:
+        _, element_id, category = entry
+        selected.add((element_id, category))
+        per_element[element_id] += 1
+
+    for category in STRIDE_CATEGORIES:
+        in_category = [entry for entry in ranked if entry[2] == category]
+        # The cap exists to stop one element speaking for the whole architecture,
+        # so it gives way when no other element has anything to say in this
+        # category: a single-component model must still be asked all six
+        # questions.
+        best = next(
+            (entry for entry in in_category if per_element[entry[1]] < MAX_CATEGORIES_PER_ELEMENT),
+            next(iter(in_category), None),
+        )
+        if best is not None:
+            take(best)
+    for entry in ranked:
+        if len(selected) >= UNKNOWN_CANDIDATE_BUDGET:
+            break
+        _, element_id, category = entry
+        if (element_id, category) in selected or per_element[element_id] >= MAX_CATEGORIES_PER_ELEMENT:
+            continue
+        take(entry)
+    return selected
+
+
+# A flow standing between two trust levels is as worth naming as the components
+# it joins, so exposure counts the boundary names the parser actually assigns.
+EXPOSED_TRUST_LEVELS = {"public", "external", "internet"}
 
 
 def _unknown_candidate_priority(element: Dict[str, Any], category: str) -> int:
     component_type = element["type"]
-    public = element["trust_level"] in {"public", "external"}
+    props = element["properties"]
+    exposed = element["trust_level"] in EXPOSED_TRUST_LEVELS
     preferences = {
-        "Spoofing": {"Identity Provider": 100, "API": 90, "WebClient": 85, "Service": 75},
-        "Tampering": {"API": 100, "WebClient": 95, "Object Storage": 90, "Compute": 85},
-        "Repudiation": {"Identity Provider": 100, "Compute": 95, "API": 90, "Object Storage": 85},
-        "Information Disclosure": {"Object Storage": 100, "Database": 100, "API": 90, "WebClient": 80, "Compute": 75},
-        "Denial of Service": {"WebClient": 100, "API": 100, "Compute": 95, "Identity Provider": 90},
-        "Elevation of Privilege": {"Compute": 100, "API": 95, "Identity Provider": 90, "Object Storage": 85},
+        "Spoofing": {"Identity Provider": 100, "API": 90, "WebClient": 85, "Service": 75, "Data Flow": 70},
+        "Tampering": {"API": 100, "WebClient": 95, "Object Storage": 90, "Compute": 85, "Data Flow": 80},
+        "Repudiation": {"Identity Provider": 100, "Compute": 95, "API": 90, "Object Storage": 85, "Data Flow": 60},
+        "Information Disclosure": {"Object Storage": 100, "Database": 100, "API": 90, "Data Flow": 90, "WebClient": 80, "Compute": 75},
+        "Denial of Service": {"WebClient": 100, "API": 100, "Compute": 95, "Identity Provider": 90, "Data Flow": 70},
+        "Elevation of Privilege": {"Compute": 100, "API": 95, "Identity Provider": 90, "Object Storage": 85, "Data Flow": 75},
     }
-    return preferences.get(category, {}).get(component_type, 50) + (10 if public else 0)
+    score = preferences.get(category, {}).get(component_type, 50) + (10 if exposed else 0)
+    # Among flows, prefer the one that leaves a trust level over one that stays
+    # inside it. Guessed paths are already excluded by _risk_relevant.
+    score += 10 if props.get("crosses_trust_boundary") else 0
+    # What the element handles decides which questions are worth the reviewer's
+    # attention: an unencrypted hop carrying card data matters more than the same
+    # question asked about an internal call carrying nothing in particular.
+    return score + 4 * graph.rank(props.get("data_sensitivity") or props.get("data_type"))
 
 
 def _candidate_threat(element: Dict[str, Any], category: str, state: str, controls: List[str]) -> Threat:

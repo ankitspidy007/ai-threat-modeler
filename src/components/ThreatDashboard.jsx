@@ -1,22 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ShieldAlert,
     Download,
     FileText,
-    Share2,
-    Code,
     Filter,
     Search,
     X,
     Copy,
     ClipboardCheck,
-    HelpCircle,
-    ListChecks,
-    TrendingUp,
-    Sparkles,
     ShieldCheck,
-    ArrowUpRight,
-    Eye,
     ZoomIn,
     ZoomOut,
     RotateCcw,
@@ -26,11 +17,23 @@ import { clsx } from 'clsx';
 import mermaid from 'mermaid';
 import RiskMatrix from './RiskMatrix';
 import StrideChart from './StrideChart';
-import { useToast } from './Toast';
+import ArchitectureModelEditor from './dashboard/ArchitectureModelEditor';
+import EvidenceRequests from './dashboard/EvidenceRequests';
+import ReanalysisDiff from './dashboard/ReanalysisDiff';
+import {
+    AISecurityLensCard,
+    DetailSection,
+    EmptyInsight,
+    MetricCard,
+    PriorityActionCard,
+    SeverityBadge,
+} from './dashboard/InsightCards';
+import { RiskDetailsModal, ThreatSection } from './dashboard/RiskRegister';
+import { insightCardBase, reviewStateMeta, severityOrder, severityTheme } from './dashboard/theme';
+import { useToast } from '../hooks/useToast';
+import { loadAnnotations, saveAnnotations } from '../utils/annotations';
 import html2canvas from 'html2canvas';
 import AnalystWorkbench from './AnalystWorkbench';
-
-const severityOrder = { Critical: 4, High: 3, Medium: 2, Low: 1 };
 
 const resizeDiagramSvg = (svgElement, zoom) => {
     if (!svgElement?.dataset.baseWidth || !svgElement?.dataset.baseHeight) return;
@@ -40,367 +43,7 @@ const resizeDiagramSvg = (svgElement, zoom) => {
     svgElement.style.maxHeight = 'none';
 };
 
-const severityTheme = {
-    Critical: {
-        badge: 'bg-red-50 text-red-700 border-red-400 dark:bg-red-900/30 dark:text-red-300',
-        accent: 'from-red-500 to-rose-500',
-        border: 'border-red-200 dark:border-red-900/50',
-        surface: 'bg-red-50/80 dark:bg-red-950/20',
-        label: 'Critical exposure',
-    },
-    High: {
-        badge: 'bg-orange-50 text-orange-700 border-orange-400 dark:bg-orange-900/30 dark:text-orange-300',
-        accent: 'from-orange-500 to-amber-500',
-        border: 'border-orange-200 dark:border-orange-900/50',
-        surface: 'bg-orange-50/80 dark:bg-orange-950/20',
-        label: 'High priority',
-    },
-    Medium: {
-        badge: 'bg-yellow-50 text-yellow-700 border-yellow-400 dark:bg-yellow-900/30 dark:text-yellow-300',
-        accent: 'from-yellow-400 to-amber-400',
-        border: 'border-yellow-200 dark:border-yellow-900/50',
-        surface: 'bg-yellow-50/80 dark:bg-yellow-950/20',
-        label: 'Needs planning',
-    },
-    Low: {
-        badge: 'bg-sky-50 text-sky-700 border-sky-400 dark:bg-sky-900/30 dark:text-sky-300',
-        accent: 'from-sky-400 to-cyan-400',
-        border: 'border-sky-200 dark:border-sky-900/50',
-        surface: 'bg-sky-50/80 dark:bg-sky-950/20',
-        label: 'Monitor',
-    },
-};
-
-const reviewStateMeta = {
-    open: {
-        label: 'Open',
-        className: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-    },
-    mitigated: {
-        label: 'Mitigated',
-        className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
-    },
-    accepted: {
-        label: 'Accepted',
-        className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-    },
-    false_positive: {
-        label: 'False Positive',
-        className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-    },
-};
-
-const insightCardBase = 'rounded-md border border-slate-200 bg-white shadow-sm';
-
-const SeverityBadge = ({ severity }) => {
-    const theme = severityTheme[severity] || severityTheme.Low;
-    return (
-        <span className={clsx('inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em]', theme.badge)}>
-            {severity}
-        </span>
-    );
-};
-
-const EmptyInsight = ({ icon, title, description }) => (
-    <div className="rounded-lg border border-dashed border-brand-300 bg-brand-50 px-5 py-8 text-center dark:border-brand-700 dark:bg-brand-900/35">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-white text-brand-600 dark:bg-brand-800 dark:text-brand-300">
-            {React.createElement(icon, { className: 'h-5 w-5' })}
-        </div>
-        <h4 className="text-base font-semibold text-brand-900 dark:text-white">{title}</h4>
-        <p className="mt-2 text-sm leading-6 text-brand-600 dark:text-brand-400">{description}</p>
-    </div>
-);
-
-const MetricCard = ({ label, value, tone = 'default', detail }) => {
-    const toneMap = {
-        default: 'bg-white border-slate-200',
-        danger: 'bg-white border-red-300',
-        warning: 'bg-white border-amber-300',
-        success: 'bg-white border-emerald-300',
-        accent: 'bg-white border-sky-300',
-    };
-
-    return (
-        <div className={clsx('rounded-lg border border-brand-200 p-5 dark:border-brand-700', toneMap[tone] || toneMap.default)}>
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-500 dark:text-brand-400">{label}</p>
-            <div className="mt-3 flex items-end justify-between gap-3">
-                <div className="text-3xl font-black tracking-tight text-brand-950 dark:text-white">{value}</div>
-                {detail && <div className="max-w-[8rem] text-right text-xs leading-5 text-brand-500 dark:text-brand-400">{detail}</div>}
-            </div>
-        </div>
-    );
-};
-
-const aiLensTone = {
-    high: 'border-red-200 bg-red-50/80 text-red-900 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-200',
-    medium: 'border-amber-200 bg-amber-50/80 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200',
-    low: 'border-emerald-200 bg-emerald-50/80 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200',
-};
-
-const AISecurityLensCard = ({ item }) => (
-    <div className={clsx('rounded-lg border p-4', aiLensTone[item.level] || aiLensTone.low)}>
-        <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-                <p className="text-base font-semibold leading-6">{item.label}</p>
-                <p className="mt-2 text-2xl font-bold tracking-tight">{item.count}</p>
-            </div>
-            <span className="shrink-0 rounded-full bg-white/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-current dark:bg-black/10">
-                {item.level}
-            </span>
-        </div>
-        <p className="mt-3 text-sm leading-6 opacity-90">{item.summary}</p>
-    </div>
-);
-
-const PriorityActionCard = ({ action, index }) => (
-    <div className="rounded-lg border border-brand-200 bg-brand-50 p-5 dark:border-brand-700 dark:bg-brand-900/35">
-        <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-primary text-sm font-bold text-white">
-                    {index + 1}
-                </div>
-                <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Fix first</p>
-                    <h4 className="mt-1 text-base font-bold text-brand-950 dark:text-white">{action.title}</h4>
-                </div>
-            </div>
-            <SeverityBadge severity={action.priority} />
-        </div>
-        <p className="mt-4 text-sm leading-6 text-brand-700 dark:text-brand-300">{action.why_now}</p>
-        <div className="mt-4 rounded-lg border border-brand-200 bg-white px-4 py-3 text-sm font-medium leading-6 text-brand-800 dark:border-brand-700 dark:bg-brand-800/60 dark:text-brand-200">
-            {action.action}
-        </div>
-        {action.focus_area?.length > 0 && (
-            <p className="mt-3 text-xs leading-5 text-brand-500 dark:text-brand-400">
-                Focus area: {action.focus_area.join(', ')}
-            </p>
-        )}
-    </div>
-);
-
-const ThreatCard = ({ threat, reviewState = 'open', onReviewStateChange }) => {
-    const theme = severityTheme[threat.severity] || severityTheme.Low;
-    const evidencePreview = threat.explanation?.evidence_summary?.length
-        ? threat.explanation.evidence_summary
-        : (threat.evidence || []).slice(0, 2);
-
-    return (
-        <article className={clsx('relative overflow-hidden rounded-lg border bg-white p-6 shadow-sm transition-colors dark:bg-brand-800', theme.border)}>
-            <div className={clsx('absolute inset-x-0 top-0 h-1', theme.accent.replace('from-', 'bg-').split(' ')[0])} />
-
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                <div className="max-w-3xl">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <SeverityBadge severity={threat.severity} />
-                        <span className={clsx(
-                            'inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em]',
-                            threat.tier === 'Confirmed'
-                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
-                        )}>
-                            {threat.tier}
-                        </span>
-                        <span className="text-xs font-medium text-brand-500 dark:text-brand-400">Confidence {threat.confidence}</span>
-                        <span className="rounded-full bg-brand-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-700 dark:text-brand-200">{(threat.finding_type || 'architecture').replaceAll('_', ' ')}</span>
-                        <span className={clsx('rounded-full px-2.5 py-1 text-[11px] font-semibold', reviewStateMeta[reviewState]?.className || reviewStateMeta.open.className)}>
-                            {reviewStateMeta[reviewState]?.label || 'Open'}
-                        </span>
-                    </div>
-
-                    <h4 className="mt-4 text-xl font-bold tracking-tight text-brand-950 dark:text-white">{threat.title}</h4>
-                    <p className="mt-2 text-sm font-medium text-brand-500 dark:text-brand-400">
-                        {threat.category}
-                        {threat.stride_category && threat.stride_category !== threat.category && ` -> ${threat.stride_category}`}
-                    </p>
-                    <p className="mt-4 max-w-3xl text-[15px] leading-7 text-brand-700 dark:text-brand-300">{threat.description}</p>
-                </div>
-
-                <div className={clsx('min-w-[220px] rounded-lg border p-4', theme.surface, theme.border)}>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-500 dark:text-brand-400">Narrative</p>
-                    <p className="mt-3 text-sm leading-6 text-brand-700 dark:text-brand-300">
-                        {threat.explanation?.why_flagged || 'This finding was raised from the current architecture signals and rule matches.'}
-                    </p>
-                    {threat.explanation?.remediation_priority && (
-                        <div className="mt-4 flex items-center gap-2 text-sm font-semibold text-brand-900 dark:text-white">
-                            <ArrowUpRight className="h-4 w-4 text-brand-primary" />
-                            {threat.explanation.remediation_priority}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <div className="mt-5 grid gap-4 lg:grid-cols-[1.3fr_0.9fr]">
-                <div className="rounded-lg border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-900/35">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Signals</p>
-                    <div className="mt-3 grid gap-3 md:grid-cols-2">
-                        <div>
-                            <p className="text-xs font-semibold text-brand-600 dark:text-brand-400">Evidence highlights</p>
-                            {evidencePreview.length > 0 ? (
-                                <ul className="mt-2 space-y-2 text-sm leading-6 text-brand-700 dark:text-brand-300">
-                                    {evidencePreview.map((ev, i) => (
-                                        <li key={i} className="rounded-lg border border-brand-200 bg-white px-3 py-2 dark:border-brand-700 dark:bg-brand-800/60">{ev}</li>
-                                    ))}
-                                </ul>
-                            ) : (
-                                <p className="mt-2 text-sm text-brand-500 dark:text-brand-400">No explicit evidence captured for this finding.</p>
-                            )}
-                        </div>
-                        <div className="space-y-3">
-                            <div>
-                                <p className="text-xs font-semibold text-brand-600 dark:text-brand-400">Impacted components</p>
-                                <p className="mt-2 text-sm leading-6 text-brand-700 dark:text-brand-300">
-                                    {threat.explanation?.impacted_components?.length
-                                        ? threat.explanation.impacted_components.join(', ')
-                                        : threat.affected_components?.join(', ') || 'Not specified'}
-                                </p>
-                            </div>
-                            <div>
-                                <p className="text-xs font-semibold text-brand-600 dark:text-brand-400">Data flows</p>
-                                <p className="mt-2 text-sm leading-6 text-brand-700 dark:text-brand-300">
-                                    {threat.affected_data_flows?.length ? threat.affected_data_flows.join(', ') : 'No flow-specific impact noted'}
-                                </p>
-                            </div>
-                            <div>
-                                <p className="text-xs font-semibold text-brand-600 dark:text-brand-400">Risk inputs</p>
-                                <p className="mt-2 text-sm leading-6 text-brand-700 dark:text-brand-300">
-                                    Exposure {threat.risk_factors?.exposure || threat.exposure || 'unspecified'}; evidence {threat.risk_factors?.evidence_confidence || threat.confidence}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">Recommended next move</p>
-                    <p className="mt-3 text-sm leading-6 text-emerald-900 dark:text-emerald-300">{threat.mitigation}</p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                        {Object.entries(reviewStateMeta).map(([state, meta]) => (
-                            <button
-                                key={state}
-                                onClick={() => onReviewStateChange?.(threat.id, state)}
-                                className={clsx(
-                                    'rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors',
-                                    reviewState === state
-                                        ? meta.className
-                                        : 'bg-white text-brand-600 hover:bg-brand-100 dark:bg-brand-800 dark:text-brand-300 dark:hover:bg-brand-700'
-                                )}
-                            >
-                                {meta.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </article>
-    );
-};
-
-const affectedComponents = (threat) => {
-    const components = threat.explanation?.impacted_components?.length
-        ? threat.explanation.impacted_components
-        : threat.affected_components?.length
-            ? threat.affected_components
-            : [threat.affected_component || threat.component].filter(Boolean);
-    return components.length ? components.join(', ') : 'Not specified';
-};
-
-const ThreatSection = ({ threats, onSelectThreat }) => (
-    <section className={clsx(insightCardBase, 'overflow-hidden')}>
-        <div className="flex items-center justify-between gap-4 border-b border-brand-200 px-5 py-4 dark:border-brand-700">
-            <div>
-                <h3 className="text-lg font-bold text-brand-950 dark:text-white">Risk register</h3>
-                <p className="mt-1 text-sm text-brand-600 dark:text-brand-400">Technical findings ordered by severity and risk score.</p>
-            </div>
-            <span className="text-sm font-semibold text-brand-600 dark:text-brand-300">{threats.length} risks</span>
-        </div>
-
-        {threats.length === 0 ? (
-            <div className="p-6">
-                <EmptyInsight icon={ShieldCheck} title="No matching risks" description="No findings match the current filters." />
-            </div>
-        ) : (
-            <div className="overflow-x-auto">
-                <table className="w-full min-w-[820px] border-collapse text-left">
-                    <thead className="bg-brand-50 text-xs font-semibold uppercase text-brand-500 dark:bg-brand-900/50 dark:text-brand-400">
-                        <tr>
-                            <th className="px-5 py-3">Risk name</th>
-                            <th className="w-28 px-4 py-3">Severity</th>
-                            <th className="w-52 px-4 py-3">Affected STRIDE</th>
-                            <th className="w-64 px-4 py-3">Affected component</th>
-                            <th className="w-20 px-4 py-3 text-center">Details</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-brand-200 dark:divide-brand-700">
-                        {threats.map((threat) => (
-                            <tr key={threat.id} className="bg-white hover:bg-brand-50/70 dark:bg-brand-800 dark:hover:bg-brand-700/45">
-                                <td className="px-5 py-4">
-                                    <p className="max-w-md text-sm font-semibold text-brand-950 dark:text-white">{threat.title}</p>
-                                    <p className="mt-1 text-xs text-brand-500 dark:text-brand-400">{threat.tier} | {(threat.finding_type || 'architecture').replaceAll('_', ' ')}</p>
-                                </td>
-                                <td className="px-4 py-4"><SeverityBadge severity={threat.severity} /></td>
-                                <td className="px-4 py-4 text-sm font-medium text-brand-700 dark:text-brand-300">{(threat.affected_stride_categories?.length ? threat.affected_stride_categories : [threat.stride_category || threat.category]).join(', ')}</td>
-                                <td className="px-4 py-4 text-sm text-brand-600 dark:text-brand-300">{affectedComponents(threat)}</td>
-                                <td className="px-4 py-4 text-center">
-                                    <button
-                                        type="button"
-                                        onClick={() => onSelectThreat(threat)}
-                                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-brand-200 text-brand-600 hover:border-brand-primary hover:text-brand-primary dark:border-brand-600 dark:text-brand-300"
-                                        aria-label={`View details for ${threat.title}`}
-                                        title="View risk details"
-                                    >
-                                        <Eye className="h-4 w-4" />
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        )}
-    </section>
-);
-
-const RiskDetailsModal = ({ threat, reviewState, onReviewStateChange, onClose }) => {
-    useEffect(() => {
-        if (!threat) return undefined;
-        const handleKeyDown = (event) => {
-            if (event.key === 'Escape') onClose();
-        };
-        const previousOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
-        window.addEventListener('keydown', handleKeyDown);
-        return () => {
-            document.body.style.overflow = previousOverflow;
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [threat, onClose]);
-
-    if (!threat) return null;
-    return (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/45 p-4 pt-[6vh]" role="presentation" onMouseDown={onClose}>
-            <div
-                className="relative max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-lg bg-white p-2 shadow-2xl dark:bg-brand-900"
-                role="dialog"
-                aria-modal="true"
-                aria-label={`Risk details: ${threat.title}`}
-                onMouseDown={(event) => event.stopPropagation()}
-            >
-                <button
-                    type="button"
-                    onClick={onClose}
-                    className="absolute right-4 top-4 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-brand-200 bg-white text-brand-600 hover:text-brand-950 dark:border-brand-700 dark:bg-brand-800 dark:text-brand-300 dark:hover:text-white"
-                    aria-label="Close risk details"
-                    title="Close"
-                >
-                    <X className="h-4 w-4" />
-                </button>
-                <ThreatCard threat={threat} reviewState={reviewState} onReviewStateChange={onReviewStateChange} />
-            </div>
-        </div>
-    );
-};
-
-export default function ThreatDashboard({ data, projectName }) {
+export default function ThreatDashboard({ data, projectName, onReanalyze, isAnalyzing, darkMode = false }) {
     const mermaidRef = useRef(null);
     const diagramViewportRef = useRef(null);
     const toast = useToast();
@@ -421,10 +64,9 @@ export default function ThreatDashboard({ data, projectName }) {
             if (!data?.diagram || !mermaidRef.current) return;
 
             try {
-                const isDark = document.documentElement.classList.contains('dark');
                 mermaid.initialize({
                     startOnLoad: false,
-                    theme: isDark ? 'dark' : 'default',
+                    theme: darkMode ? 'dark' : 'default',
                     securityLevel: 'loose',
                     fontFamily: 'Inter, sans-serif',
                 });
@@ -458,19 +100,32 @@ export default function ThreatDashboard({ data, projectName }) {
         };
 
         renderDiagram();
-    }, [data]);
+    }, [data, darkMode]);
 
     useEffect(() => {
         resizeDiagramSvg(mermaidRef.current?.querySelector('svg'), diagramZoom);
     }, [diagramZoom]);
 
     useEffect(() => {
+        // A reviewer's decision outranks the engine's default. Re-analysis
+        // reports every finding as open again, and without this a finding
+        // already accepted or marked a false positive would come back demanding
+        // the same judgement after every edit to the model.
+        const stored = loadAnnotations(projectName).reviewStates;
         const nextStates = {};
         (data?.threats || []).forEach((threat) => {
-            nextStates[threat.id] = threat.review_state || 'open';
+            nextStates[threat.id] = stored[threat.id] || threat.review_state || 'open';
         });
         queueMicrotask(() => setReviewStates(nextStates));
-    }, [data]);
+    }, [data, projectName]);
+
+    const updateReviewState = (threatId, state) => {
+        setReviewStates((prev) => {
+            const next = { ...prev, [threatId]: state };
+            saveAnnotations(projectName, { reviewStates: next });
+            return next;
+        });
+    };
 
     const severities = ['all', ...new Set(data?.threats?.map((t) => t.severity) || [])];
     const categories = ['all', ...new Set(data?.threats?.map((t) => t.category) || [])];
@@ -503,16 +158,19 @@ export default function ThreatDashboard({ data, projectName }) {
     const strideCoverage = data.stride_coverage || {};
     const engineStatus = data.engine_status || {};
     const qualityGate = engineStatus.quality_gate || {};
-    const publicationBlocked = qualityGate.publication_status === 'blocked' || qualityGate.status === 'fail';
+    const publicationBlocked = qualityGate.publication_status === 'blocked' || qualityGate.status === 'blocked';
     const publicationLabel = publicationBlocked
-        ? 'Draft - quality gate failed'
+        ? 'Draft - model integrity check failed'
         : qualityGate.publication_status === 'ready'
             ? 'Publication ready'
             : 'Technical review';
-    const attackPaths = data.attack_chains?.paths || [];
+    const integrityViolations = qualityGate.integrity_violations || [];
+    const completenessWarnings = qualityGate.completeness_warnings || [];
+    const diagramCoverage = engineStatus.diagram_coverage;
     const assumptions = data.coverage?.assumptions || [];
     const diffSummary = data.diff_summary;
     const followUpQuestions = data.follow_up_questions || [];
+    const evidenceRequests = data.evidence_requests || null;
     const aiSecurityLens = data.ai_security_lens || { enabled: false, overview: '', items: [] };
     const aiLensGridClass = aiSecurityLens.items?.length === 1
         ? 'grid-cols-1'
@@ -520,6 +178,9 @@ export default function ThreatDashboard({ data, projectName }) {
             ? 'md:grid-cols-2'
             : 'md:grid-cols-2 xl:grid-cols-3';
     const priorityActions = data.priority_actions || [];
+    // The header counted follow-up questions while the body showed evidence
+    // requests as well, so the two disagreed about how much was outstanding.
+    const openQuestionCount = followUpQuestions.length + (evidenceRequests?.requests?.length || 0);
 
     const allThreatsSorted = [...(data.threats || [])].sort((a, b) => {
         const severityDelta = (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0);
@@ -528,9 +189,12 @@ export default function ThreatDashboard({ data, projectName }) {
     });
 
     const topStory = allThreatsSorted[0];
-    const confirmedCount = (data.threats || []).filter((threat) => threat.tier === 'Confirmed').length;
-    const criticalCount = (data.threats || []).filter((t) => t.severity === 'Critical').length;
-    const highCount = (data.threats || []).filter((t) => t.severity === 'High').length;
+    const confirmedThreats = (data.threats || []).filter((threat) => threat.tier === 'Confirmed');
+    const confirmedCount = confirmedThreats.length;
+    // Counted across every finding, these read as a breakdown of the confirmed
+    // total they sit under and so could exceed it. They describe the same set.
+    const criticalCount = confirmedThreats.filter((t) => t.severity === 'Critical').length;
+    const highCount = confirmedThreats.filter((t) => t.severity === 'High').length;
     const mitigatedThreats = Object.values(reviewStates).filter((state) => state === 'mitigated' || state === 'accepted').length;
     const remediationPercent = data.threats?.length ? Math.round((mitigatedThreats / data.threats.length) * 100) : 0;
     const reviewSummary = (data.threats || []).reduce((summary, threat) => {
@@ -664,18 +328,14 @@ export default function ThreatDashboard({ data, projectName }) {
         setFilters({ severity: 'all', category: 'all', tier: 'all', search: '' });
     };
 
-    const updateReviewState = (threatId, state) => {
-        setReviewStates((prev) => ({ ...prev, [threatId]: state }));
-    };
-
     return (
-        <div className="technical-report mx-auto w-full max-w-6xl animate-fade-in-up bg-white px-2 pb-24 text-slate-900 sm:px-4">
+        <div className="technical-report mx-auto w-full max-w-6xl animate-fade-in-up bg-white px-2 pb-24 text-slate-900 transition-colors dark:bg-brand-900 dark:text-brand-100 sm:px-4">
             <section className={clsx(insightCardBase, 'relative overflow-hidden p-6')}>
 
                 <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                     <div className="max-w-3xl">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Technical threat model</p>
-                        <h1 className="mt-2 text-2xl font-semibold text-slate-950 md:text-3xl">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Technical threat model</p>
+                        <h1 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-white md:text-3xl">
                             {projectName}
                         </h1>
                         <p className="mt-3 max-w-3xl text-sm leading-7 text-brand-600 dark:text-brand-300">
@@ -693,7 +353,7 @@ export default function ThreatDashboard({ data, projectName }) {
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                         <button
                             onClick={() => setShowFilters(!showFilters)}
                             className="ui-button-secondary"
@@ -703,28 +363,28 @@ export default function ThreatDashboard({ data, projectName }) {
                                 Filters {hasActiveFilters && `(${filteredThreats.length})`}
                             </span>
                         </button>
-                        <button onClick={downloadJSON} className="ui-button-secondary">
-                            <span className="inline-flex items-center gap-2"><Code className="h-4 w-4" /> JSON</span>
-                        </button>
-                        <button onClick={downloadCSV} className="ui-button-secondary">
-                            <span className="inline-flex items-center gap-2"><Share2 className="h-4 w-4" /> CSV</span>
-                        </button>
-                        {data.report_markdown && (
-                            <button onClick={downloadMarkdown} disabled={publicationBlocked} className="ui-button-secondary disabled:cursor-not-allowed disabled:opacity-45" title={publicationBlocked ? 'Resolve quality-gate failures before final export' : 'Download Markdown report'}>
-                                <span className="inline-flex items-center gap-2"><FileText className="h-4 w-4" /> Markdown</span>
-                            </button>
-                        )}
                         <button onClick={handlePDFExport} disabled={publicationBlocked} className="btn-brand disabled:cursor-not-allowed disabled:opacity-45" title={publicationBlocked ? 'Resolve quality-gate failures before final export' : 'Export final PDF'}>
                             <span className="inline-flex items-center gap-2"><Download className="h-4 w-4" /> Export PDF</span>
                         </button>
+                        <details className="relative">
+                            <summary className="ui-button-secondary cursor-pointer marker:content-none">
+                                <span className="inline-flex items-center gap-2"><FileText className="h-4 w-4" /> Other formats</span>
+                            </summary>
+                            <div className="absolute right-0 z-20 mt-2 flex w-44 flex-col gap-1 rounded-md border border-slate-200 bg-white p-2 shadow-lg dark:border-brand-700 dark:bg-brand-800">
+                                <button onClick={downloadJSON} className="rounded px-3 py-2 text-left text-sm text-brand-700 hover:bg-brand-50 dark:text-brand-200 dark:hover:bg-brand-700">JSON</button>
+                                <button onClick={downloadCSV} className="rounded px-3 py-2 text-left text-sm text-brand-700 hover:bg-brand-50 dark:text-brand-200 dark:hover:bg-brand-700">CSV</button>
+                                {data.report_markdown && (
+                                    <button onClick={downloadMarkdown} disabled={publicationBlocked} className="rounded px-3 py-2 text-left text-sm text-brand-700 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-45 dark:text-brand-200 dark:hover:bg-brand-700">Markdown</button>
+                                )}
+                            </div>
+                        </details>
                     </div>
                 </div>
 
-                <div className="relative mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="relative mt-8 grid gap-4 md:grid-cols-3">
                     <MetricCard label="Security score" value={`${data.score}/100`} tone={data.score < 40 ? 'danger' : data.score < 70 ? 'warning' : 'success'} detail={data.score < 40 ? 'Immediate response recommended' : data.score < 70 ? 'Address top findings next' : 'Strong baseline with focused follow-up'} />
                     <MetricCard label="Confirmed risks" value={confirmedCount} tone={criticalCount > 0 ? 'danger' : 'accent'} detail={`${criticalCount} critical, ${highCount} high`} />
-                    <MetricCard label="Review progress" value={`${remediationPercent}%`} tone="success" detail={`${mitigatedThreats}/${data.threats?.length || 0} findings triaged`} />
-                    <MetricCard label="Questions for team" value={followUpQuestions.length} tone="warning" detail={followUpQuestions.length ? 'Answer these to sharpen the model' : 'Architecture detail looks well covered'} />
+                    <MetricCard label="Open questions" value={openQuestionCount} tone="warning" detail={openQuestionCount ? 'Answering these sharpens the model' : 'Architecture detail looks well covered'} />
                 </div>
             </section>
 
@@ -732,8 +392,8 @@ export default function ThreatDashboard({ data, projectName }) {
                 <section className={clsx(insightCardBase, 'mt-6 p-5')}>
                     <div className="flex items-center justify-between gap-4">
                         <div>
-                            <h3 className="text-lg font-bold text-brand-950 dark:text-white">Focus the story</h3>
-                            <p className="mt-1 text-sm text-brand-600 dark:text-brand-400">Trim the report to the exact severity, category, tier, or wording you want to review.</p>
+                            <h3 className="text-lg font-bold text-brand-950 dark:text-white">Filter findings</h3>
+                            <p className="mt-1 text-sm text-brand-600 dark:text-brand-400">Narrow the list below by severity, category, tier, or wording.</p>
                         </div>
                         {hasActiveFilters && (
                             <button onClick={clearFilters} className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-white">
@@ -778,199 +438,60 @@ export default function ThreatDashboard({ data, projectName }) {
                 </section>
             )}
 
-            <section className="mt-6 space-y-6">
+            {(publicationBlocked || integrityViolations.length > 0) && (
+                <div className="mt-6 border-l-4 border-red-600 bg-white px-4 py-3 text-sm text-slate-700 dark:bg-red-950/20 dark:text-red-200">
+                    <p className="font-semibold text-red-700 dark:text-red-300">This report contradicts itself and cannot be published as final.</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                        {integrityViolations.map((violation) => (
+                            <li key={violation.check}>{violation.detail} ({violation.count})</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {!publicationBlocked && completenessWarnings.length > 0 && (
+                <div className="mt-6 border-l-4 border-amber-500 bg-white px-4 py-3 text-sm text-slate-700 dark:bg-amber-950/20 dark:text-amber-200">
+                    <p className="font-semibold text-amber-700 dark:text-amber-300">The findings stand; these gaps need a reviewer's eye before sign-off.</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                        {completenessWarnings.map((warning) => (
+                            <li key={warning.check}>{warning.detail} ({warning.count})</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            <section className="mt-6">
                 <div className={clsx(insightCardBase, 'p-6')}>
-                    <div className="flex items-center gap-2">
-                        <TrendingUp className="h-5 w-5 text-brand-primary" />
-                        <h3 className="text-lg font-bold text-brand-950 dark:text-white">Executive readout</h3>
-                    </div>
+                    <h2 className="text-lg font-bold text-brand-950 dark:text-white">What to fix first</h2>
+                    <p className="mt-1 text-sm text-brand-600 dark:text-brand-400">
+                        Ordered by severity, evidence, and how much of the system each issue exposes.
+                    </p>
 
                     {topStory ? (
-                        <div className="mt-5 space-y-5">
-                            <div className={clsx('rounded-lg border p-5', severityTheme[topStory.severity]?.surface, severityTheme[topStory.severity]?.border)}>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-brand-500 dark:text-brand-400">What matters most</p>
-                                <div className="mt-3 flex flex-wrap items-center gap-3">
-                                    <SeverityBadge severity={topStory.severity} />
-                                    <span className="text-sm font-semibold text-brand-700 dark:text-brand-300">{topStory.tier}</span>
-                                </div>
-                                <h4 className="mt-4 text-2xl font-bold tracking-tight text-brand-950 dark:text-white">{topStory.title}</h4>
-                                <p className="mt-3 text-sm leading-7 text-brand-700 dark:text-brand-300">
-                                    {topStory.explanation?.why_flagged || topStory.description}
-                                </p>
+                        <div className={clsx('mt-5 rounded-lg border p-5', severityTheme[topStory.severity]?.surface, severityTheme[topStory.severity]?.border)}>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <SeverityBadge severity={topStory.severity} />
+                                <span className="text-sm font-semibold text-brand-700 dark:text-brand-300">{topStory.tier}</span>
                             </div>
-
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div className="rounded-lg border border-brand-200 bg-brand-50 p-5 dark:border-brand-700 dark:bg-brand-900/35">
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Severity story</p>
-                                    <div className="mt-4 space-y-3">
-                                        {['Critical', 'High', 'Medium', 'Low'].map((severity) => {
-                                            const count = (data.threats || []).filter((t) => t.severity === severity).length;
-                                            return (
-                                                <div key={severity} className="flex items-center justify-between gap-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className={clsx('h-2.5 w-10 rounded-full', severityTheme[severity].accent.replace('from-', 'bg-').split(' ')[0])} />
-                                                        <span className="text-sm font-medium text-brand-700 dark:text-brand-300">{severityTheme[severity].label}</span>
-                                                    </div>
-                                                    <span className="text-sm font-bold text-brand-950 dark:text-white">{count}</span>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                <div className="rounded-lg border border-brand-200 bg-brand-50 p-5 dark:border-brand-700 dark:bg-brand-900/35">
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Review posture</p>
-                                    <div className="mt-4 grid grid-cols-2 gap-3">
-                                        {Object.entries(reviewStateMeta).map(([state, meta]) => (
-                                            <div key={state} className="rounded-lg border border-brand-200 bg-white px-4 py-3 dark:border-brand-700 dark:bg-brand-800/60">
-                                                <div className={clsx('inline-flex rounded-full px-2 py-1 text-[10px] font-semibold', meta.className)}>{meta.label}</div>
-                                                <div className="mt-2 text-2xl font-black text-brand-950 dark:text-white">{reviewSummary[state] || 0}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
+                            <h3 className="mt-4 text-xl font-bold tracking-tight text-brand-950 dark:text-white">{topStory.title}</h3>
+                            <p className="mt-3 text-sm leading-7 text-brand-700 dark:text-brand-300">
+                                {topStory.explanation?.why_flagged || topStory.description}
+                            </p>
                         </div>
                     ) : (
                         <EmptyInsight
                             icon={ShieldCheck}
                             title="No immediate threats detected"
-                            description="This run did not surface any findings. Use the follow-up prompts or add more architecture detail if you want a deeper assessment."
+                            description="This run did not surface any findings. Add more architecture detail if you want a deeper assessment."
                         />
                     )}
-                </div>
 
-                <div className="space-y-6">
-                    <div className={clsx(insightCardBase, 'p-6')}>
-                        <div className="flex items-center gap-2">
-                            <HelpCircle className="h-5 w-5 text-brand-primary" />
-                            <h3 className="text-lg font-bold text-brand-950 dark:text-white">Questions to tighten confidence</h3>
-                        </div>
-                        {followUpQuestions.length ? (
-                            <div className="mt-4 space-y-3">
-                                {followUpQuestions.slice(0, 4).map((item) => (
-                                    <div key={item.id} className="rounded-lg border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-900/35">
-                                        <div className="flex items-center gap-2">
-                                            <span className={clsx(
-                                                'rounded-full px-2 py-1 text-[10px] font-bold uppercase',
-                                                item.priority === 'high'
-                                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                                                    : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
-                                            )}>
-                                                {item.priority}
-                                            </span>
-                                            {item.related_threat_count > 0 && (
-                                                <span className="text-xs text-brand-500 dark:text-brand-400">{item.related_threat_count} linked findings</span>
-                                            )}
-                                        </div>
-                                        <p className="mt-3 text-sm font-semibold text-brand-950 dark:text-white">{item.question}</p>
-                                        <p className="mt-2 text-sm leading-6 text-brand-600 dark:text-brand-400">{item.rationale}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <EmptyInsight
-                                icon={HelpCircle}
-                                title="No follow-up gaps right now"
-                                description="The current model has enough architectural detail that the analyzer did not generate targeted clarification prompts."
-                            />
-                        )}
-                    </div>
-
-                    <div className={clsx(insightCardBase, 'p-6')}>
-                        <div className="flex items-center gap-2">
-                            <ListChecks className="h-5 w-5 text-brand-primary" />
-                            <h3 className="text-lg font-bold text-brand-950 dark:text-white">Change and review signal</h3>
-                        </div>
-                        <div className="mt-4 space-y-3">
-                            <div className="rounded-lg border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-900/35">
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Diff summary</p>
-                                {diffSummary ? (
-                                    diffSummary.changed ? (
-                                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                            <div className="rounded-lg border border-brand-200 bg-white px-4 py-3 dark:border-brand-700 dark:bg-brand-800/60">
-                                                <p className="text-xs text-brand-500 dark:text-brand-400">Score movement</p>
-                                                <p className="mt-1 text-2xl font-black text-brand-950 dark:text-white">
-                                                    {diffSummary.score_delta > 0 ? '+' : ''}{diffSummary.score_delta || 0}
-                                                </p>
-                                            </div>
-                                            <div className="rounded-lg border border-brand-200 bg-white px-4 py-3 dark:border-brand-700 dark:bg-brand-800/60">
-                                                <p className="text-xs text-brand-500 dark:text-brand-400">Architecture delta</p>
-                                                <p className="mt-1 text-sm font-semibold text-brand-950 dark:text-white">
-                                                    {diffSummary.component_delta > 0 ? '+' : ''}{diffSummary.component_delta || 0} components, {diffSummary.flow_delta > 0 ? '+' : ''}{diffSummary.flow_delta || 0} flows
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <p className="mt-3 text-sm leading-6 text-brand-600 dark:text-brand-400">No meaningful delta was detected compared with the previous analysis of this project.</p>
-                                    )
-                                ) : (
-                                    <p className="mt-3 text-sm leading-6 text-brand-600 dark:text-brand-400">Run this project again after a design change to unlock version-to-version deltas.</p>
-                                )}
-                            </div>
-
-                            <div className="rounded-lg border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-900/35">
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Coverage</p>
-                                <div className="mt-3 grid grid-cols-2 gap-3">
-                                    <div className="rounded-lg border border-brand-200 bg-white px-4 py-3 dark:border-brand-700 dark:bg-brand-800/60">
-                                        <p className="text-xs text-brand-500 dark:text-brand-400">Components</p>
-                                        <p className="mt-1 text-2xl font-black text-brand-950 dark:text-white">{data.coverage?.components_analyzed ?? 0}</p>
-                                    </div>
-                                    <div className="rounded-lg border border-brand-200 bg-white px-4 py-3 dark:border-brand-700 dark:bg-brand-800/60">
-                                        <p className="text-xs text-brand-500 dark:text-brand-400">Trust boundaries</p>
-                                        <p className="mt-1 text-2xl font-black text-brand-950 dark:text-white">{data.coverage?.trust_boundary_count ?? 0}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-                <div className={clsx(insightCardBase, 'p-6')}>
-                    <div className="flex items-center gap-2">
-                        <Sparkles className="h-5 w-5 text-brand-primary" />
-                        <h3 className="text-lg font-bold text-brand-950 dark:text-white">AI security lens</h3>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-brand-600 dark:text-brand-400">
-                        {aiSecurityLens.overview || 'A focused readout on prompt, data, model, and agent-specific AI risk themes.'}
-                    </p>
-                    {aiSecurityLens.items?.length ? (
-                        <div className={clsx('mt-5 grid gap-4', aiLensGridClass)}>
-                            {aiSecurityLens.items.map((item) => (
-                                <AISecurityLensCard key={item.id} item={item} />
-                            ))}
-                        </div>
-                    ) : (
-                        <EmptyInsight
-                            icon={Sparkles}
-                            title="No AI-specific lens available"
-                            description="This run did not generate AI-specific risk storytelling, which usually means the current architecture does not look AI-native yet."
-                        />
-                    )}
-                </div>
-
-                <div className={clsx(insightCardBase, 'p-6')}>
-                    <div className="flex items-center gap-2">
-                        <ShieldAlert className="h-5 w-5 text-brand-primary" />
-                        <h3 className="text-lg font-bold text-brand-950 dark:text-white">Top 3 things to fix first</h3>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-brand-600 dark:text-brand-400">
-                        The fastest path to reducing the current risk story, based on severity, evidence, and architectural exposure.
-                    </p>
-                    {priorityActions.length ? (
+                    {priorityActions.length > 0 && (
                         <div className="mt-5 space-y-4">
                             {priorityActions.slice(0, 3).map((action, index) => (
                                 <PriorityActionCard key={`${action.title}-${index}`} action={action} index={index} />
                             ))}
                         </div>
-                    ) : (
-                        <EmptyInsight
-                            icon={ShieldCheck}
-                            title="No urgent actions surfaced"
-                            description="The analyzer did not generate a short priority list for this run. Add more detail or rerun after a design change to surface clearer next steps."
-                        />
                     )}
                 </div>
             </section>
@@ -1035,76 +556,101 @@ export default function ThreatDashboard({ data, projectName }) {
                     <div
                         ref={diagramViewportRef}
                         onWheel={handleDiagramWheel}
-                        className="mt-5 flex min-h-[320px] w-full items-center justify-center overflow-auto rounded-md border border-slate-200 bg-white p-4 sm:min-h-[400px] sm:p-6"
+                        className="architecture-diagram mt-5 flex min-h-[320px] w-full items-center justify-center overflow-auto rounded-md border border-slate-200 bg-white p-4 dark:border-brand-700 dark:bg-brand-900/55 sm:min-h-[400px] sm:p-6"
                         aria-label="Architecture diagram. Use the mouse wheel or zoom controls to change scale."
                     >
                         <div ref={mermaidRef} className="flex h-full min-w-full w-max shrink-0 items-center justify-center" />
                     </div>
                 </div>
 
-                {publicationBlocked && (
-                    <div className="relative mt-6 border-l-4 border-red-600 bg-white px-4 py-3 text-sm text-slate-700">
-                        <p className="font-semibold text-red-700">This analysis is incomplete and cannot be published as a final report.</p>
-                        <p className="mt-1">
-                            {qualityGate.unclassified_known_issues || 0} unclassified issues, {qualityGate.confirmed_unmapped_findings || 0} unscoped confirmed findings, {qualityGate.omitted_named_components || 0} omitted components, and {qualityGate.duplicate_component_aliases || 0} duplicate aliases require resolution.
-                        </p>
-                    </div>
+                {diagramCoverage && (
+                    <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                        {diagramCoverage.components_drawn} of {diagramCoverage.components_in_model} components and{' '}
+                        {diagramCoverage.flows_drawn} of {diagramCoverage.flows_in_model} data flows are drawn.
+                        {diagramCoverage.components_hidden_for_readability > 0 &&
+                            ` ${diagramCoverage.components_hidden_for_readability} components are summarised for readability.`}
+                        {diagramCoverage.components_excluded_as_non_flow > 0 &&
+                            ` ${diagramCoverage.components_excluded_as_non_flow} components take no part in a data flow.`}
+                        {' '}A dotted flow was assumed from component types rather than described; a bold red
+                        outline marks a component with a confirmed finding.
+                    </p>
                 )}
+
             </section>
 
-            <section className="mt-6 grid gap-6 xl:grid-cols-2">
-                <div className={clsx(insightCardBase, 'p-6')}>
-                    <div className="flex items-center gap-2">
-                        <ListChecks className="h-5 w-5 text-brand-primary" />
-                        <h3 className="text-lg font-bold text-brand-950 dark:text-white">Technical system model</h3>
-                    </div>
-                    <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-                        <div className="border-b border-brand-200 pb-3 dark:border-brand-700"><span className="text-brand-500 dark:text-brand-400">Public entry points</span><p className="mt-1 font-semibold text-brand-950 dark:text-white">{systemModel.public_entry_points?.length ?? 0}</p></div>
-                        <div className="border-b border-brand-200 pb-3 dark:border-brand-700"><span className="text-brand-500 dark:text-brand-400">Confirmed boundary crossings</span><p className="mt-1 font-semibold text-brand-950 dark:text-white">{systemModel.boundary_crossings?.length ?? 0}</p><p className="mt-1 text-xs text-brand-500 dark:text-brand-400">{systemModel.inferred_boundary_crossings?.length ?? 0} inferred</p></div>
-                        <div><span className="text-brand-500 dark:text-brand-400">Identities modeled</span><p className="mt-1 font-semibold text-brand-950 dark:text-white">{systemModel.identities?.length ?? 0}</p></div>
-                        <div><span className="text-brand-500 dark:text-brand-400">Cloud resources</span><p className="mt-1 font-semibold text-brand-950 dark:text-white">{systemModel.cloud_resources?.length ?? 0}</p></div>
-                    </div>
-                </div>
-
-                <div className={clsx(insightCardBase, 'p-6')}>
-                    <div className="flex items-center gap-2">
-                        <TrendingUp className="h-5 w-5 text-brand-primary" />
-                        <h3 className="text-lg font-bold text-brand-950 dark:text-white">Evidence-backed attack paths</h3>
-                    </div>
-                    {attackPaths.length ? (
-                        <div className="mt-4 space-y-3">
-                            {attackPaths.slice(0, 3).map((path) => (
-                                <div key={path.id || path.related_threat_id} className="border-l-2 border-brand-primary pl-4">
-                                    <p className="text-sm font-semibold text-brand-950 dark:text-white">{path.entry_point} to {path.target_component}</p>
-                                    <p className="mt-1 text-sm leading-6 text-brand-600 dark:text-brand-400">{path.steps?.[0] || path.impact}</p>
-                                    <p className="mt-1 text-xs font-medium uppercase tracking-wide text-brand-500 dark:text-brand-400">{path.severity} confidence {path.confidence}</p>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="mt-4 text-sm text-brand-500 dark:text-brand-400">No attack path has enough evidence to model in this analysis.</p>
-                    )}
-                </div>
+            <section className="mt-8">
+                <ThreatSection threats={sortedFilteredThreats} onSelectThreat={setSelectedThreat} />
             </section>
 
-            <section className="mt-6">
-                <div className={clsx(insightCardBase, 'p-6')}>
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <ShieldAlert className="h-5 w-5 text-brand-primary" />
-                                <h3 className="text-lg font-bold text-brand-950 dark:text-white">STRIDE assessment coverage</h3>
+            <section className="mt-8 space-y-4">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Supporting detail</h2>
+
+                {(evidenceRequests || followUpQuestions.length > 0) && (
+                    <DetailSection
+                        title="Open questions for the team"
+                        summary={openQuestionCount ? `${openQuestionCount} answers would sharpen this model` : undefined}
+                    >
+                        <EvidenceRequests evidenceRequests={evidenceRequests} cardClassName="" />
+                        {followUpQuestions.length > 0 && (
+                            <div className="mt-4 space-y-3">
+                                {followUpQuestions.slice(0, 4).map((item) => (
+                                    <div key={item.id} className="rounded-lg border border-brand-200 bg-brand-50 p-4 dark:border-brand-700 dark:bg-brand-900/35">
+                                        <div className="flex items-center gap-2">
+                                            <span className={clsx(
+                                                'rounded-full px-2 py-1 text-[10px] font-bold uppercase',
+                                                item.priority === 'high'
+                                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                                                    : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+                                            )}>
+                                                {item.priority}
+                                            </span>
+                                            {item.related_threat_count > 0 && (
+                                                <span className="text-xs text-brand-500 dark:text-brand-400">{item.related_threat_count} linked findings</span>
+                                            )}
+                                        </div>
+                                        <p className="mt-3 text-sm font-semibold text-brand-950 dark:text-white">{item.question}</p>
+                                        <p className="mt-2 text-sm leading-6 text-brand-600 dark:text-brand-400">{item.rationale}</p>
+                                    </div>
+                                ))}
                             </div>
-                            <p className="mt-1 text-sm text-brand-600 dark:text-brand-400">Every modeled element is evaluated against all six STRIDE categories. Unknown cells identify missing architecture evidence.</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-2xl font-black text-brand-950 dark:text-white">{strideCoverage.assessment_percent ?? 100}% assessed</p>
-                            <p className="text-xs text-brand-500 dark:text-brand-400">
-                                {strideCoverage.evidence_resolution_percent ?? strideCoverage.coverage_percent ?? 0}% evidence resolution | {strideCoverage.unknown_cells ?? 0} unknown
-                            </p>
-                        </div>
+                        )}
+                    </DetailSection>
+                )}
+
+                <DetailSection title="Risk distribution" summary="Where severity and STRIDE categories concentrate">
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <RiskMatrix threats={data.threats} onCellClick={handleRiskMatrixClick} />
+                        <StrideChart threats={data.threats || []} />
                     </div>
-                    <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                </DetailSection>
+
+                <DetailSection
+                    title="What was modeled and assessed"
+                    summary={`${data.coverage?.components_analyzed ?? 0} components, ${strideCoverage.assessment_percent ?? 100}% STRIDE assessed`}
+                >
+                    <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
+                        {[
+                            ['Components', data.coverage?.components_analyzed ?? 0],
+                            ['Data flows', data.coverage?.flows_analyzed ?? 0],
+                            // The key here was trust_boundary_count, which the backend
+                            // never emitted, so this read zero while the diagram drew
+                            // the boundaries it had found.
+                            ['Trust boundaries', data.coverage?.trust_boundaries_modeled ?? 0],
+                            ['Public entry points', systemModel.public_entry_points?.length ?? 0],
+                            ['Boundary crossings', systemModel.boundary_crossings?.length ?? 0],
+                            ['Cloud resources', systemModel.cloud_resources?.length ?? 0],
+                        ].map(([label, value]) => (
+                            <div key={label} className="rounded-lg border border-brand-200 px-4 py-3 dark:border-brand-700">
+                                <p className="text-xs text-brand-500 dark:text-brand-400">{label}</p>
+                                <p className="mt-1 text-2xl font-black text-brand-950 dark:text-white">{value}</p>
+                            </div>
+                        ))}
+                    </div>
+                    <p className="mt-5 text-sm text-brand-600 dark:text-brand-400">
+                        Every modeled element is assessed against all six STRIDE categories.
+                        {' '}{strideCoverage.unknown_cells ?? 0} cells are unresolved for lack of architecture evidence.
+                    </p>
+                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                         {(strideCoverage.categories || []).map((category) => {
                             const summary = strideCoverage.category_summary?.[category] || {};
                             return (
@@ -1117,33 +663,47 @@ export default function ThreatDashboard({ data, projectName }) {
                             );
                         })}
                     </div>
-                    <div className="mt-5 flex flex-wrap gap-2 text-xs">
-                        {Object.entries(engineStatus).map(([name, status]) => (
-                            <span key={name} className="border border-brand-200 px-2.5 py-1.5 text-brand-600 dark:border-brand-700 dark:text-brand-300">
-                                {name.replaceAll('_', ' ')}: {status?.status || 'unknown'}
-                            </span>
+                </DetailSection>
+
+                {aiSecurityLens.items?.length > 0 && (
+                    <DetailSection title="AI-specific risk" summary={aiSecurityLens.overview || undefined}>
+                        <div className={clsx('grid gap-4', aiLensGridClass)}>
+                            {aiSecurityLens.items.map((item) => (
+                                <AISecurityLensCard key={item.id} item={item} />
+                            ))}
+                        </div>
+                    </DetailSection>
+                )}
+
+                <DetailSection
+                    title="Review progress and changes"
+                    summary={`${mitigatedThreats} of ${data.threats?.length || 0} findings triaged (${remediationPercent}%)`}
+                >
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                        {Object.entries(reviewStateMeta).map(([state, meta]) => (
+                            <div key={state} className="rounded-lg border border-brand-200 px-4 py-3 dark:border-brand-700">
+                                <div className={clsx('inline-flex rounded-full px-2 py-1 text-[10px] font-semibold', meta.className)}>{meta.label}</div>
+                                <div className="mt-2 text-2xl font-black text-brand-950 dark:text-white">{reviewSummary[state] || 0}</div>
+                            </div>
                         ))}
                     </div>
-                </div>
-            </section>
+                    <div className="mt-5">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400">Since the last run</p>
+                        <ReanalysisDiff diff={diffSummary} />
+                    </div>
+                </DetailSection>
 
-            <section className="mt-6">
-                <div className={clsx(insightCardBase, 'p-6')}>
-                    <div className="flex items-center justify-between gap-4">
-                        <div>
-                            <h3 className="text-lg font-bold text-brand-950 dark:text-white">Risk landscape</h3>
-                            <p className="mt-1 text-sm text-brand-600 dark:text-brand-400">Scan where the current architecture concentrates the most likely and most damaging issues.</p>
+                {assumptions.length > 0 && (
+                    <DetailSection title="Assumptions still shaping the model" summary={`${assumptions.length} assumption${assumptions.length === 1 ? '' : 's'} in force`}>
+                        <div className="grid gap-3 md:grid-cols-2">
+                            {assumptions.slice(0, 4).map((assumption, index) => (
+                                <div key={`${assumption.scope}-${index}`} className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 dark:border-yellow-900/40 dark:bg-yellow-950/20">
+                                    <p className="text-sm leading-6 text-yellow-900 dark:text-yellow-300">{assumption.message}</p>
+                                </div>
+                            ))}
                         </div>
-                    </div>
-                    <div className="mt-5 grid gap-6 lg:grid-cols-2">
-                        <RiskMatrix threats={data.threats} onCellClick={handleRiskMatrixClick} />
-                        <StrideChart threats={data.threats || []} />
-                    </div>
-                </div>
-            </section>
-
-            <section className="mt-8">
-                <ThreatSection threats={sortedFilteredThreats} onSelectThreat={setSelectedThreat} />
+                    </DetailSection>
+                )}
             </section>
 
             <AnalystWorkbench
@@ -1152,19 +712,13 @@ export default function ThreatDashboard({ data, projectName }) {
                 reviewStates={reviewStates}
             />
 
-            {assumptions.length > 0 && (
-                <section className={clsx(insightCardBase, 'mt-8 p-6')}>
-                    <div className="flex items-center gap-2">
-                        <Sparkles className="h-5 w-5 text-brand-primary" />
-                        <h3 className="text-lg font-bold text-brand-950 dark:text-white">Assumptions still shaping the model</h3>
-                    </div>
-                    <div className="mt-4 grid gap-3 md:grid-cols-2">
-                        {assumptions.slice(0, 4).map((assumption, index) => (
-                            <div key={`${assumption.scope}-${index}`} className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 dark:border-yellow-900/40 dark:bg-yellow-950/20">
-                                <p className="text-sm leading-6 text-yellow-900 dark:text-yellow-300">{assumption.message}</p>
-                            </div>
-                        ))}
-                    </div>
+            {onReanalyze && (
+                <section className="mt-8">
+                    <ArchitectureModelEditor
+                        document={data.architecture_document}
+                        onReanalyze={onReanalyze}
+                        isAnalyzing={isAnalyzing}
+                    />
                 </section>
             )}
             <RiskDetailsModal

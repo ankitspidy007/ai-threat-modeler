@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections import deque
 from typing import Dict, List, Optional, Tuple
 
+from . import graph
+
 
 def generate_attack_paths(system_model, threats) -> List[Dict]:
     components = {component.id: component for component in system_model.components or []}
@@ -26,19 +28,28 @@ def generate_attack_paths(system_model, threats) -> List[Dict]:
             continue
         target = _target_component(threat, components)
         if not target:
+            paths.append(_unresolved_path(threat))
             continue
 
-        threat_entries = list(entry_points)
-        if threat.exposure == "public" and target not in threat_entries:
-            threat_entries.append(target)
-        route = _best_route(threat_entries, target, adjacency)
+        route = _best_route(entry_points, target, adjacency)
         if route is None and threat.data_flow:
             source, _, flow_target = threat.data_flow.replace(" → ", "->").partition("->")
             if source in components and flow_target in components:
                 flow = next((item for item in flows if item.source_id == source and item.target_id == flow_target), None)
                 route = [(source, None), (flow_target, flow)]
+        # A finding on a component that faces the public is reached at that
+        # component, with no hops before it. This is the last resort rather than
+        # a candidate route, because a zero-hop route is always the shortest and
+        # would otherwise win over the real path through the architecture,
+        # reporting every path as beginning at its own target.
+        if route is None and (threat.exposure == "public" or target in entry_points):
+            route = [(target, None)]
 
         if route is None:
+            paths.append(
+                _component_local_path(threat, target, components)
+                if target in components else _unresolved_path(threat)
+            )
             continue
 
         hops = []
@@ -70,6 +81,22 @@ def generate_attack_paths(system_model, threats) -> List[Dict]:
         if threat.asset:
             steps.append(f"The path affects protected asset {threat.asset}.")
 
+        # A path that stops at the weak component understates it. What the
+        # architecture connects downstream is what the attacker gains next, and
+        # naming the sensitive stores among them is the difference between "this
+        # service is exposed" and "this service is the way to the records".
+        onward = sorted(graph.downstream(target, flows))
+        exposed_stores = [
+            components[component_id].name for component_id in onward
+            if graph.rank((components[component_id].properties or {}).get("data_sensitivity")) >= 3
+        ]
+        if exposed_stores:
+            steps.append(
+                "From there the path reaches sensitive data held by "
+                + ", ".join(exposed_stores)
+                + "."
+            )
+
         entry_id = route[0][0]
         confidence = "High" if inferred_hops == 0 and threat.confidence == "High" else "Medium"
         paths.append({
@@ -89,6 +116,8 @@ def generate_attack_paths(system_model, threats) -> List[Dict]:
             "evidence": threat.evidence_details or _fallback_evidence(threat),
             "path_status": "explicit" if inferred_hops == 0 else "partially_inferred",
             "inferred_hops": inferred_hops,
+            "onward_reach": onward,
+            "sensitive_data_reached": exposed_stores,
         })
     return paths
 
@@ -160,6 +189,8 @@ def _component_local_path(threat, target: str, components: Dict[str, object]) ->
         "evidence": threat.evidence_details or _fallback_evidence(threat),
         "path_status": "unresolved_entry_path",
         "inferred_hops": 0,
+        "onward_reach": [],
+        "sensitive_data_reached": [],
     }
 
 
@@ -181,6 +212,8 @@ def _unresolved_path(threat) -> Dict:
         "evidence": threat.evidence_details or _fallback_evidence(threat),
         "path_status": "unmapped",
         "inferred_hops": 0,
+        "onward_reach": [],
+        "sensitive_data_reached": [],
     }
 
 

@@ -114,7 +114,12 @@ def test_healthcare_known_issues_cover_multiple_stride_categories():
     assert findings['HEALTH-PHI-DLP-001'].category == 'Information Disclosure'
     assert findings['HEALTH-PHI-DLP-001'].severity == 'Critical'
     assert findings['AUTH-LONG-LIVED-SESSION-001'].category == 'Spoofing'
-    assert findings['AUTH-LONG-LIVED-SESSION-001'].severity == 'High'
+    # Sessions that never expire, on components that handle PHI and sit either
+    # side of a trust boundary, from which most of the architecture is reachable.
+    # This read as High while blast radius counted the components a finding named
+    # and PHI was recognised only where the word appeared, so the finding scored
+    # as an internal weakness on one component.
+    assert findings['AUTH-LONG-LIVED-SESSION-001'].severity == 'Critical'
     assert findings['HEALTH-BTG-AUDIT-001'].affected_components == ['rest_api', 'azure_ad', 'postgresql']
     assert findings['HEALTH-PHI-DLP-001'].affected_components == ['azure_blob', 'rest_api', 'react']
     assert findings['AUTH-LONG-LIVED-SESSION-001'].affected_components == ['redis', 'azure_ad', 'rest_api']

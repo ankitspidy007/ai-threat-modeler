@@ -1,0 +1,164 @@
+Document: Reference_Healthcare_AI_Architecture.docx
+Type: docx
+Role: source_design
+Content:
+1. Purpose
+
+A multi-tenant healthcare platform with an AI assistant. This document is the
+authoritative architecture record: the tables below assign stable IDs to every
+component, flow, boundary, asset, actor and known weakness.
+
+2. Scope
+
+In scope: the production AWS account, the AI tier and the delivery platform.
+Out of scope: corporate IT and the clinical devices themselves.
+
+3. Architecture inventory
+
+[Table 1]
+Row 1: ID | Component | Technology | Responsibility / Data
+Row 2: C1 | React patient web app | React SPA | Patient portal UI; displays PHI, holds session tokens
+Row 3: C2 | Clinician support portal | React SPA | Support and clinician console; tenant data access
+Row 4: C3 | Patient mobile app | iOS / Android | Patient mobile client; session tokens
+Row 5: C4 | Public API edge | AWS CloudFront and API Gateway with WAF | TLS termination, routing, rate limiting
+Row 6: C5 | Private ALB | AWS Private ALB and EKS ingress controller | Internal routing to application workloads
+Row 7: C6 | Identity service | AWS Cognito with JWKS | Authentication and token issuance
+Row 8: C7 | Core API | Java Spring Boot on EKS | Business logic and tenant authorization
+Row 9: C8 | FHIR service | HAPI FHIR server on EKS | Clinical record exchange; PHI
+Row 10: C9 | Claims service | Node.js on EKS | Claims adjudication; PHI and financial data
+Row 11: C10 | Payment service | Java Spring Boot on EKS | Payment authorization and refunds
+Row 12: C11 | Notification service | Node.js with SendGrid integration | Email and SMS notifications
+Row 13: C12 | Document ingestion lambda | AWS Lambda | Upload scanning and normalization
+Row 14: C13 | Workflow bus | AWS EventBridge | Asynchronous workflow events
+Row 15: C14 | Transactional database | Aurora PostgreSQL | Patient, claim and ledger records
+Row 16: C15 | Clinical document store | Amazon S3 document store | Clinical documents; PHI at rest
+Row 17: C16 | Session cache | ElastiCache Redis | Session state and cached tokens
+Row 18: C17 | Search index | Amazon OpenSearch | Patient and claim search index
+Row 19: C18 | AI orchestrator | Python agent orchestrator | Prompt assembly and tool calling
+Row 20: C19 | Model endpoint | Amazon Bedrock | LLM inference
+Row 21: C20 | Vector knowledge index | Amazon OpenSearch vector index | RAG embeddings and tenant corpora
+Row 22: C21 | MCP tool gateway | MCP server | Delegated tool invocation on behalf of the assistant
+Row 23: C22 | Model evaluation service | Amazon SageMaker | Output scoring and guardrail evaluation
+Row 24: C23 | Security services account | AWS KMS, CloudTrail, GuardDuty and Security Hub | Keys, audit trail and detection
+Row 25: C24 | Observability platform | OpenTelemetry collector with SIEM | Telemetry and audit logging
+Row 26: C25 | Delivery platform | GitHub Actions, ECR and Argo CD | Build, registry and deployment
+
+4. Trust boundaries
+
+[Table 2]
+Row 1: ID | Boundary | Trust level | Contents
+Row 2: TB1 | Internet | untrusted | Patients, clinicians and partner systems outside the platform
+Row 3: TB2 | Public edge | public | C1, C2, C3, C4
+Row 4: TB3 | Application tier | internal | C5, C7, C8, C9, C10, C11, C12, C13
+Row 5: TB4 | Data tier | restricted | C14, C15, C16, C17
+Row 6: TB5 | AI tier | internal | C18, C19, C20, C21, C22
+Row 7: TB6 | Third parties | external | Stripe, SendGrid and the insurer partner system
+Row 8: TB7 | Security and identity | restricted | C6, C23, C25
+Row 9: TB8 | AWS production account | internal | All platform components C1-C25
+Row 10: TB9 | Detection and response | restricted | C23, C24
+
+5. Data flows
+
+[Table 3]
+Row 1: ID | Source and Destination | Protocol | Data | Boundary crossing
+Row 2: F1 | C1 -> C4 | HTTPS | Patient session token and PHI requests | TB2 -> TB2
+Row 3: F2 | C3 -> C4 | HTTPS | Mobile session token and PHI requests | TB2 -> TB2
+Row 4: F3 | C4 -> C6 | HTTPS | Token validation against JWKS | TB2 -> TB7
+Row 5: F4 | C7 -> C14 | TLS | Patient, claim and ledger records | TB3 -> TB4
+Row 6: F5 | C4 -> C5 | HTTPS | Routed API requests | TB2 -> TB3
+Row 7: F6 | C5 -> C7 | HTTPS | Application requests with tenant context | TB3 -> TB3
+Row 8: F7 | C15 -> C12 | HTTPS | Uploaded clinical documents for scanning | TB4 -> TB3
+Row 9: F8 | C7 -> C8 | HTTPS | FHIR record read and write; PHI | TB3 -> TB3
+Row 10: F9 | C7 -> C9 | HTTPS | Claim adjudication requests; PHI | TB3 -> TB3
+Row 11: F10 | C7 -> C10 | HTTPS | Payment authorization requests | TB3 -> TB3
+Row 12: F11 | C10 -> Stripe | HTTPS | Customer payment token and amount | TB3 -> TB6
+Row 13: F12 | C11 -> SendGrid | HTTPS | Notification payloads with patient name | TB3 -> TB6
+Row 14: F13 | C7 -> C16 | TLS | Session state and cached tokens | TB3 -> TB4
+Row 15: F14 | C18 -> C20 | HTTPS | Embedding queries and retrieved passages | TB5 -> TB5
+Row 16: F15 | C7 -> C18 | HTTPS | Assistant prompts with patient context | TB3 -> TB5
+Row 17: F16 | C18 -> C21 | HTTPS | Delegated tool invocations | TB5 -> TB5
+Row 18: F17 | C7 -> C24 | HTTPS | Audit and telemetry events | TB3 -> TB9
+Row 19: F18 | C18 -> C19 | HTTPS | Inference requests and completions | TB5 -> TB5
+Row 20: F19 | C8 -> Insurer partner system | HTTPS | FHIR exchange with the insurer | TB3 -> TB6
+Row 21: F20 | C2 -> C7 | HTTPS | Support engineer access to tenant data | TB2 -> TB3
+
+6. Actors and identities
+
+[Table 4]
+Row 1: ID | Actor | Identity | Intended privilege
+Row 2: A1 | Patient | Cognito user pool | Own records only
+Row 3: A2 | Clinician | Cognito with SAML federation | Assigned patients only
+Row 4: A3 | Support engineer | Entra ID with MFA | Tenant metadata only, no PHI
+Row 5: A4 | Platform administrator | Entra ID with MFA and PIM | Infrastructure only, no application data
+Row 6: A5 | Claims adjudicator | Cognito user pool | Assigned claims only
+Row 7: A6 | Insurer partner system | mTLS client certificate | FHIR exchange scope only
+Row 8: A7 | Payment processor | API key with webhook signature | Payment callbacks only
+Row 9: A8 | Delivery pipeline | GitHub OIDC federated role | Deploy to production only
+Row 10: A9 | AI assistant service identity | IAM role | Tool scopes granted per request
+Row 11: A10 | Security analyst | Entra ID with MFA | Read-only detection and audit data
+
+7. Implemented controls
+
+[Table 5]
+Row 1: Domain | Implemented controls
+Row 2: Identity | MFA enforced for staff, OAuth2 authorization code with PKCE, short-lived access tokens
+Row 3: Edge | WAF enabled with managed rules, rate limiting per tenant, TLS 1.2 minimum
+Row 4: Authorization | RBAC for staff roles and ABAC on tenant attributes at the service layer
+Row 5: Data protection | Encryption at rest with KMS customer managed keys and encryption in transit everywhere
+Row 6: Kubernetes | Signed container images, admission control and network policies between namespaces
+Row 7: Software supply chain | Provenance attestation, image scanning and pinned build actions
+Row 8: Detection and response | CloudTrail organization trail, GuardDuty enabled, alerts routed to the SIEM
+Row 9: Payments | Webhook signature validation and idempotency keys on payment operations
+Row 10: AI | Output validation and guardrail evaluation on assistant responses
+
+8. Known weaknesses
+
+[Table 6]
+Row 1: ID | Area | Known condition
+Row 2: K1 | Authorization | Object identifiers in the core API are sequential and tenant ownership is not re-checked on read, so a caller can request another tenant's object by identifier
+Row 3: K2 | Session management | Sessions cached in Redis are not revoked when a token is invalidated at the identity service, so a logged-out session stays usable
+Row 4: K3 | Partner authentication | The FHIR service accepts partner requests on the strength of a client certificate subject string without validating the certificate chain, so a partner can be spoofed
+Row 5: K4 | Transport | Internal service-to-service calls inside the cluster fall back to plaintext HTTP when TLS negotiation fails
+Row 6: K5 | Input validation | Uploaded documents are scanned for malware but not for embedded active content
+Row 7: K6 | Injection | An order-by parameter in the core API is concatenated into a SQL query, so SQL injection is possible through the sort parameter
+Row 8: K7 | Rate limiting | Rate limits are applied per source address and not per tenant identity
+Row 9: K8 | Output encoding | Clinician-supplied note text is rendered in the support portal without contextual output encoding, so stored XSS is possible
+Row 10: K9 | Storage exposure | Pre-signed URLs for the clinical document store are issued with a seven day lifetime and no download audit
+Row 11: K10 | Server-side request forgery | A document import feature fetches a caller-supplied URL without allow-listing the destination, so internal metadata endpoints are reachable
+Row 12: K11 | Key management | Application secrets are read from environment variables populated at deploy time rather than from a managed secret store
+Row 13: K12 | Backup | Database snapshots are copied to a secondary region without their own key policy review
+Row 14: K13 | Prompt handling | Retrieved document text is concatenated into the assistant prompt without delimiting untrusted content, so indirect prompt injection is possible
+Row 15: K14 | Model output | Assistant output is rendered as markdown with links preserved and no destination validation
+Row 16: K15 | Tenant isolation | The vector knowledge index stores every tenant's embeddings in one namespace and filters by metadata at query time, so RAG tenant isolation depends on a single query filter
+Row 17: K16 | Delegated authorization | The MCP tool gateway executes tool calls with the orchestrator's own service role rather than the calling user's delegated scope
+Row 18: K17 | Non-repudiation | Assistant actions that trigger claim and payment changes are logged without the acting user identity
+Row 19: K18 | Audit integrity | Audit records written to the observability platform are mutable by the same role that writes them
+Row 20: K19 | Availability | A single unbounded assistant request can exhaust the inference quota shared by all tenants
+Row 21: K20 | Denial of service | Document ingestion has no size ceiling on uploads before scanning
+Row 22: K21 | Privilege escalation | The support role can impersonate a tenant user without a second approval
+Row 23: K22 | Secrets in code | A signing key used by the notification service is committed to the application repository
+Row 24: K23 | Logging | PHI appears in application logs for FHIR and payment error paths
+Row 25: K24 | Container security | Workload containers run as root in two namespaces
+Row 26: K25 | Network policy | Namespace network policies permit egress to the whole internet
+Row 27: K26 | Supply chain | The delivery pipeline trusts a GitHub OIDC subject claim scoped to the whole organization rather than a single repository and environment
+Row 28: K27 | Dependency management | Build dependencies are resolved from floating version ranges at build time
+Row 29: K28 | Encryption scope | Keys for the vector index and the session cache are AWS managed rather than customer managed and are not rotated on a schedule
+Row 30: K29 | Idempotency | Payment and claim workflow events on the workflow bus are processed without idempotency keys, so a redelivered event repeats a payment
+Row 31: K30 | Privacy / deletion | A tenant deletion request removes rows from the transactional database but does not propagate to the search index, the vector index, the workflow bus or the evaluation store
+
+9. Assets
+
+[Table 7]
+Row 1: ID | Asset | Classification | Required property
+Row 2: AS1 | Clinical documents held in the clinical document store C15 | PHI | Confidentiality and integrity at rest
+Row 3: AS2 | Identity tokens issued by the identity service C6 | Credentials | Integrity and short lifetime
+Row 4: AS3 | Session state in the session cache C16 | Credentials | Confidentiality and prompt revocation
+Row 5: AS4 | Claim records processed by the claims service C9 | PHI | Integrity and auditability
+Row 6: AS5 | Payment instructions in the payment service C10 | Financial | Integrity and idempotency
+Row 7: AS6 | Tenant authorization decisions in the core API C7 | Internal | Correctness and completeness
+Row 8: AS7 | Encryption keys in the security services account C23 | Secrets | Confidentiality and scheduled rotation
+Row 9: AS8 | Audit trail in the observability platform C24 | Internal | Integrity and non-repudiation
+Row 10: AS9 | Build provenance in the delivery platform C25 | Internal | Integrity and attestation
+Row 11: AS10 | Prompt and tool context in the AI orchestrator C18 | Internal | Integrity and isolation
+Row 12: AS11 | Delegated tool credentials in the MCP tool gateway C21 | Secrets | Least privilege
+Row 13: AS12 | Workflow events on the workflow bus C13 | Internal | Integrity and ordering

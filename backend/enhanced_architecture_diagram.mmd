@@ -1,6 +1,8 @@
 %%{init: {'flowchart': {'htmlLabels': true, 'nodeSpacing': 32, 'rankSpacing': 64, 'curve': 'linear'}} }%%
 flowchart TB
     %% DFD notation: E# external entity, #.0 process, D# data store
+    %% Coverage: 4 of 4 components and 3 of 3 flows drawn
+    %% A dotted flow was assumed from component types, not described
     subgraph dfd_public["Internet / Client Boundary"]
         direction LR
         react(("1.0 React"))
@@ -21,13 +23,15 @@ flowchart TB
         cognito["E1 Cognito"]
     end
     style dfd_third_party fill:#ffffff,stroke:#404040,stroke-width:2px,stroke-dasharray: 7 4
-    node_js ==>|TCP| mongodb
-    node_js ==>|HTTPS| cognito
-    react ==>|HTTPS| node_js
+    node_js -.->|TCP (assumed)| mongodb
+    node_js -.->|HTTPS (assumed)| cognito
+    react -.->|HTTPS (assumed)| node_js
     classDef dfdEntity fill:#ffffff,stroke:#202020,stroke-width:2px,color:#111111
     classDef dfdProcess fill:#ffffff,stroke:#202020,stroke-width:2px,color:#111111
     classDef dfdStore fill:#ffffff,stroke:#202020,stroke-width:2px,color:#111111
+    classDef dfdFinding fill:#ffffff,stroke:#b91c1c,stroke-width:4px,color:#111111
+    classDef dfdMore fill:#f8fafc,stroke:#94a3b8,stroke-width:1px,color:#334155,stroke-dasharray: 4 3
     class node_js dfdProcess
-    class mongodb dfdStore
     class cognito dfdEntity
+    class mongodb dfdStore
     class react dfdProcess

@@ -1,55 +1,50 @@
 import re
 import uuid
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from ..models import Asset, Component, DataFlow, SystemArchitecture, TrustBoundary
+from . import control_statements, graph, prose, technology_catalog
+from .component_identity import consolidate, name_from_description, richer_name
+from .flow_extraction import alias_index, extract_stated_flows, find_mentions
+from .component_roles import find_named_roles, representative_of
+from .known_issue_taxonomy import (
+    GENERIC_SCOPE_TYPES,
+    classify_generic_weakness,
+    classify_generic_weaknesses,
+)
 import networkx as nx
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
+# Words that name a category rather than a component, plus the connectives that
+# survive tokenizing a cell. A single one of these must never become an alias: on
+# its own "service" would make "the service" resolve to whichever service was
+# declared first, and "with" would attach every sentence containing it to the one
+# component whose technology column happened to read "X with Y".
+_ALIAS_STOPWORDS = frozenset({
+    'account', 'api', 'app', 'application', 'bus', 'cache', 'client', 'cluster',
+    'data', 'database', 'edge', 'endpoint', 'engine', 'gateway', 'index', 'layer',
+    'microservice', 'model', 'node', 'partner', 'pipeline', 'platform', 'portal',
+    'process', 'provider', 'proxy', 'queue', 'record', 'records', 'server',
+    'service', 'services', 'store', 'storage', 'system', 'systems', 'tier',
+    'token', 'tokens', 'tool', 'user', 'users', 'web', 'worker', 'workload',
+    'workloads',
+    'all', 'and', 'any', 'are', 'both', 'each', 'for', 'from', 'has', 'have',
+    'into', 'its', 'not', 'off', 'one', 'only', 'other', 'over', 'own', 'per',
+    'that', 'the', 'their', 'them', 'then', 'these', 'they', 'this', 'those',
+    'used', 'uses', 'using', 'via', 'was', 'were', 'when', 'which', 'while',
+    'with', 'within', 'without',
+})
+
 # Import NLP processor (graceful fallback if unavailable)
 try:
-    from .nlp_processor import get_nlp_processor, TECH_COMPONENT_MAP
+    from .nlp_processor import get_nlp_processor
     NLP_AVAILABLE = True
 except Exception:
     NLP_AVAILABLE = False
-    TECH_COMPONENT_MAP = {}
     logger.warning("NLP processor not available. Using regex-only parsing.")
 
-
-# Component type synonyms for better detection
-COMPONENT_SYNONYMS = {
-    'Database': ['db', 'database', 'sql', 'mysql', 'postgresql', 'postgres', 'mongodb', 'mongo', 
-                 'dynamodb', 'cassandra', 'redis', 'mariadb', 'oracle', 'mssql', 'documentdb',
-                 'cosmosdb', 'firestore'],
-    'API': ['api', 'rest api', 'graphql', 'backend', 'api server', 'web service', 'rest', 'grpc'],
-    'WebClient': ['frontend', 'ui', 'client', 'spa', 'react', 'vue', 'angular', 'web app', 
-                  'mobile app', 'mobile', 'app', 'webapp', 'ios', 'android', 'kiosk'],
-    'API Gateway': ['gateway', 'api gateway', 'proxy', 'apigw', 'reverse proxy', 'kong', 'apigee'],
-    'Load Balancer': ['load balancer', 'lb', 'alb', 'nlb', 'balancer', 'elb'],
-    'Queue': ['queue', 'kafka', 'rabbitmq', 'sqs', 'message queue', 'mq', 'pubsub', 'sns', 
-              'mqtt', 'mqtt broker', 'iot core'],
-    'Service': ['worker', 'job', 'service', 'microservice', 'lambda', 'function', 'serverless',
-                'cloud function', 'azure function'],
-    'Object Storage': ['storage', 's3', 'bucket', 'blob', 'object storage', 'cloud storage',
-                       'azure blob', 'gcs'],
-    'IoT Device': ['iot device', 'sensor', 'medical device', 'glucose monitor', 'heart rate monitor',
-                   'blood pressure', 'infusion pump', 'smart device', 'connected device'],
-    'CDN': ['cdn', 'cloudfront', 'content delivery', 'edge network', 'akamai'],
-    'Secrets Manager': ['secrets manager', 'vault', 'key vault', 'parameter store', 'secrets'],
-    'Threat Detection': ['guardduty', 'security hub', 'defender', 'threat detection', 'siem'],
-    'Data Warehouse': ['data warehouse', 'snowflake', 'redshift', 'bigquery', 'synapse'],
-    'ML Service': ['sagemaker', 'ml', 'machine learning', 'ai', 'model', 'ml pipeline',
-                   'vertex ai', 'azure ml'],
-    'VPN': ['vpn', 'vpn tunnel', 'site-to-site', 'ipsec'],
-    'Bastion': ['bastion', 'bastion host', 'jump box', 'jump server'],
-    'Identity Provider': ['idp', 'identity provider', 'auth0', 'okta', 'active directory',
-                          'ldap', 'azure ad', 'cognito'],
-    'Monitoring': ['monitoring', 'cloudwatch', 'datadog', 'splunk', 'elk', 'prometheus',
-                   'grafana', 'new relic'],
-    'Backup': ['backup', 'glacier', 'backup vault', 'snapshot'],
-}
 
 class ArchitectureParser:
     # Sections describing weaknesses or out-of-scope technology must never be
@@ -139,7 +134,7 @@ class ArchitectureParser:
             return ""
 
         names = {component_name, component_name.replace("_", " ").replace("-", " ")}
-        segments = re.split(r'(?<=[.!?])\s+|[\r\n]+', text or "")
+        segments = prose.sentences(text or "")
         matching = [
             segment.strip().lower()
             for segment in segments
@@ -212,11 +207,14 @@ class ArchitectureParser:
                 })
 
         for flow in flows:
-            if flow.properties.get('trust_boundary') == 'inferred':
+            if flow.properties.get('origin') == 'assumed':
                 assumptions.append({
                     'scope': f"{flow.source_id}->{flow.target_id}",
-                    'type': 'trust_boundary',
-                    'message': f"Trust boundary for flow {flow.source_id} -> {flow.target_id} was inferred."
+                    'type': 'data_flow',
+                    'message': flow.properties.get('assumption') or (
+                        f"The flow {flow.source_id} -> {flow.target_id} was assumed from component "
+                        f"types because the description did not state it."
+                    ),
                 })
 
         return assumptions
@@ -388,9 +386,62 @@ class ArchitectureParser:
                     properties={'technology': f'{service_name.lower()} microservice', 'extraction_method': 'literal_service_list'},
                 )
 
+    def _add_inferred_named_components(self, text: str, components: Dict[str, Component]) -> None:
+        """Model named services, portals and workers that no registry enumerates.
+
+        A registry cannot list product-specific names such as "Settlement
+        Worker". Without this pass those declarations collapse into a generic
+        peer of the same type, which removes them from the model entirely.
+        """
+        added = 0
+        for candidate in find_named_roles(text or ''):
+            if added >= 12:
+                break
+            if candidate['id'] in components:
+                continue
+            existing = representative_of(candidate, list(components.values()))
+            if existing is not None:
+                # The candidate is the same node under a fuller name. Adopt the
+                # name the design used and keep the established id.
+                better = richer_name(candidate, existing)
+                if better:
+                    existing.name = better
+                continue
+            context = self._extract_component_context(text, candidate['phrase']) or candidate['phrase']
+            props = self._infer_properties(context.lower(), candidate['type'])
+            props.update({
+                'technology': candidate['phrase'].lower(),
+                'extraction_method': 'inferred_named_role',
+            })
+            if candidate['external']:
+                props['external'] = True
+                props['third_party_integration'] = True
+            components[candidate['id']] = Component(
+                id=candidate['id'],
+                name=candidate['name'],
+                type=candidate['type'],
+                description=context,
+                properties=props,
+            )
+            added += 1
+
     @staticmethod
-    def _consolidate_component_aliases(text: str, components: Dict[str, Component]) -> None:
-        """Merge generic aliases when a concrete technology represents the same node."""
+    def _consolidate_component_aliases(
+        text: str, components: Dict[str, Component]
+    ) -> List[Dict[str, str]]:
+        """Merge generic aliases when a concrete technology represents the same node.
+
+        Returns what was resolved so the report and the extraction challenger can
+        see that a name was accounted for rather than dropped.
+        """
+        # Resolve names that denote one node before the type-specific rules run,
+        # so those rules see one component per node rather than two.
+        resolved = consolidate(components, text)
+        for component in components.values():
+            better = name_from_description(component)
+            if better:
+                component.name = better
+
         concrete_api_ids = [
             component_id for component_id, component in components.items()
             if component.type == 'API' and component_id not in {'api', 'rest_api'}
@@ -398,6 +449,24 @@ class ArchitectureParser:
         if concrete_api_ids:
             for generic_id in ('api', 'rest_api'):
                 components.pop(generic_id, None)
+
+        # A named peer of the same type supersedes the generic noun it was
+        # extracted from. Keeping both models one node twice and attributes
+        # findings to a placeholder the design never mentioned.
+        generic_aliases = {
+            'Service': ('service', 'microservice'),
+            'WebClient': ('web_application',),
+            'Database': ('database',),
+            'Queue': ('queue',),
+        }
+        for component_type, generic_ids in generic_aliases.items():
+            concrete = [
+                component_id for component_id, component in components.items()
+                if component.type == component_type and component_id not in generic_ids
+            ]
+            if concrete:
+                for generic_id in generic_ids:
+                    components.pop(generic_id, None)
 
         if 'pinecone' in components:
             components.pop('vector_store', None)
@@ -416,9 +485,6 @@ class ArchitectureParser:
             components.pop('waf', None)
         if 'key_vault' in components and 'vault' in components:
             components.pop('vault', None)
-        if 'okta' in components and 'okta_external' in components:
-            components['okta'].properties.update(components['okta_external'].properties or {})
-            components.pop('okta_external', None)
 
         if 'mcp_filesystem' in components:
             components.pop('filesystem', None)
@@ -450,6 +516,8 @@ class ArchitectureParser:
                 components['ec2'].properties['hosts'] = hosted
                 for component_id in hosted:
                     components[component_id].properties['hosted_on'] = 'ec2'
+
+        return resolved
 
     def _build_trust_boundaries(self, components: Dict[str, Component], flows: List[DataFlow]) -> List[TrustBoundary]:
         """Summarize trust boundaries crossed by the modeled architecture."""
@@ -524,7 +592,12 @@ class ArchitectureParser:
             row_match = re.match(r'^Row\s+(\d+)\s*:\s*(.*)$', raw_line.strip(), re.IGNORECASE)
             if current is None or not row_match:
                 continue
-            values = [value.replace('&#124;', '|').strip() for value in row_match.group(2).split(' | ')]
+            # Split on the bare separator, not on " | ": the line has been
+            # stripped, so a row whose last cell is empty ends in "|" and
+            # splitting on the padded form would fold that separator into the
+            # previous cell and shift the row one column short.  Content pipes
+            # are escaped at ingestion, so every remaining "|" is a boundary.
+            values = [value.replace('&#124;', '|').strip() for value in row_match.group(2).split('|')]
             current['rows'].append(values)
 
         normalized = []
@@ -544,49 +617,198 @@ class ArchitectureParser:
         required_set = set(required)
         return next((table for table in tables if required_set.issubset(set(table['headers']))), None)
 
+    #: Trust levels ordered from most exposed to most protected. Used to decide
+    #: which of two claims about one component is the more restrictive.
+    TRUST_ORDER = ('external', 'public', 'internal', 'restricted')
+
+    #: The least exposed a component of this type can be, whatever boundary it was
+    #: placed in. A tier declared "internal" that contains a database does not make
+    #: the database internal; it means the tier was described at the wrong grain.
+    TRUST_FLOOR_BY_TYPE = {
+        'Database': 'restricted',
+        'Object Storage': 'restricted',
+        'Secrets Manager': 'restricted',
+        'Key Management': 'restricted',
+        'Identity Provider': 'restricted',
+    }
+
+    #: The kinds of data a description can name, and the words that name them.
+    #: Health data is separate from personal data because it is regulated
+    #: separately and weighs more in the risk calculation, and "patient records"
+    #: was previously read as no classification at all.
+    DATA_SENSITIVITY_TERMS = (
+        ('pii', (
+            'pii', 'personal data', 'personal information', 'personally identifiable',
+            'customer record', 'date of birth', 'ssn', 'social security', 'passport',
+            'national id', 'home address', 'phone number', 'gdpr',
+        )),
+        ('phi', (
+            'phi', 'patient', 'medical', 'health record', 'health data', 'clinical',
+            'diagnos', 'prescription', 'lab result', 'hipaa', 'ehr', 'emr',
+        )),
+        ('financial', (
+            'payment', 'credit card', 'cardholder', 'financial', 'transaction',
+            'invoice', 'bank account', 'pci', 'billing',
+        )),
+        ('credentials', (
+            'credential', 'password', 'api key', 'private key', 'access token',
+            'session token', 'secret',
+        )),
+    )
+
+    #: Types that face the internet by definition, so they are at the public edge
+    #: even when no boundary table says where they sit. A load balancer is absent
+    #: deliberately: it is as often internal as not, and the boundary table is the
+    #: only thing that can say which.
+    PUBLIC_BY_TYPE = frozenset({'WebClient', 'IoT Device', 'API Gateway', 'CDN'})
+
     @staticmethod
     def _authoritative_component_type(name: str, technology: str, responsibility: str) -> str:
-        context = f"{name} {technology} {responsibility}".lower()
-        if any(token in context for token in ('react', 'ios / android', 'mobile application')):
-            return 'WebClient'
-        if any(token in context for token in ('private alb', 'ingress controller')):
-            return 'Load Balancer'
-        if any(token in context for token in ('api gateway', 'public api edge')):
-            return 'API Gateway'
-        if any(token in context for token in ('cognito', 'identity service')):
-            return 'Identity Provider'
-        if any(token in context for token in ('aurora postgresql', 'elasticache redis', 'opensearch')):
-            return 'Database'
-        if re.search(r'\bs3\b', context) and any(token in context for token in ('document store', 'object', 'bucket', 'origin')):
-            return 'Object Storage'
-        if any(token in context for token in ('document ingestion', 'ingestion lambda')):
-            return 'Service'
-        if any(token in context for token in ('eventbridge', 'sns', 'sqs', 'workflow bus')):
-            return 'Queue'
-        if any(token in context for token in ('bedrock', 'sagemaker', 'ai orchestrator', 'model endpoint', 'model evaluation')):
-            return 'ML Service'
-        if any(token in context for token in ('mcp tool gateway', 'core api', 'fhir service')):
-            return 'API'
-        if any(token in context for token in ('cloudtrail', 'guardduty', 'security hub', 'security services')):
-            return 'Threat Detection'
-        if any(token in context for token in ('observability', 'cloudwatch', 'opentelemetry', 'siem')):
-            return 'Monitoring'
+        """The type of a declared component, from what the row says it is.
+
+        The row is read most-specific-field first. The name is the label the
+        author chose for the component, so "Core API" is an API even though its
+        technology column says Spring Boot and its responsibility mentions
+        payments; only when the name carries no role does the technology decide.
+        """
+        for field in (name, technology, f"{name}. {technology}. {responsibility}"):
+            resolved = technology_catalog.classify_role(field)
+            if resolved:
+                return resolved
         return 'Service'
 
-    @staticmethod
-    def _authoritative_trust_level(component_id: str, component_type: str) -> str:
-        numeric = int(re.sub(r'\D', '', component_id) or 0)
-        if numeric in {1, 2, 3, 4}:
+    @classmethod
+    def _more_restrictive(cls, first: Optional[str], second: Optional[str]) -> Optional[str]:
+        candidates = [level for level in (first, second) if level in cls.TRUST_ORDER]
+        if not candidates:
+            return first or second
+        return max(candidates, key=cls.TRUST_ORDER.index)
+
+    @classmethod
+    def _authoritative_trust_level(cls, component_type: str, declared: Optional[str] = None) -> str:
+        """The trust level of a declared component.
+
+        A boundary table states the trust level of each tier, and that statement
+        is the best evidence available. Absent one, the type decides: clients are
+        outside, stores and secrets are protected, everything else is internal.
+        """
+        if declared in cls.TRUST_ORDER:
+            return cls._more_restrictive(declared, cls.TRUST_FLOOR_BY_TYPE.get(component_type))
+        if component_type in cls.PUBLIC_BY_TYPE:
             return 'public'
-        if numeric in {6, 14, 15, 16, 17, 23}:
-            return 'restricted'
-        if component_type in {'Database', 'Object Storage', 'Secrets Manager'}:
-            return 'restricted'
-        return 'internal'
+        return cls.TRUST_FLOOR_BY_TYPE.get(component_type, 'internal')
 
     @staticmethod
-    def _flow_data_type(value: str) -> str:
+    def _stable_component_id(name: str, source_id: str, taken: Dict[str, Component]) -> str:
+        """An identifier that survives the table being edited.
+
+        Two components can carry the same name, and one of them has to be told
+        apart somehow; the row label is the only thing left that distinguishes
+        them, so it is used as the tie-break rather than as the identity.
+        """
+        slug = re.sub(r'_+', '_', re.sub(r'[^a-z0-9]+', '_', (name or '').lower())).strip('_')
+        if not slug:
+            return source_id.lower()
+        return slug if slug not in taken else f'{slug}_{source_id.lower()}'
+
+    @staticmethod
+    def _declared_controls(value: str) -> Dict[str, Any]:
+        """Control state written down by a previous analysis of this model.
+
+        "mfa_enabled" is present, "mfa_enabled=no" is known to be absent, and a
+        control that appears in neither form stays unknown. The three states are
+        distinct to the rules, so a round trip that could only express presence
+        would turn every stated weakness back into an open question.
+        """
+        declared: Dict[str, Any] = {}
+        for entry in re.split(r'[,;]', value or ''):
+            entry = entry.strip()
+            if not entry:
+                continue
+            key, _, raw = entry.partition('=')
+            key = key.strip().lower().replace(' ', '_')
+            if not re.fullmatch(r'[a-z][a-z0-9_]*', key):
+                continue
+            raw = raw.strip().lower()
+            if not raw:
+                declared[key] = True
+            elif raw in {'yes', 'true', 'enabled', 'present', '1'}:
+                declared[key] = True
+            elif raw in {'no', 'false', 'disabled', 'absent', '0'}:
+                declared[key] = False
+            elif raw in {'unknown', 'none', ''}:
+                declared[key] = None
+            else:
+                declared[key] = raw
+        return declared
+
+    @staticmethod
+    def _normalize_trust_level(value: str) -> Optional[str]:
+        lowered = (value or '').strip().lower()
+        if not lowered:
+            return None
+        for level in ArchitectureParser.TRUST_ORDER:
+            if level in lowered:
+                return level
+        if any(token in lowered for token in ('untrusted', 'internet', 'third party')):
+            return 'external'
+        if any(token in lowered for token in ('confidential', 'protected', 'sensitive')):
+            return 'restricted'
+        if 'trusted' in lowered:
+            return 'internal'
+        return None
+
+    @staticmethod
+    def _components_named_in(text: str, aliases: Dict[str, str], components: Dict[str, Component]) -> List[str]:
+        """The components this sentence names, in the order it names them.
+
+        Matching is on whole words, so "namespaces" does not name the component
+        whose technology is an SPA, and it is ordered by position then by length,
+        so the sentence's own subject leads rather than whichever component was
+        declared first.
+        """
+        lowered = (text or '').lower()
+        matches: List[Tuple[int, int, str]] = []
+        for alias, component_id in aliases.items():
+            if not alias or component_id not in components:
+                continue
+            found = technology_catalog.first_mention(lowered, alias)
+            if found is not None:
+                matches.append((found, -len(alias), component_id))
+
+        ordered: List[str] = []
+        for _, _, component_id in sorted(matches):
+            if component_id not in ordered:
+                ordered.append(component_id)
+        return ordered
+
+    @staticmethod
+    def _referenced_component_ids(text: str) -> List[str]:
+        """Component ids named in a free-text cell, expanding "C1-C25" ranges."""
+        lowered = (text or '').lower()
+        found: List[str] = []
+        for match in re.finditer(r'\bc(\d+)\s*(?:-|–|—|to|through)\s*c?(\d+)\b', lowered):
+            start, end = int(match.group(1)), int(match.group(2))
+            if start <= end and end - start < 500:
+                found.extend(f'c{number}' for number in range(start, end + 1))
+        for match in re.finditer(r'\bc(\d+)\b', lowered):
+            found.append(f'c{match.group(1)}')
+        ordered: List[str] = []
+        for component_id in found:
+            if component_id not in ordered:
+                ordered.append(component_id)
+        return ordered
+
+    #: The data classifications a flow can carry, as the rules understand them.
+    DATA_TYPES = ('phi', 'financial', 'credentials', 'secrets', 'application_data')
+
+    @classmethod
+    def _flow_data_type(cls, value: str) -> str:
         lowered = (value or '').lower()
+        # An emitted model writes the classification itself into this column, and
+        # "financial" is not a word the description of a payment would use.
+        if lowered.strip() in cls.DATA_TYPES:
+            return lowered.strip()
         if any(token in lowered for token in ('phi', 'clinical', 'patient', 'fhir')):
             return 'phi'
         if any(token in lowered for token in ('payment', 'refund', 'ledger', 'amount', 'customer token')):
@@ -616,17 +838,110 @@ class ArchitectureParser:
 
         components: Dict[str, Component] = {}
         aliases: Dict[str, str] = {}
+        full_names: Dict[str, str] = {}
+        alias_owners: Dict[str, set] = {}
+        name_owners: Dict[str, set] = {}
+        searchable_component_text: Dict[str, str] = {}
+        stated_trust_levels: Dict[str, str] = {}
+        #: row label ("c7") -> component id. The label is how the rest of the
+        #: document refers to a row; it is not what the component is.
+        record_labels: Dict[str, str] = {}
+
+        def labelled(*values: str) -> List[str]:
+            """The components the given row labels refer to, in order."""
+            seen: List[str] = []
+            for value in values:
+                for label in value if isinstance(value, list) else [value]:
+                    resolved = record_labels.get(label)
+                    if resolved and resolved not in seen:
+                        seen.append(resolved)
+            return seen
+
+        def _claim(index: Dict[str, str], owners: Dict[str, set], label: str, component_id: str) -> None:
+            """Let a component claim a label, unless another already has.
+
+            A word two components share identifies neither of them. "Document"
+            belongs to both the ingestion lambda and the document store, so a
+            weakness about document text is about neither in particular, and
+            awarding it to whichever row came first is how a plausible but wrong
+            attribution gets made.
+            """
+            holders = owners.setdefault(label, set())
+            holders.add(component_id)
+            if len(holders) == 1:
+                index[label] = component_id
+            else:
+                index.pop(label, None)
+
+        def register_aliases(component_id: str, name: str, technology: str = '', *extra: str) -> None:
+            """Record the names a later cell might use to refer to this component.
+
+            A component owns the words in the name its author gave it. It does not
+            own every product listed in its technology column: a notification
+            service built "with SendGrid" is not SendGrid, and treating it as such
+            makes a flow to the real third party resolve back to the caller. Words
+            from the technology column therefore only count when the catalog
+            recognizes them as naming a technology.
+            """
+            labels = {value.strip().lower() for value in (name, technology, *extra) if value and value.strip()}
+            for label in labels:
+                _claim(full_names, name_owners, label, component_id)
+
+            candidates = set(re.findall(r'[a-z][a-z0-9.+-]{2,}', (name or '').lower()))
+            candidates.update(
+                token for token in re.findall(r'[a-z][a-z0-9.+-]{2,}', (technology or '').lower())
+                if token in technology_catalog.TECHNOLOGY_TYPES
+            )
+            component_type = components.get(component_id).type if component_id in components else None
+            candidates.update(
+                term for term, term_type in technology_catalog.ROLE_VOCABULARY.items()
+                if term_type == component_type and technology_catalog.mentions(technology, term)
+            )
+            for alias in labels | candidates:
+                if alias and alias not in _ALIAS_STOPWORDS:
+                    _claim(aliases, alias_owners, alias, component_id)
+
+            searchable_component_text[component_id] = ' '.join(
+                value.lower() for value in (name, *extra) if value and value.strip()
+            )
+
+        def resolve_by_name(value: str) -> Optional[str]:
+            """The component whose own name or technology this text states.
+
+            Used where a cell lists membership rather than referring to a
+            component in prose, so that a boundary described as holding
+            "patients, clinicians and partner systems" claims no component.
+            """
+            lowered = re.sub(r'\s+', ' ', (value or '').lower()).strip(' .;,')
+            if not lowered:
+                return None
+            ranked = sorted(
+                ((len(label), cid) for label, cid in full_names.items() if label in lowered),
+                reverse=True,
+            )
+            return ranked[0][1] if ranked else None
+
         for record in component_table['records']:
             source_id = str(record.get('id', '')).strip().upper()
             if not re.fullmatch(r'C\d+', source_id):
                 continue
-            component_id = source_id.lower()
             name = record.get('component', '').strip() or source_id
+            # Identity comes from the name, not the row label. Findings are keyed
+            # by the component they concern, so if a component were "C7" then
+            # inserting a row above it would renumber the rest of the table and
+            # every finding and reviewer note below the insertion would detach
+            # from the thing it was written about.
+            component_id = self._stable_component_id(name, source_id, components)
             technology = record.get('technology', '').strip()
             responsibility = (record.get('responsibility_data') or record.get('responsibility') or '').strip()
-            component_type = self._authoritative_component_type(name, technology, responsibility)
+            # A document the analyzer emitted states the type and control state it
+            # derived, so that re-reading its own output reproduces the model
+            # rather than inferring it a second time from the same words.
+            component_type = (record.get('type') or '').strip() or \
+                self._authoritative_component_type(name, technology, responsibility)
             context = f"{name}. {technology}. {responsibility}."
             props = self._infer_properties(context, component_type)
+            props.update(self._declared_controls(record.get('controls', '')))
             props.update({
                 'source_record_id': source_id,
                 'technology': technology,
@@ -634,7 +949,12 @@ class ArchitectureParser:
                 'evidence_status': 'explicit',
                 'authoritative': True,
             })
-            trust_level = self._authoritative_trust_level(source_id, component_type)
+            stated_trust = self._normalize_trust_level(record.get('trust_level', ''))
+            if stated_trust:
+                stated_trust_levels[component_id] = stated_trust
+            # Provisional: a stated level, or the boundary table parsed once every
+            # component and external participant exists, overrides it below.
+            trust_level = self._authoritative_trust_level(component_type)
             props['trust_level'] = trust_level
             component = Component(
                 id=component_id,
@@ -653,102 +973,98 @@ class ArchitectureParser:
                 }],
             )
             components[component_id] = component
-            alias_values = {source_id.lower(), name.lower(), technology.lower()}
-            alias_values.update(re.findall(r'[a-z][a-z0-9.+-]{2,}', f"{name} {technology}".lower()))
-            for alias in alias_values:
-                if alias:
-                    aliases.setdefault(alias, component_id)
+            record_labels[source_id.lower()] = component_id
+            register_aliases(component_id, name, technology, responsibility, source_id)
 
-        # Controls are affirmative evidence and prevent generic missing-control
-        # candidates from contradicting the document.
         control_table = self._table_with_headers(tables, 'domain', 'implemented_controls')
-        for record in (control_table or {}).get('records', []):
-            domain = record.get('domain', '').lower()
-            control = record.get('implemented_controls', '').lower()
-            if domain == 'identity' and 'c6' in components:
-                components['c6'].properties.update({'mfa_enabled': True, 'auth_type': 'oauth2'})
-            elif domain == 'edge' and 'c4' in components:
-                components['c4'].properties.update({'waf_enabled': True, 'rate_limiting': True})
-            elif domain == 'authorization':
-                for cid in ('c7', 'c8', 'c9', 'c10', 'c21'):
-                    if cid in components:
-                        components[cid].properties.update({'rbac_enabled': True, 'abac_enabled': True})
-            elif domain == 'data protection':
-                for cid in ('c14', 'c15', 'c16', 'c17', 'c20'):
-                    if cid in components:
-                        components[cid].properties.update({'encryption_at_rest': True, 'encryption_in_transit': True})
-                if 'c15' in components:
-                    components['c15'].properties.update({'public_access': False, 's3_block_public_access': True})
-            elif domain == 'kubernetes':
-                for cid, component in components.items():
-                    if 'eks' in str(component.properties.get('technology', '')).lower():
-                        component.properties.update({
-                            'containerized': True,
-                            'container_image_provenance': True,
-                            'container_image_scanning': True,
-                        })
-            elif domain == 'software supply chain' and 'c25' in components:
-                components['c25'].properties.update({
-                    'container_image_provenance': True,
-                    'container_image_scanning': True,
-                    'logging_enabled': True,
-                })
-            elif domain == 'detection and response':
-                for cid in ('c23', 'c24'):
-                    if cid in components:
-                        components[cid].properties.update({'logging_enabled': True, 'audit_logging': True})
-            elif domain == 'payments' and 'c10' in components:
-                components['c10'].properties.update({'webhook_signature_validation': True, 'idempotency_keys': True})
-            elif domain == 'ai':
-                for cid in ('c18', 'c19', 'c20', 'c21', 'c22'):
-                    if cid in components:
-                        components[cid].properties.update({'output_validation': True})
+        parse_warnings: List[str] = []
 
-        def resolve_endpoint(value: str, prefer: str = '') -> Optional[str]:
+        def resolve_endpoint(value: str, prefer: str = '', exclude: str = '') -> Optional[str]:
+            """The component a cell refers to, by id where given and by name otherwise."""
             lowered = re.sub(r'[^a-z0-9+/. -]+', ' ', (value or '').lower()).strip()
+            if not lowered:
+                return prefer or None
             explicit = re.search(r'\bc\d+\b', lowered)
-            if explicit and explicit.group(0) in components:
-                return explicit.group(0)
-            endpoint_rules = (
-                (('stripe',), 'ext_stripe'), (('sendgrid',), 'ext_sendgrid'),
-                (('fhir',), 'c8'),
-                (('insurer', 'lab', 'partner'), 'ext_healthcare_partner'),
-                (('support engineer',), 'c2'),
-                (('patient', 'clinician', 'user', 'customer'), 'c1'),
-                (('api gateway', 'public api edge', 'cloudfront', 'waf'), 'c4'),
-                (('private alb', 'ingress'), 'c5'), (('cognito', 'entra', 'jwks'), 'c6'),
-                (('core api', 'support portal', 'workloads'), 'c7'),
-                (('claims service', 'claim service'), 'c9'), (('payment service',), 'c10'),
-                (('notification service',), 'c11'), (('ingestion lambda', 'document ingestion'), 'c12'),
-                (('eventbridge', 'workflow bus', 'workers'), 'c13'), (('aurora', 'transactional database'), 'c14'),
-                (('clinical document store', 'final s3', 'quarantine', 's3'), 'c15'),
-                (('redis',), 'c16'), (('search index',), 'c17'),
-                (('ai assistant', 'orchestrator'), 'c18'), (('bedrock',), 'c19'),
-                (('vector index', 'vector knowledge'), 'c20'), (('mcp gateway',), 'c21'),
-                (('model evaluation',), 'c22'), (('security account', 'backup account', 'dr region'), 'c23'),
-                (('telemetry', 'siem', 'observability'), 'c24'),
-                (('github actions', 'ecr', 'argo cd', 'delivery platform'), 'c25'),
-                (('eks',), 'c5'), (('production',), 'c14'),
-            )
-            for tokens, component_id in endpoint_rules:
-                if any(token in lowered for token in tokens):
-                    if component_id.startswith('ext_'):
-                        if component_id not in components:
-                            label = component_id.replace('ext_', '').replace('_', ' ').title()
-                            components[component_id] = Component(
-                                id=component_id, name=label, type='External Service', trust_level='external',
-                                description='Authoritative external participant referenced by an explicit data flow.',
-                                properties={'external': True, 'authoritative_external_entity': True, 'trust_level': 'external'},
-                                confidence='High',
-                            )
-                        return component_id
-                    if component_id in components:
-                        return component_id
+            if explicit:
+                if explicit.group(0) in record_labels:
+                    return record_labels[explicit.group(0)]
+                # An id the inventory never declared is a defect in the document,
+                # and guessing a component here would hide it.
+                parse_warnings.append(
+                    f"'{value.strip()}' refers to {explicit.group(0).upper()}, "
+                    "which the component inventory does not declare"
+                )
+                return None
             ranked = sorted(
-                ((len(alias), cid) for alias, cid in aliases.items() if alias and alias in lowered),
-                reverse=True,
+                (lowered.index(alias), -len(alias), cid)
+                for alias, cid in aliases.items()
+                if alias and alias in lowered and cid != exclude
             )
-            return ranked[0][1] if ranked else (prefer or None)
+            if ranked:
+                return ranked[0][2]
+
+            meaningful = {
+                token for token in re.findall(r'[a-z][a-z0-9+-]{2,}', lowered)
+                if token not in _ALIAS_STOPWORDS
+            }
+            if meaningful:
+                scored = []
+                for component_id, context in searchable_component_text.items():
+                    if component_id == exclude:
+                        continue
+                    score = sum(
+                        len(token) for token in meaningful
+                        if re.search(r'(?<![a-z0-9])' + re.escape(token) + r'(?![a-z0-9])', context)
+                    )
+                    if score:
+                        scored.append((score, component_id))
+                scored.sort(reverse=True)
+                if scored and (len(scored) == 1 or scored[0][0] > scored[1][0]):
+                    return scored[0][1]
+            return prefer or None
+
+        def resolve_flow_endpoint(value: str) -> Optional[str]:
+            """As resolve_endpoint, but a named outside party becomes an external node.
+
+            A flow row is the author asserting that data leaves for somewhere. If
+            that somewhere is not in the inventory it is still a participant, and
+            dropping it would lose the boundary crossing that makes the flow
+            interesting.
+            """
+            resolved = resolve_endpoint(value)
+            if resolved:
+                return resolved
+            label = re.sub(r'\s+', ' ', re.sub(r'[^A-Za-z0-9 .+-]+', ' ', value or '')).strip()
+            label = re.sub(r'(?i)^(?:the|a|an)\s+', '', label)
+            if not label or re.fullmatch(r'(?i)tb\d+', label) or re.search(r'\bc\d+\b', label.lower()):
+                return None
+            slug = re.sub(r'_+', '_', re.sub(r'[^a-z0-9]+', '_', label.lower())).strip('_')
+            if not slug:
+                return None
+            external_id = f'ext_{slug}'
+            if external_id not in components:
+                components[external_id] = Component(
+                    id=external_id,
+                    name=label,
+                    type='External Service',
+                    trust_level='external',
+                    description='External participant named by an explicit data flow.',
+                    properties={
+                        'external': True,
+                        'authoritative_external_entity': True,
+                        'trust_level': 'external',
+                    },
+                    confidence='High',
+                    evidence=[{
+                        'source_type': 'architecture_input',
+                        'source_ref': label,
+                        'line': None,
+                        'statement': f'Named as a data flow endpoint: {label}.',
+                        'confidence': 'High',
+                    }],
+                )
+                register_aliases(external_id, label)
+            return external_id
 
         flows: List[DataFlow] = []
         for record in flow_table['records']:
@@ -760,29 +1076,42 @@ class ArchitectureParser:
             if len(parts) < 2:
                 continue
             source_id = resolve_endpoint(parts[0])
-            target_id = resolve_endpoint(parts[-1])
-            endpoint_overrides = {
-                'F4': ('c7', 'c14'),
-                'F7': ('c15', 'c12'),
-                'F14': ('c18', 'c20'),
-                'F16': ('c18', 'c21'),
-                'F17': ('c7', 'c24'),
-                'F20': ('c2', 'c7'),
-            }
-            if flow_id in endpoint_overrides:
-                source_id, target_id = endpoint_overrides[flow_id]
-            if not source_id or not target_id or source_id == target_id:
+            if not source_id:
+                source_id = next(
+                    (resolved for part in parts[1:-1] if (resolved := resolve_endpoint(part))),
+                    None,
+                )
+            source_id = source_id or resolve_flow_endpoint(parts[0])
+
+            target_id = resolve_endpoint(parts[-1], exclude=source_id)
+            if not target_id:
+                target_id = next(
+                    (
+                        resolved for part in reversed(parts[1:-1])
+                        if (resolved := resolve_endpoint(part, exclude=source_id))
+                    ),
+                    None,
+                )
+            target_id = target_id or resolve_flow_endpoint(parts[-1])
+            if not source_id or not target_id:
+                parse_warnings.append(
+                    f"{flow_id} '{route}' could not be resolved to components"
+                )
                 continue
             protocol = record.get('protocol', 'HTTPS').strip().lower()
             data = record.get('data', '').strip()
             crossing = record.get('boundary_crossing', '').strip()
             crosses_boundary = '->' in crossing or '→' in crossing or '/' in crossing
+            # A row can say the flow was inferred rather than observed. Without
+            # that, re-submitting an emitted model would silently upgrade every
+            # guessed edge into something the document asserts.
+            assumed = 'assum' in (record.get('evidence', '') or '').strip().lower()
             flows.append(DataFlow(
                 source_id=source_id,
                 target_id=target_id,
                 protocol=protocol,
                 data_type=self._flow_data_type(data),
-                assumed=False,
+                assumed=assumed,
                 properties={
                     'source_record_id': flow_id,
                     'evidence': f"{flow_id}: {route} over {protocol}; data: {data}",
@@ -790,6 +1119,7 @@ class ArchitectureParser:
                     'authoritative': True,
                     'route': route,
                     'intermediate_hops': parts[1:-1],
+                    'internal_workflow': source_id == target_id,
                     'boundary_crossing': crossing,
                     'crosses_trust_boundary': crosses_boundary,
                 },
@@ -797,43 +1127,84 @@ class ArchitectureParser:
             ))
 
         boundary_table = self._table_with_headers(tables, 'id', 'boundary', 'trust_level', 'contents')
-        boundary_members = {
-            'TB1': [], 'TB2': ['c1', 'c2', 'c3', 'c4'],
-            'TB3': ['c5', 'c7', 'c8', 'c9', 'c10', 'c11', 'c12', 'c13'],
-            'TB4': ['c14', 'c15', 'c16', 'c17'],
-            'TB5': ['c18', 'c19', 'c20', 'c21', 'c22'],
-            'TB6': ['ext_stripe', 'ext_sendgrid', 'ext_healthcare_partner'],
-            'TB7': ['c6', 'c23', 'c25'], 'TB8': [cid for cid in components if cid.startswith('c')],
-            'TB9': ['c23', 'c24'],
-        }
         trust_boundaries: List[TrustBoundary] = []
+        declared_trust: Dict[str, Tuple[int, str]] = {}
         for record in (boundary_table or {}).get('records', []):
             boundary_id = str(record.get('id', '')).strip().upper()
             if not re.fullmatch(r'TB\d+', boundary_id):
                 continue
+            contents = record.get('contents', '').strip()
+            declared_level = record.get('trust_level', '').strip()
+
+            members = labelled(self._referenced_component_ids(contents))
+            if not members:
+                # A boundary can list its contents by name ("Stripe, SendGrid and
+                # the insurer partner system") rather than by id.
+                for fragment in re.split(r',|;|\band\b|/', contents):
+                    resolved = resolve_by_name(fragment)
+                    if resolved and resolved not in members:
+                        members.append(resolved)
+
             trust_boundaries.append(TrustBoundary(
                 name=record.get('boundary', '').strip() or boundary_id,
-                boundary_type=record.get('trust_level', '').strip() or 'logical',
-                components=[cid for cid in boundary_members.get(boundary_id, []) if cid in components],
-                description=record.get('contents', '').strip(),
+                boundary_type=declared_level or 'logical',
+                components=members,
+                description=contents,
                 confidence='High',
                 evidence=[{'source_type': 'architecture_input', 'source_ref': boundary_id,
-                           'line': None, 'statement': record.get('contents', ''), 'confidence': 'High'}],
+                           'line': None, 'statement': contents, 'confidence': 'High'}],
             ))
+
+            # The narrowest boundary naming a component describes it best: an
+            # account-wide boundary listing everything says less about a database
+            # than the data tier that contains only stores.
+            normalized_level = self._normalize_trust_level(declared_level)
+            if not normalized_level or not members:
+                continue
+            for component_id in members:
+                incumbent = declared_trust.get(component_id)
+                if incumbent is None or len(members) < incumbent[0]:
+                    declared_trust[component_id] = (len(members), normalized_level)
+
+        for component_id, component in components.items():
+            if component.properties.get('external'):
+                continue
+            # A level on the component's own row is the most specific statement
+            # available, so it outranks any boundary that also contains it.
+            claim = declared_trust.get(component_id)
+            trust_level = stated_trust_levels.get(component_id) or self._authoritative_trust_level(
+                component.type, claim[1] if claim else None
+            )
+            component.trust_level = trust_level
+            component.properties['trust_level'] = trust_level
+
+        for record in (control_table or {}).get('records', []):
+            domain = technology_catalog.CONTROL_DOMAINS.get(record.get('domain', '').strip().lower())
+            if not domain:
+                continue
+            for component in components.values():
+                if component.properties.get('external'):
+                    continue
+                context = f"{component.name} {component.properties.get('technology', '')}".lower()
+                matches_type = component.type in domain['types']
+                matches_term = any(
+                    technology_catalog.mentions(context, term) for term in domain['terms']
+                )
+                if not matches_type and not matches_term:
+                    continue
+                if domain['exposed'] and component.trust_level != 'public':
+                    continue
+                component.properties.update(domain['asserts'])
+                component.properties.update(domain['type_asserts'].get(component.type, {}))
 
         asset_table = self._table_with_headers(tables, 'id', 'asset', 'classification', 'required_property')
         assets: List[Asset] = []
-        asset_locations = {
-            'AS1': 'c15', 'AS2': 'c6', 'AS3': 'c16', 'AS4': 'c9',
-            'AS5': 'c10', 'AS6': 'c7', 'AS7': 'c23', 'AS8': 'c24',
-            'AS9': 'c25', 'AS10': 'c18', 'AS11': 'c21', 'AS12': 'c13',
-        }
         for record in (asset_table or {}).get('records', []):
             asset_id = str(record.get('id', '')).strip().upper()
             if not re.fullmatch(r'AS\d+', asset_id):
                 continue
             name = record.get('asset', '').strip()
-            location_id = asset_locations.get(asset_id) or resolve_endpoint(name)
+            location_id = resolve_endpoint(f"{name} {record.get('required_property', '')}")
             assets.append(Asset(
                 name=name,
                 sensitivity=record.get('classification', '').strip() or 'internal',
@@ -858,35 +1229,20 @@ class ArchitectureParser:
             issue = self._classify_known_issue(f"{area}: {condition}")
             issue['source_record_id'] = issue_id
             issue['description'] = condition
-            # Resolve classifier hints and condition keywords to canonical IDs.
-            resolved_hints = []
-            for hint in issue.get('component_hints', []):
-                match = resolve_endpoint(hint)
-                if match and match not in resolved_hints:
-                    resolved_hints.append(match)
-            for token, component_id in (
-                ('session', 'c16'), ('redis', 'c16'), ('fhir', 'c8'), ('claim', 'c9'),
-                ('payment', 'c10'), ('refund', 'c10'), ('sendgrid', 'c11'), ('upload', 'c12'),
-                ('lambda', 'c12'), ('s3', 'c15'), ('kms', 'c23'), ('vector', 'c20'),
-                ('prompt', 'c18'), ('agent', 'c18'), ('mcp', 'c21'), ('github', 'c25'),
-                ('audit', 'c24'), ('log', 'c24'), ('graphql', 'c7'), ('sql', 'c7'),
-                ('xss', 'c2'), ('secret', 'c23'), ('backup', 'c23'),
-            ):
-                if token in f"{area} {condition}".lower() and component_id in components and component_id not in resolved_hints:
-                    resolved_hints.append(component_id)
-            issue['component_hints'] = resolved_hints
-            explicit_issue_components = {
-                'K2': ['c16', 'c6'], 'K3': ['c8'], 'K6': ['c7'],
-                'K9': ['c15'], 'K13': ['c18'], 'K15': ['c18'],
-                'K16': ['c21'], 'K17': ['c18', 'c9', 'c10'],
-                'K18': ['c24', 'c18'], 'K23': ['c24', 'c8', 'c10'],
-                'K28': ['c23', 'c20', 'c16'], 'K29': ['c8', 'c9', 'c13'],
-                'K30': ['c14', 'c17', 'c20', 'c13', 'c22'],
-            }
-            if issue_id in explicit_issue_components:
-                preferred = [cid for cid in explicit_issue_components[issue_id] if cid in components]
-                issue['component_hints'] = preferred + [cid for cid in resolved_hints if cid not in preferred]
+            # A weakness that cites a component id is attributed to it. Anything
+            # else is left for the shared resolver below, which already matches on
+            # component names and, failing that, on the capability the weakness
+            # describes; guessing here from table text was how one document's
+            # weakness numbering became part of the parser.
+            # The area column is a heading ("Session management"), not a
+            # reference, so only the condition is read for component names.
+            issue['component_hints'] = (
+                labelled(self._referenced_component_ids(condition))
+                or self._components_named_in(condition, aliases, components)
+            )
             known_issues.append(issue)
+
+        known_issues = self._link_known_issues_to_components(known_issues, components)
 
         actor_table = self._table_with_headers(tables, 'id', 'actor', 'identity', 'intended_privilege')
         actors = []
@@ -920,6 +1276,7 @@ class ArchitectureParser:
                 'source_text': text,
                 'architecture_text': text,
                 'authoritative_model': True,
+                'authoritative_parse_warnings': parse_warnings,
                 'authoritative_record_counts': {
                     'components': len(component_table['records']),
                     'flows': len(flow_table['records']),
@@ -960,7 +1317,41 @@ class ArchitectureParser:
                 if item.strip(' \t.;')
             )
 
-        return [self._classify_known_issue(entry) for entry in entries]
+        classified = [self._classify_known_issue(entry) for entry in entries]
+
+        # Unclassified issues each need their own identifier so that reviewers can
+        # track them individually instead of seeing one repeated id.
+        unclassified = 0
+        for issue in classified:
+            self._backfill_issue_mapping(issue)
+            if str(issue.get('suggested_threat_id') or '').startswith('UNCLASSIFIED-'):
+                unclassified += 1
+                issue['suggested_threat_id'] = f'UNCLASSIFIED-KNOWN-ISSUE-{unclassified:03d}'
+        return classified
+
+    @staticmethod
+    def _backfill_issue_mapping(issue: Dict[str, Any]) -> None:
+        """Give compatibility-catalog entries the mappings the taxonomy knows.
+
+        The legacy catalog returns a rule id, a control and a severity but no
+        STRIDE category, OWASP entry or CWE, so those issues would otherwise be
+        reported as Tampering with no standards mapping at all.
+        """
+        if issue.get('category') and issue.get('owasp_top_10') and issue.get('cwe'):
+            return
+        generic = classify_generic_weakness(str(issue.get('description') or ''))
+        if not generic:
+            return
+        if not issue.get('category'):
+            issue['category'] = generic['category']
+        if not issue.get('owasp_top_10'):
+            issue['owasp_top_10'] = list(generic['owasp'])
+        if not issue.get('cwe'):
+            issue['cwe'] = list(generic['cwe'])
+        if not issue.get('affected_stride_categories'):
+            issue['affected_stride_categories'] = list(generic['stride'])
+        if not issue.get('classification_status'):
+            issue['classification_status'] = 'classified'
 
     def _link_known_issues_to_components(
         self, issues: List[Dict[str, Any]], components: Dict[str, Component]
@@ -1015,18 +1406,33 @@ class ArchitectureParser:
                 issue["component_resolution"] = "literal_issue_evidence"
                 continue
 
-            capability_types = set()
+            # Ordered so that the closest-fitting component type is offered first.
+            # A set here previously let dictionary order decide the scope, which
+            # attributed issues to whichever component happened to come first.
+            capability_types: List[str] = list(
+                GENERIC_SCOPE_TYPES.get(str(issue.get('suggested_threat_id') or '').upper(), ())
+            )
+
+            def add_types(*types: str) -> None:
+                capability_types.extend(item for item in types if item not in capability_types)
+
+            if any(token in text for token in ("secret", "credential", "api key", "private key", "signing key")):
+                add_types("Secrets Manager", "Service", "API")
             if any(token in text for token in ("session", "token", "oauth", "jwt", "password")):
-                capability_types.update({"Identity Provider", "Database"})
+                add_types("Identity Provider", "API", "Service")
+            if any(token in text for token in ("at rest", "backup", "snapshot")):
+                add_types("Database", "Object Storage", "Data Warehouse")
             if any(token in text for token in ("graphql", "sql", "query", "xss", "ssrf", "input", "webhook")):
-                capability_types.update({"API", "API Gateway", "Service"})
+                add_types("API", "API Gateway", "Service")
             if any(token in text for token in ("prompt", "model", "agent", "retrieval", "vector", "tool call")):
-                capability_types.update({"ML Service", "API"})
+                add_types("ML Service", "API")
             if any(token in text for token in ("container", "pod", "service account", "kubernetes", "k8s")):
-                capability_types.add("Container Platform")
+                add_types("Container Platform")
             candidates = [
-                component_id for component_id, component in components.items()
-                if component.type in capability_types
+                component_id
+                for component_type in capability_types
+                for component_id, component in components.items()
+                if component.type == component_type
             ]
             if candidates:
                 issue["component_hints"] = candidates[:3]
@@ -1891,6 +2297,14 @@ class ArchitectureParser:
                 'suggested_threat_id': 'EOP-003'
             }
         
+        generic = classify_generic_weakness(issue_text)
+        if generic:
+            return self._known_issue_metadata(
+                issue_text, generic['id'], generic['category'], generic['severity'],
+                generic['control'], generic['mitigation'], generic['owasp'], generic['cwe'],
+                affected_stride_categories=generic['stride'],
+            )
+
         # Never manufacture a STRIDE category for an explicit issue that the
         # taxonomy does not understand. It remains evidence-backed, but blocks
         # publication until a specialist rule or analyst maps it.
@@ -1900,12 +2314,126 @@ class ArchitectureParser:
             [], [], affected_stride_categories=[],
         )
     
+    def _assign_stated_weaknesses(self, text: str, components: Dict[str, Component]) -> None:
+        """Attribute weaknesses stated in prose to the component they describe.
+
+        A weakness written in ordinary prose carries the same authority as one
+        listed under a "Known issues" heading, so each clause is classified and
+        recorded on the component it is about. Where a clause names several
+        components the earliest and most specifically named one is chosen, which
+        keeps "the payments service calls Stripe without verification" on the
+        payments service rather than on Stripe.
+
+        Clauses rather than whole sentences, because a list of weaknesses is
+        usually a list of subjects too: "there is no MFA on the portal, the audit
+        log is writable, and the partner reuses a credential" names three
+        components and blaming the portal for all three would be wrong.
+        """
+        index = alias_index(components)
+        for component in components.values():
+            component.properties.setdefault('stated_weaknesses', [])
+
+        for statement in prose.clauses(text or ''):
+            rules = classify_generic_weaknesses(statement)
+            if not rules:
+                continue
+            # The same name resolution used for data flows, so a component
+            # referred to by part of its name is still the one described.
+            mentions = find_mentions(statement, index)
+            if not mentions:
+                continue
+            component = components[mentions[0][2]]
+            weaknesses = component.properties['stated_weaknesses']
+            for rule in rules:
+                if any(item['rule_id'] == rule['id'] for item in weaknesses):
+                    continue
+                weaknesses.append({
+                    'rule_id': rule['id'],
+                    'control': rule['control'],
+                    'statement': statement,
+                })
+
+    def _names_something_unmodelled(self, clause: str, components: Dict[str, Component]) -> bool:
+        """True when the clause names a component-like thing the model lacks."""
+        return any(
+            representative_of(candidate, components.values()) is None
+            for candidate in find_named_roles(clause)
+        )
+
+    def _scope_controls_to_named_subjects(self, text: str, components: Dict[str, Component]) -> None:
+        """Keep a control claim on the component whose clause made it.
+
+        "The clinician portal has no MFA" is knowledge about the portal. Read
+        from a wider window it became knowledge about everything in the model,
+        so a database inherited a sign-in weakness it was never party to and a
+        service was credited with a firewall standing in front of someone else.
+
+        Each claim is therefore attributed to the component its clause names,
+        and a control that only ever appears in clauses about other components
+        is removed from the rest. A control *claimed* alongside another component
+        is left with both, because "the portal calls the API over TLS" is a fact
+        about both ends; a control *denied* belongs to the one thing said to lack
+        it. A claim that names nobody stays general.
+        """
+        index = alias_index(components)
+        subjects: Dict[str, Dict[str, bool]] = defaultdict(dict)
+        participants: Dict[str, set] = defaultdict(set)
+        general: set = set()
+
+        for statement in control_statements.statements(text):
+            mentions = find_mentions(statement.clause, index)
+            if not mentions:
+                # A claim about something the model does not contain belongs to
+                # nothing yet. Spreading it over every component was how "the
+                # receipts bucket is not encrypted" became a verdict on a
+                # database, so it is held back and reported as a gap instead.
+                if not self._names_something_unmodelled(statement.clause, components):
+                    general.add(statement.control)
+                continue
+            if statement.affirmed:
+                participants[statement.control].update(mention[2] for mention in mentions)
+            subject = mentions[0][2]
+            claims = subjects[statement.control]
+            # A denial outranks a claim about the same component: the clause
+            # that says a control is absent is the one carrying the risk.
+            if statement.affirmed and claims.get(subject) is False:
+                continue
+            claims[subject] = statement.affirmed
+            if statement.affirmed:
+                for implied in control_statements.IMPLIED_BY.get(statement.control, ()):
+                    subjects[implied].setdefault(subject, True)
+                    participants[implied].add(subject)
+
+        for control in set(subjects) | set(participants):
+            claims = subjects.get(control, {})
+            for component_id, component in components.items():
+                props = component.properties
+                negations = set(props.get('explicit_negations') or [])
+                if component_id in claims:
+                    props[control] = claims[component_id]
+                    negations.discard(control)
+                    if claims[component_id] is False:
+                        negations.add(control)
+                elif control in general or component_id in participants.get(control, ()):
+                    continue
+                else:
+                    props.pop(control, None)
+                    negations.discard(control)
+                props['explicit_negations'] = sorted(negations)
+
     def _detect_negations(self, text: str) -> Dict[str, bool]:
         """
         Detect explicit negations indicating missing security controls.
         Returns dict of control_name: False for missing controls.
         """
-        negations = {}
+        # Every control in the shared vocabulary can be denied, so a weakness
+        # does not need its own hand-written pattern here to be recorded. The
+        # patterns below cover the judgements the vocabulary does not model as a
+        # property, such as an administrative path that shares an identity.
+        negations = {
+            control: False
+            for control in control_statements.read(text).denied
+        }
         text_lower = text.lower()
         
         # JWT validation patterns
@@ -2149,7 +2677,8 @@ class ArchitectureParser:
         self._add_explicit_named_components(model_text, components)
         self._add_explicit_mcp_components(model_text, components)
         self._add_explicit_logical_components(model_text, components)
-        self._consolidate_component_aliases(model_text, components)
+        self._add_inferred_named_components(model_text, components)
+        resolved_names = self._consolidate_component_aliases(model_text, components)
 
         # Prefer a concrete frontend technology over generic aliases extracted
         # from the same declaration (for example React + frontend).
@@ -2176,6 +2705,11 @@ class ArchitectureParser:
                 nlp = get_nlp_processor()
                 nlp_flows = nlp.extract_data_flows(model_text, components)
                 existing_pairs = {(f.source_id, f.target_id): f for f in flows}
+                described_endpoints = {
+                    endpoint for flow in flows
+                    if flow.properties.get('origin') == 'stated'
+                    for endpoint in (flow.source_id, flow.target_id)
+                }
                 for nf in nlp_flows:
                     pair = (nf['source'], nf['target'])
                     if pair in existing_pairs and nf.get('evidence'):
@@ -2183,13 +2717,27 @@ class ArchitectureParser:
                         existing.properties['evidence'] = nf['evidence']
                         existing.properties['extraction_method'] = 'text_pattern'
                         existing.properties.pop('trust_boundary', None)
-                    elif pair not in existing_pairs and nf['source'] in components and nf['target'] in components:
+                    elif (
+                        pair not in existing_pairs
+                        # The same relationship in the opposite direction is a
+                        # contradiction, not an addition. The extracted flow
+                        # already carries the sentence that stated its direction.
+                        and tuple(reversed(pair)) not in existing_pairs
+                        # This pass matches single words, so it cannot tell which
+                        # of two components named in a sentence is the subject.
+                        # It may connect a component nothing was said about, but
+                        # it may not add a second opinion about one already
+                        # modeled from a resolved sentence.
+                        and not (described_endpoints & set(pair))
+                        and nf['source'] in components and nf['target'] in components
+                    ):
                         flows.append(DataFlow(
                             source_id=nf['source'],
                             target_id=nf['target'],
                             protocol=nf.get('protocol', 'HTTPS'),
                             properties={
                                 'evidence': nf.get('evidence', ''),
+                                'origin': 'stated' if nf.get('evidence') else 'assumed',
                                 'extraction_method': 'text_pattern' if nf.get('evidence') else nf.get('method', 'nlp')
                             }
                         ))
@@ -2214,6 +2762,7 @@ class ArchitectureParser:
             for control, value in local_negations.items():
                 comp.properties[control] = value
             comp.properties['explicit_negations'] = sorted(local_negations)
+        self._assign_stated_weaknesses(model_text, components)
         
         # 9. NLP-ENHANCED: Apply NLP-extracted security properties
         if nlp_security_props:
@@ -2235,10 +2784,22 @@ class ArchitectureParser:
                     negations.add('waf_enabled')
                     comp.properties['explicit_negations'] = sorted(negations)
 
+        self._scope_controls_to_named_subjects(model_text, components)
+
         # 9.5. Normalize trust levels and enrich flow metadata for architecture modeling
         for comp in components.values():
             comp.trust_level = self._infer_trust_level(comp.type, comp.properties or {})
             comp.properties['trust_level'] = comp.trust_level
+
+        # A classification stated in one sentence describes the data, not the one
+        # component the sentence happened to be about, so it is carried along the
+        # paths that data travels. This runs before flow data types are derived so
+        # that a flow is typed by what actually moves on it.
+        for component_id, (sensitivity, reason) in graph.propagate_sensitivity(components, flows).items():
+            properties = components[component_id].properties
+            properties['data_sensitivity'] = sensitivity
+            properties['data_sensitivity_basis'] = 'propagated'
+            properties['data_sensitivity_reason'] = reason
 
         component_map = components
         for flow in flows:
@@ -2247,16 +2808,28 @@ class ArchitectureParser:
             target = component_map.get(flow.target_id)
             if source and target:
                 flow.data_type = self._infer_data_type(source, target)
+                # Whether the two ends sit at different trust levels is a fact
+                # about the pair, so it is recorded whatever the boundary is
+                # named. Deriving it only when the name is missing left every
+                # flow looking like it stayed inside one trust level, which both
+                # hid boundary crossings from the report and kept them out of
+                # the risk calculation.
+                if source.trust_level != target.trust_level:
+                    flow.properties['crosses_trust_boundary'] = True
                 if not flow.properties.get('trust_boundary'):
-                    if source.trust_level != target.trust_level:
-                        flow.properties['trust_boundary'] = f"{source.trust_level}_to_{target.trust_level}"
-                        flow.properties['crosses_trust_boundary'] = True
-                    else:
-                        flow.properties['trust_boundary'] = source.trust_level
+                    flow.properties['trust_boundary'] = (
+                        f"{source.trust_level}_to_{target.trust_level}"
+                        if source.trust_level != target.trust_level else source.trust_level
+                    )
                 flow.properties['source_trust_level'] = source.trust_level
                 flow.properties['target_trust_level'] = target.trust_level
-            flow.assumed = (
-                flow.properties.get('trust_boundary') == 'inferred'
+            # A flow the templates supplied is already marked assumed by
+            # _infer_flows. Recomputing the flag from the boundary name alone
+            # discarded that, presenting a guessed path as a described one.
+            flow.assumed = bool(
+                flow.assumed
+                or flow.properties.get('origin') == 'assumed'
+                or flow.properties.get('trust_boundary') == 'inferred'
                 or flow.properties.get('extraction_method') in {'nlp', 'heuristic'}
             )
             flow.properties['assumed'] = flow.assumed
@@ -2281,6 +2854,7 @@ class ArchitectureParser:
                 'nlp_enhanced': NLP_AVAILABLE and nlp_entities is not None,
                 'global_security_signals': nlp_security_props,
                 'assumptions': assumptions,
+                'resolved_names': resolved_names,
                 'trust_boundaries': [boundary.model_dump() for boundary in trust_boundaries],
                 'assets': [asset.model_dump() for asset in assets],
             }
@@ -2494,13 +3068,86 @@ class ArchitectureParser:
         return text[start:end]
     
     def _infer_flows(self, text: str, components: Dict[str, Component]) -> List[DataFlow]:
+        """Model the stated data flows, then connect whatever is still isolated.
+
+        A flow the description states is evidence and is modeled as written. The
+        type-based templates below are assumptions, so they are applied only to
+        components the description left unconnected: filling a real gap keeps the
+        model reviewable, while adding a guessed path beside a stated one would
+        put a boundary crossing in the report that the design never had.
         """
-        Infer data flows between components based on descriptions and typical patterns.
-        Uses flexible type-based matching instead of hardcoded IDs.
-        """
+        flows: List[DataFlow] = []
+        stated_pairs = set()
+        assumed_ends: set = set()
+        for stated in extract_stated_flows(text, components):
+            stated_pairs.add((stated['source_id'], stated['target_id']))
+            flows.append(DataFlow(
+                source_id=stated['source_id'],
+                target_id=stated['target_id'],
+                protocol=stated['protocol'],
+                assumed=False,
+                confidence='High',
+                evidence=[{
+                    'source_type': 'architecture_input',
+                    'source_ref': f"{stated['source_id']}->{stated['target_id']}",
+                    'line': None,
+                    'statement': stated['evidence'],
+                    'confidence': 'High',
+                    'relationship': stated['verb'],
+                }],
+                properties={
+                    'trust_boundary': self._flow_trust_boundary(
+                        components[stated['source_id']], components[stated['target_id']]
+                    ),
+                    'origin': 'stated',
+                    'evidence': stated['evidence'],
+                    'stated_relationship': stated['verb'],
+                    'extraction_method': 'stated_relationship',
+                },
+            ))
+        connected = {component_id for pair in stated_pairs for component_id in pair}
+        for flow in self._template_flows(text, components):
+            pair = (flow.source_id, flow.target_id)
+            if pair in stated_pairs or tuple(reversed(pair)) in stated_pairs:
+                continue
+            # An assumption is only worth making about a component whose
+            # connections nobody described, and one assumed flow is enough to
+            # put it in scope. Adding every type-compatible peer would invent a
+            # fan-out that reads as a described design.
+            isolated = next(
+                (end for end in pair if end not in connected and end not in assumed_ends),
+                None,
+            )
+            if isolated is None:
+                continue
+            assumed_ends.add(isolated)
+            other = pair[1] if isolated == pair[0] else pair[0]
+            flow.assumed = True
+            flow.confidence = 'Low'
+            flow.properties['origin'] = 'assumed'
+            flow.properties['assumption'] = (
+                f'No data flow was described for {components[isolated].name}. It is placed '
+                f'with {components[other].name} because that is the usual arrangement for a '
+                f'{components[isolated].type}; confirm or correct this.'
+            )
+            flows.append(flow)
+            stated_pairs.add(pair)
+        return flows
+
+    @staticmethod
+    def _flow_trust_boundary(source: Component, target: Component) -> str:
+        """Name the boundary a flow crosses from the two ends it connects."""
+        for component in (source, target):
+            if component.properties.get('external') or component.properties.get('third_party_integration'):
+                return 'external'
+        if source.type in {'WebClient', 'Mobile App'} or source.properties.get('public_access'):
+            return 'internet'
+        return 'internal'
+
+    def _template_flows(self, text: str, components: Dict[str, Component]) -> List[DataFlow]:
+        """Typical flows for each component type, used where nothing was stated."""
         flows = []
-        text_lower = text.lower()
-        
+
         # Get components by type
         frontend_comps = [cid for cid, c in components.items() if c.type in ['WebClient', 'Mobile App']]
         api_comps = [cid for cid, c in components.items() if c.type in ['API', 'API Gateway', 'Load Balancer']]
@@ -2513,6 +3160,11 @@ class ArchitectureParser:
             or any(token in cid.lower() for token in ('fhir', 'hl7', 'partner', 'integration'))
         ]
         business_service_comps = [cid for cid in service_comps if cid not in integration_comps]
+        # Types that run application code without saying so in their name. An EC2
+        # instance or an EKS cluster called "the backend" plays the part this
+        # table gave only to API and Service, so an architecture of a web app,
+        # EC2, RDS and a bucket matched no row and produced no flows at all.
+        compute_comps = [cid for cid, c in components.items() if c.type in ['Compute', 'Container Platform']]
         db_comps = [cid for cid, c in components.items() if c.type == 'Database']
         storage_comps = [cid for cid, c in components.items() if c.type == 'Object Storage']
         queue_comps = [cid for cid, c in components.items() if c.type == 'Queue']
@@ -2520,9 +3172,10 @@ class ArchitectureParser:
         ml_comps = [cid for cid, c in components.items() if c.type == 'ML Service']
         external_comps = [cid for cid, c in components.items() if c.properties.get('external', False)]
         
-        # 1. Frontend → API/Gateway (typical web/mobile app pattern)
+        # 1. Frontend → API/Gateway (typical web/mobile app pattern), or straight
+        # to the compute tier where nothing sits in front of it.
         for frontend_id in frontend_comps:
-            for api_id in api_comps:
+            for api_id in (api_comps or compute_comps):
                 flows.append(DataFlow(
                     source_id=frontend_id,
                     target_id=api_id,
@@ -2530,10 +3183,11 @@ class ArchitectureParser:
                     properties={'trust_boundary': 'internet', 'crosses_trust_boundary': True}
                 ))
         
-        # 2. API/Gateway → Services (if services exist)
-        if service_comps:
+        # 2. API/Gateway → whatever runs behind it
+        backend_comps = service_comps or compute_comps
+        if backend_comps:
             for api_id in api_comps:
-                for service_id in service_comps:
+                for service_id in backend_comps:
                     flows.append(DataFlow(
                         source_id=api_id,
                         target_id=service_id,
@@ -2542,7 +3196,10 @@ class ArchitectureParser:
                     ))
         
         # 3. API → Database (direct connection if no services layer)
-        data_consumers = application_api_comps or business_service_comps
+        # Whichever tier is present reaches the stores; the compute tier ranks
+        # above a gateway because a load balancer in front of EC2 is not the thing
+        # that queries the database.
+        data_consumers = application_api_comps or business_service_comps or compute_comps
         if not data_consumers and gateway_comps:
             data_consumers = gateway_comps
         if not data_consumers:
@@ -2570,7 +3227,7 @@ class ArchitectureParser:
         
         # 5. API/Services → Identity Provider (for authentication)
         if idp_comps:
-            auth_consumers = application_api_comps or business_service_comps or api_comps
+            auth_consumers = application_api_comps or business_service_comps or compute_comps or api_comps
             for consumer_id in auth_consumers:
                 for idp_id in idp_comps:
                     flows.append(DataFlow(
@@ -2648,40 +3305,9 @@ class ArchitectureParser:
                         properties={'trust_boundary': 'external', 'crosses_trust_boundary': True}
                     ))
         
-        # 9. Infer from text patterns (e.g., "A connected to B")
-        connection_patterns = [
-            (r'(\w+)\s+connected to\s+(\w+)', 'TCP'),
-            (r'(\w+)\s+communicates with\s+(\w+)', 'HTTPS'),
-            (r'(\w+)\s+sends data to\s+(\w+)', 'HTTPS'),
-            (r'(\w+)\s+queries\s+(\w+)', 'TCP'),
-            (r'(\w+)\s+uses\s+(\w+)', 'HTTPS'),
-        ]
-        
-        import re
-        for pattern, protocol in connection_patterns:
-            matches = re.findall(pattern, text_lower)
-            for source_name, target_name in matches:
-                # Try to find matching components
-                source_id = None
-                target_id = None
-                
-                for cid, comp in components.items():
-                    if source_name in comp.name.lower() or source_name in cid.lower():
-                        source_id = cid
-                    if target_name in comp.name.lower() or target_name in cid.lower():
-                        target_id = cid
-                
-                if source_id and target_id and source_id != target_id:
-                    # Avoid duplicates
-                    existing = any(f.source_id == source_id and f.target_id == target_id for f in flows)
-                    if not existing:
-                        flows.append(DataFlow(
-                            source_id=source_id,
-                            target_id=target_id,
-                            protocol=protocol,
-                            properties={'trust_boundary': 'inferred'}
-                        ))
-        
+        # Flows written out in the description are extracted from the sentence
+        # itself by extract_stated_flows, which resolves full component names
+        # rather than the single word these patterns could capture.
         return flows
 
 
@@ -2779,48 +3405,17 @@ class ArchitectureParser:
             props['auth_type'] = 'none'
         elif 'api key' in text_lower:
             props['auth_type'] = 'api_key'
-        
-        # Encryption detection
-        if 'encrypted' in text_lower or 'encryption at rest' in text_lower or 'tde' in text_lower:
-            props['encryption_at_rest'] = True
-        if 'https' in text_lower or 'tls' in text_lower or 'ssl' in text_lower:
-            props['encryption_in_transit'] = True
-        if 'mtls' in text_lower or 'mutual tls' in text_lower:
-            props['mtls_enabled'] = True
-        if 'kms' in text_lower or 'key management' in text_lower:
-            props['kms_enabled'] = True
-        
-        # Logging detection
-        if 'logging' in text_lower or 'logs' in text_lower or 'audit' in text_lower:
-            props['logging_enabled'] = True
-        if 'cloudwatch' in text_lower or 'datadog' in text_lower or 'splunk' in text_lower or 'elk' in text_lower:
-            props['centralized_logging'] = True
-            props['logging_enabled'] = True
-        if 'cloudtrail' in text_lower:
-            props['audit_logging'] = True
-            props['logging_enabled'] = True
-        
-        # Security controls
-        if any(phrase in text_lower for phrase in ['no waf', 'without waf', 'missing waf', 'no web application firewall', 'without web application firewall']):
-            props['waf_enabled'] = False
-        elif 'waf' in text_lower or 'web application firewall' in text_lower:
-            props['waf_enabled'] = True
-        if 'rate limit' in text_lower or 'throttling' in text_lower:
-            props['rate_limiting'] = True
-        if 'input validation' in text_lower or 'sanitization' in text_lower:
-            props['input_validation'] = True
-        if 'rbac' in text_lower or 'role-based' in text_lower:
-            props['rbac_enabled'] = True
-        if 'mfa' in text_lower or 'multi-factor' in text_lower or '2fa' in text_lower:
-            props['mfa_enabled'] = True
-        
-        # Data sensitivity
-        if 'pii' in text_lower or 'personal' in text_lower or 'phi' in text_lower:
-            props['data_sensitivity'] = 'pii'
-        if 'payment' in text_lower or 'credit card' in text_lower or 'financial' in text_lower:
-            props['data_sensitivity'] = 'financial'
-        if 'credential' in text_lower or 'password' in text_lower:
-            props['data_sensitivity'] = 'credentials'
+
+
+        # Data sensitivity. Where a description names more than one kind of data
+        # the most sensitive one decides, rather than whichever check ran last.
+        stated = [
+            classification for classification, terms in self.DATA_SENSITIVITY_TERMS
+            if any(term in text_lower for term in terms)
+        ]
+        if stated:
+            props['data_sensitivity'] = graph.most_sensitive(*stated)
+            props['data_sensitivity_basis'] = 'stated'
         
         # Compliance frameworks
         if 'hipaa' in text_lower or 'phi' in text_lower:
@@ -2839,10 +3434,6 @@ class ArchitectureParser:
             props['deployment'] = 'k8s'
         if 'docker' in text_lower or 'container' in text_lower:
             props['containerized'] = True
-        if any(phrase in text_lower for phrase in ('image scanning', 'container scanning', 'ecr scanning', 'trivy', 'clair')):
-            props['container_image_scanning'] = True
-        if any(phrase in text_lower for phrase in ('no image scanning', 'without image scanning', 'image scanning disabled')):
-            props['container_image_scanning'] = False
         if ('aws' in text_lower or 'azure' in text_lower or 'gcp' in text_lower or 'cloud' in text_lower) and 'cloud_provider' not in props:
             props['deployment_model'] = 'cloud'
         
@@ -2943,18 +3534,19 @@ class ArchitectureParser:
         if 'fhir' in text_lower or 'hl7' in text_lower:
             props['healthcare_integration'] = True
         
-        # Backup and DR
-        if 'backup' in text_lower or 'glacier' in text_lower:
-            props['backup_enabled'] = True
         if 'multi-region' in text_lower or 'failover' in text_lower or 'replication' in text_lower:
             props['multi_region'] = True
             props['disaster_recovery'] = True
         
-        # Monitoring
-        if 'guardduty' in text_lower or 'threat detection' in text_lower:
-            props['threat_detection'] = True
-        if 'monitoring' in text_lower:
-            props['monitoring_enabled'] = True
+        # Security controls are read last and with the polarity the sentence
+        # used, so no heuristic above can turn a stated absence into an
+        # assurance. One vocabulary credits a control and records its denial,
+        # which is what keeps "the portal has no MFA" out of the strengths.
+        reading = control_statements.read(text_lower)
+        for control in control_statements.CONTROL_TERMS:
+            stated = reading.value(control)
+            if stated is not None:
+                props[control] = stated
         
         return props
 

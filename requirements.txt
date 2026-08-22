@@ -1,11 +1,15 @@
-# AI Threat Modeler Workspace Requirements
+# Aegis Threat Workspace Requirements
 
-This repository has a React frontend and a FastAPI backend.
+This repository has a React frontend and a FastAPI backend. This file is the
+human-readable summary; the authoritative lists are
+[package.json](package.json) for the frontend and
+[backend/requirements.txt](backend/requirements.txt) for the backend.
 
-## Frontend Runtime
+## Runtimes
 
 - Node.js >= 18
 - npm >= 9
+- Python >= 3.10 (tested on 3.12)
 
 ## Frontend Packages
 
@@ -36,12 +40,18 @@ This repository has a React frontend and a FastAPI backend.
 - eslint-plugin-react-hooks (^7.0.1)
 - eslint-plugin-react-refresh (^0.4.24)
 - globals (^16.5.0)
+- jsdom (^29.1.1)
 
 ## Backend Packages
 
-Install Python dependencies from [backend/requirements.txt](C:/Users/Ankit/Documents/codex/ai-threat-modeler/backend/requirements.txt).
+Install from [backend/requirements.txt](backend/requirements.txt). The local NLP
+stack is `blingfire` for segmentation, `sentence-transformers` for semantic
+retrieval, `faiss-cpu` for vector search, and a scikit-learn STRIDE classifier.
+No spaCy model download is required.
 
-The backend now uses a hybrid NLP stack built around `blingfire`, `transformers`, `sentence-transformers`, and domain-specific rules. Python `3.14` is supported by this stack much more cleanly than the old spaCy-based path.
+The passes that read architecture descriptions — sentence and clause
+segmentation, flow extraction, control polarity, and graph reachability — are
+plain Python over the standard library and need no additional packages.
 
 ## Install
 
@@ -50,5 +60,3 @@ npm install
 cd backend
 pip install -r requirements.txt
 ```
-
-No extra spaCy model download is required.

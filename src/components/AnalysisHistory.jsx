@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, Trash2, Eye, GitCompare, X, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import { loadAnalyses, deleteAnalysis, clearAllAnalyses } from '../utils/storage';
-import { useToast } from './Toast';
+import { useToast } from '../hooks/useToast';
 
 const AnalysisHistory = ({ onLoadAnalysis }) => {
     const [analyses, setAnalyses] = useState(() => loadAnalyses());

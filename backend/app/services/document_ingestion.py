@@ -44,6 +44,8 @@ TEXT_EXTENSIONS = {
 }
 SUPPORTED_EXTENSIONS = TEXT_EXTENSIONS | {".pdf", ".docx"}
 MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
+MAX_DOCUMENTS = int(os.getenv("AEGIS_THREAT_MAX_UPLOAD_FILES", "20"))
+MAX_TOTAL_BYTES = int(os.getenv("AEGIS_THREAT_MAX_UPLOAD_TOTAL_BYTES", str(32 * 1024 * 1024)))
 
 
 def _read_text_bytes(raw_bytes: bytes) -> str:
@@ -230,16 +232,32 @@ def _extract_text_from_bytes(filename: str, raw_bytes: bytes) -> Tuple[str, str,
     raise ValueError(f"Unsupported file type '{extension}'.")
 
 
-async def extract_documents(files: List[UploadFile]) -> Tuple[str, List[Dict[str, str]]]:
+async def extract_documents(
+    files: List[UploadFile],
+    max_files: int = MAX_DOCUMENTS,
+    max_total_bytes: int = MAX_TOTAL_BYTES,
+) -> Tuple[str, List[Dict[str, str]]]:
     if not files:
         raise ValueError("At least one design document must be uploaded.")
+    if len(files) > max_files:
+        raise ValueError(
+            f"{len(files)} files were submitted; this endpoint accepts at most {max_files} per analysis."
+        )
 
     extracted_sections: List[str] = []
     metadata: List[Dict[str, str]] = []
+    total_bytes = 0
 
     for file in files:
         filename = file.filename or "uploaded-document"
         raw_bytes = await file.read()
+        # Every document is held in memory and concatenated into one description,
+        # so the batch needs a ceiling of its own, not only a per-file one.
+        total_bytes += len(raw_bytes)
+        if total_bytes > max_total_bytes:
+            raise ValueError(
+                f"The submitted documents exceed the {max_total_bytes // (1024 * 1024)} MB total upload limit."
+            )
         extracted_text, extension, extraction_details = _extract_text_from_bytes(filename, raw_bytes)
         if not extracted_text:
             raise ValueError(f"File '{filename}' did not contain usable text.")

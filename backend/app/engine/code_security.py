@@ -66,16 +66,28 @@ class CodeSecurityAnalyzer:
         ]),
     ]
 
+    # Every occurrence is a separate defect to fix, so all of them are reported
+    # rather than only the first. The cap keeps a pathological file from
+    # producing thousands of findings, and truncation is stated on the finding.
+    MAX_FINDINGS_PER_RULE = 25
+
     def analyze(self, content: str) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
         for rule_id, severity, title, category, cwe, mitigation, patterns in self.RULES:
+            occurrences: Dict[int, str] = {}
             for pattern in patterns:
-                match = re.search(pattern, content, re.IGNORECASE | re.MULTILINE)
-                if not match:
-                    continue
-                line = content.count("\n", 0, match.start()) + 1
-                evidence = match.group(0).strip().replace("\n", " ")[:180]
-                findings.append({
+                for match in re.finditer(pattern, content, re.IGNORECASE | re.MULTILINE):
+                    line = content.count("\n", 0, match.start()) + 1
+                    occurrences.setdefault(
+                        line, match.group(0).strip().replace("\n", " ")[:180]
+                    )
+            if not occurrences:
+                continue
+            reported = sorted(occurrences)[: self.MAX_FINDINGS_PER_RULE]
+            omitted = len(occurrences) - len(reported)
+            for line in reported:
+                evidence = occurrences[line]
+                finding = {
                     "id": f"{rule_id}:{line}",
                     "rule_id": rule_id,
                     "resource_id": f"source line {line}",
@@ -87,6 +99,12 @@ class CodeSecurityAnalyzer:
                     "category": category,
                     "cwe": [cwe],
                     "evidence": [f"Source line {line}: {evidence}"],
-                })
-                break
+                    "rule_match_count": len(occurrences),
+                }
+                if omitted and line == reported[0]:
+                    finding["truncated_matches"] = omitted
+                    finding["evidence"].append(
+                        f"{omitted} further matches for {rule_id} were not listed individually."
+                    )
+                findings.append(finding)
         return findings

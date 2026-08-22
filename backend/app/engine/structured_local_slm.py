@@ -6,6 +6,7 @@ import json
 import os
 from typing import Any, Dict, List
 
+from . import model_policy
 from .stride_coverage_engine import STRIDE_CATEGORIES, StrideCoverageEngine
 
 
@@ -23,10 +24,15 @@ class StructuredLocalSLM:
                 os.getenv("AEGIS_THREAT_LOCAL_SLM_TASK", "text2text-generation"),
                 model=self.model_name,
                 tokenizer=self.model_name,
-                local_files_only=True,
+                **model_policy.transformers_kwargs(self.model_name),
             )
+            model_policy.note_model(self.model_name, "local_slm", loaded=True)
         except Exception as exc:
             self.error = str(exc)
+            model_policy.note_model(
+                self.model_name, "local_slm", loaded=False, error=str(exc),
+                fallback="deterministic_engines_only",
+            )
 
     def review(self, architecture, findings) -> Dict[str, Any]:
         if not self.pipeline:

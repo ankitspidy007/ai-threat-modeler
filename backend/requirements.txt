@@ -28,8 +28,13 @@ openai>=1.0.0,<2.0.0
 anthropic>=0.18.0,<1.0.0
 requests>=2.31.0,<3.0.0
 
-# Testing
+# Testing.
+# These are installed in the runtime image too, which is more than it needs;
+# splitting them into requirements-dev.txt is tracked separately.
 pytest>=8.0.0,<9.0.0
 pytest-asyncio>=0.23.0,<1.0.0
 pytest-cov>=4.1.0,<5.0.0
+# Most of the suite's wall time is engine import, not assertions, so the fast
+# lane parallelizes across processes.
+pytest-xdist>=3.6.0,<4.0.0
 httpx>=0.26.0,<1.0.0

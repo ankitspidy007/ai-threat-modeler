@@ -41,10 +41,22 @@ class ConfidenceCalibrator:
             if declared_issue:
                 source_score = max(source_score, 0.97)
 
-            scoped = bool(threat.affected_components or threat.affected_data_flows or threat.affected_assets)
+            # A finding about the submitted material itself names no component
+            # because it is not about one. That is a stated scope, not a missing
+            # one, so it does not take the unscoped-inference penalty.
+            document_scoped = (threat.explanation or {}).get("scope") == "submitted_material"
+            scoped = bool(
+                threat.affected_components or threat.affected_data_flows or threat.affected_assets
+            ) or document_scoped
             score = source_score + (0.04 if scoped else -0.18)
-            flow_ref = (threat.data_flow or threat.related_data_flow or "").replace(" â†’ ", "->")
+            flow_ref = (threat.data_flow or threat.related_data_flow or "").replace(" → ", "->")
             flow = flows.get(flow_ref)
+            # A finding about a path is only as good as the path. This discount
+            # was written for that and never applied, because the reference was
+            # matched against a corrupted spelling of the arrow that no finding
+            # ever carries. The penalty stays on flow-scoped findings alone: a
+            # weakness in a component's own configuration is no less true because
+            # the paths drawn around it were guessed.
             if flow and flow.assumed:
                 score -= 0.12
             if not threat.root_cause or not (threat.attack_scenario or threat.realistic_attack_scenario):
@@ -84,5 +96,8 @@ class ConfidenceCalibrator:
             "status": "active",
             "version": "confidence-1.0",
             "distribution": dict(distribution),
-            "policy": "Confirmed requires direct evidence, canonical scope, and confidence score >= 0.80.",
+            "policy": (
+            "Confirmed requires direct evidence, a stated scope (a canonical component, flow, "
+            "asset, or the submitted material itself), and confidence score >= 0.80."
+        ),
         }

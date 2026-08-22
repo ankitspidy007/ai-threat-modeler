@@ -1,0 +1,543 @@
+# Which technologies the extractor recognizes, and what each one is.
+#
+# This is the one place a vendor is taught to the tool. The same knowledge used
+# to live in three Python modules, so adding a database meant editing the
+# extractor, the challenger that decides whether a term was missed, and the pass
+# that merges duplicate nodes, and forgetting any of the three produced a model
+# that was wrong in a way nobody could see. Adding a technology here is enough.
+#
+# Order carries no meaning. Terms are matched longest first, so "azure openai"
+# resolves to itself rather than to "openai", regardless of where it appears.
+#
+# Terms are lowercase because the text is lowercased before matching, and they
+# are matched on word boundaries, so "s3" is not found inside "s3cret".
+
+version: technology-catalog-1.0
+
+# Vendor and framework names, grouped by the architectural role they fill. The
+# type decides which threat packs apply and which STRIDE cells are assessed, so
+# put a technology under what it *is* to an attacker, not under who sells it.
+technologies:
+  API:
+    - express
+    - fastapi
+    - django
+    - flask
+    - spring boot
+    - spring
+    - rails
+    - laravel
+    - gin
+    - fiber
+    - actix
+    - nest
+    - nestjs
+    - graphql
+    - rest api
+    - grpc
+    - api server
+    - web service
+    - koa
+    - hapi
+    - adonisjs
+    - node.js
+    - nodejs
+
+  API Gateway:
+    - llm gateway
+    - kong
+    - apigee
+    - api gateway
+    - aws api gateway
+    - azure api management
+
+  CDN:
+    - cloudfront
+    - cloudflare
+    - akamai
+    - fastly
+
+  CI/CD:
+    - github actions
+    - argo cd
+    - argocd
+
+  Compute:
+    - ec2
+
+  Container Platform:
+    - eks
+
+  Container Registry:
+    - ecr
+
+  DNS:
+    - route 53
+    - route53
+
+  Database:
+    - postgresql
+    - postgres
+    - mysql
+    - mongodb
+    - mongo
+    - redis
+    - dynamodb
+    - cassandra
+    - mariadb
+    - oracle
+    - mssql
+    - cosmosdb
+    - firestore
+    - documentdb
+    - elasticsearch
+    - opensearch
+    - snowflake
+    - redshift
+    - bigquery
+    - sqlite
+    - cockroachdb
+    - neo4j
+    - influxdb
+    - timescaledb
+    - supabase
+    - planetscale
+    - neon
+    - turso
+    - valkey
+    - dragonfly
+    - dragonflydb
+    - memcached
+    - couchdb
+    - rethinkdb
+    - vector database
+    - vector db
+    - vector store
+    - pinecone
+    - weaviate
+    - qdrant
+    - milvus
+    - rds
+    - aurora
+    - elasticache
+
+  Identity Provider:
+    - auth0
+    - okta
+    - cognito
+    - keycloak
+    - azure ad
+    - entra id
+    - firebase auth
+
+  IoT Device:
+    - iot device
+    - sensor
+    - medical device
+    - smart device
+
+  Key Management:
+    - aws kms
+    - kms
+
+  Load Balancer:
+    - nginx
+    - haproxy
+    - alb
+    - nlb
+    - elb
+    - traefik
+
+  MCP Server:
+    - github mcp
+    - jira mcp
+    - salesforce mcp
+    - mcp server
+
+  ML Service:
+    - openai
+    - azure openai
+    - anthropic
+    - claude
+    - gemini
+    - vertex ai
+    - sagemaker
+    - bedrock
+    - ollama
+    - llm
+    - rag
+    - embedding model
+    - model serving
+    - orchestration agent
+
+  Monitoring:
+    - datadog
+    - splunk
+    - grafana
+    - prometheus
+    - new relic
+    - elk
+    - cloudwatch
+    - sentry
+    - opentelemetry
+    - siem
+
+  Object Storage:
+    - s3
+    - azure blob
+    - gcs
+    - minio
+    - cloudflare r2
+
+  Queue:
+    - kafka
+    - rabbitmq
+    - sqs
+    - sns
+    - pubsub
+    - nats
+    - mqtt
+    - activemq
+    - celery
+    - bull
+    - sidekiq
+
+  Secrets Manager:
+    - vault
+    - key vault
+    - secrets manager
+
+  Service:
+    - service mesh
+    - istio
+    - linkerd
+    - lambda
+    - cloud function
+    - azure function
+
+  Threat Detection:
+    - guardduty
+    - security hub
+    - waf
+    - cloudtrail
+
+  Tool:
+    - shell executor
+    - filesystem
+
+  WebClient:
+    - react
+    - vue
+    - angular
+    - svelte
+    - next.js
+    - nextjs
+    - nuxt
+    - gatsby
+    - remix
+    - astro
+    - spa
+    - frontend
+    - mobile app
+    - ios
+    - android
+    - flutter
+    - react native
+    - kiosk
+
+# A platform describes how a component is built, not a component of its own.
+# "An iOS mobile app" is one client, not a client plus an operating system, so
+# the platform is folded into the component whose description mentions it.
+#
+#   hosts    the component types this platform can describe. A platform is only
+#            folded into a host of one of these types, so a React node never
+#            collapses into a database.
+#   display  the accepted spelling, used on the merged label. Without it the
+#            diagram reads "Mobile App (Ios)".
+platforms:
+  ios:
+    hosts: [Mobile App]
+    display: iOS
+  android:
+    hosts: [Mobile App]
+    display: Android
+  react native:
+    hosts: [Mobile App]
+    display: React Native
+  flutter:
+    hosts: [Mobile App]
+  swift:
+    hosts: [Mobile App]
+  kotlin:
+    hosts: [Mobile App]
+  react:
+    hosts: [WebClient]
+  vue:
+    hosts: [WebClient]
+    display: Vue
+  angular:
+    hosts: [WebClient]
+  svelte:
+    hosts: [WebClient]
+  next.js:
+    hosts: [WebClient]
+    display: Next.js
+  nextjs:
+    hosts: [WebClient]
+    display: Next.js
+  django:
+    hosts: [API, Service]
+  flask:
+    hosts: [API, Service]
+  fastapi:
+    hosts: [API, Service]
+    display: FastAPI
+  express:
+    hosts: [API, Service]
+  spring boot:
+    hosts: [API, Service]
+    display: Spring Boot
+  spring:
+    hosts: [API, Service]
+    display: Spring
+  node.js:
+    hosts: [API, Service]
+    display: Node.js
+  nodejs:
+    hosts: [API, Service]
+    display: Node.js
+  rails:
+    hosts: [API, Service]
+
+# When a term appears in the description but no component carries that exact
+# name, the challenger asks whether extraction missed something. These types
+# answer that question: a design that says "REST API" and produced a component
+# of type API did not miss anything, it just named it differently.
+#
+# Only put a mapping here when the type genuinely covers the term. Anything
+# listed here can no longer be reported as an omission.
+equivalent_types:
+  rest api: [API]
+  api server: [API]
+  web service: [API, Service]
+  frontend: [WebClient]
+  spa: [WebClient]
+  vector store: [Database]
+  vector database: [Database]
+  mcp server: [MCP Server]
+  shell executor: [Tool, MCP Server]
+  filesystem: [Tool, MCP Server]
+
+# Phrases that name a component by the job it does rather than by vendor. They
+# are used only to notice that the description mentioned something the model
+# does not contain; unlike `technologies` they never create a component on their
+# own, because a phrase this generic is as likely to be prose as a node.
+logical_terms:
+  eventbridge: Queue
+  step functions: Service
+  aws glue: Service
+  athena: Service
+  scim endpoint: API
+  agent orchestrator: ML Service
+  policy service: Service
+  workflow service: Service
+  memory service: Service
+  code execution service: Service
+  approval service: Service
+  browser tool: Tool
+  observability vendor: Monitoring
+  self-hosted model: ML Service
+
+# What a component is when the author named the job instead of the product.
+#
+# An authoritative architecture table is written by a human describing their own
+# system, and humans write "Identity service" and "Clinical document store", not
+# "Cognito" and "S3". Without these the tool could only type a row that happened
+# to name a vendor, which is why component typing used to be a hand-written list
+# of one document's exact phrases.
+#
+# Unlike `logical_terms` these do type a component, because the row already
+# asserts that the component exists; the only question is what kind it is.
+#
+# Matching is earliest-then-longest, the same rule as `technologies`, so the
+# specific entries below beat the generic ones without needing an order:
+# "Identity service" resolves on "identity service" at position 0 rather than on
+# "service" at position 9. Keep bare role words last in your thinking, and add a
+# longer phrase whenever a generic word would type something wrongly.
+role_terms:
+  # Clients
+  portal: WebClient
+  web app: WebClient
+  web client: WebClient
+  console: WebClient
+
+  # Network edge
+  api edge: API Gateway
+  public api edge: API Gateway
+  edge gateway: API Gateway
+  ingress controller: Load Balancer
+  ingress: Load Balancer
+  reverse proxy: Load Balancer
+
+  # Identity
+  identity service: Identity Provider
+  identity provider: Identity Provider
+  authentication service: Identity Provider
+  auth service: Identity Provider
+  sso: Identity Provider
+
+  # Application
+  core api: API
+  internal api: API
+  public api: API
+  fhir service: API
+  fhir server: API
+
+  # Data
+  database: Database
+  data store: Database
+  session cache: Database
+  cache: Database
+  search index: Database
+  knowledge index: Database
+  vector index: Database
+  document store: Object Storage
+  object store: Object Storage
+  blob store: Object Storage
+  data lake: Object Storage
+
+  # Messaging
+  workflow bus: Queue
+  event bus: Queue
+  message bus: Queue
+  message broker: Queue
+  event stream: Queue
+  document ingestion: Service
+
+  # AI
+  ai orchestrator: ML Service
+  assistant orchestrator: ML Service
+  model endpoint: ML Service
+  inference endpoint: ML Service
+  model evaluation: ML Service
+  model gateway: ML Service
+  mcp tool gateway: MCP Server
+  tool gateway: MCP Server
+
+  # Platform and operations
+  security services: Threat Detection
+  detection platform: Threat Detection
+  observability platform: Monitoring
+  telemetry platform: Monitoring
+  logging platform: Monitoring
+  delivery platform: CI/CD
+  build platform: CI/CD
+  deployment pipeline: CI/CD
+  secret store: Secrets Manager
+  key management service: Key Management
+
+  # Generic fallbacks. These are last-resort and are deliberately the shortest
+  # entries, so any phrase above that contains one still wins.
+  service: Service
+  worker: Service
+  scheduler: Service
+  gateway: API Gateway
+
+# What an "implemented controls" row is asserting, and about which components.
+#
+# A control row says "Data protection | encryption at rest and in transit". That
+# is affirmative evidence, and it has to reach the components it describes or the
+# engine reports a missing control the document already answered. This mapping
+# used to be a list of component ids, so an identity row only ever reached the
+# component that happened to be numbered C6.
+#
+#   types      component types the domain describes.
+#   terms      matched against a component's name and technology, for domains
+#              that describe a platform rather than a role.
+#   exposed    when true, only applies to components at a public trust level, so
+#              an "Edge" row does not credit an internal load balancer.
+#   asserts    the properties the row establishes as present.
+#
+# Be conservative here. Every property asserted suppresses a candidate finding,
+# so a domain that reaches too far hides real gaps; one that reaches too little
+# only leaves noise for a reviewer to dismiss.
+control_domains:
+  identity:
+    types: [Identity Provider]
+    asserts:
+      mfa_enabled: true
+      auth_type: oauth2
+
+  edge:
+    types: [API Gateway, CDN, Load Balancer]
+    exposed: true
+    asserts:
+      waf_enabled: true
+      rate_limiting: true
+
+  authorization:
+    types: [API, Service, MCP Server]
+    asserts:
+      rbac_enabled: true
+      abac_enabled: true
+
+  data protection:
+    types: [Database, Object Storage, Secrets Manager, Key Management]
+    asserts:
+      encryption_at_rest: true
+      encryption_in_transit: true
+    # Encryption at rest on a bucket says nothing about who can read it, so the
+    # exposure properties are only credited to the type they apply to.
+    type_asserts:
+      Object Storage:
+        public_access: false
+        s3_block_public_access: true
+
+  kubernetes:
+    terms: [eks, aks, gke, kubernetes, k8s, openshift]
+    asserts:
+      containerized: true
+      container_image_provenance: true
+      container_image_scanning: true
+
+  software supply chain:
+    types: [CI/CD, Container Registry]
+    asserts:
+      container_image_provenance: true
+      container_image_scanning: true
+      logging_enabled: true
+
+  detection and response:
+    types: [Threat Detection, Monitoring]
+    asserts:
+      logging_enabled: true
+      audit_logging: true
+
+  payments:
+    terms: [payment, refund, billing, checkout]
+    asserts:
+      webhook_signature_validation: true
+      idempotency_keys: true
+
+  ai:
+    types: [ML Service, MCP Server]
+    asserts:
+      output_validation: true
+
+# Ids that different extraction passes produce for one component. Listing them
+# does not merge them; it lets the challenger report that a merge is still owed,
+# which is how a gap in the merge rules becomes visible instead of silently
+# doubling a node's findings.
+alias_groups:
+  - [aws_api_gateway, api_gateway]
+  - [key_vault, vault]
+  - [okta, okta_external]
+  - [azure_openai, openai]
+  - [pinecone, vector_store, vector_database]
+
+# Suffixes a pass appends when it classifies a component rather than naming it.
+# "auth0_external" and "auth0" are one dependency described from two sides.
+classifying_suffixes:
+  - _external
+  - _service
+  - _api

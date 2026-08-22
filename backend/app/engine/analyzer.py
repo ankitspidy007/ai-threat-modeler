@@ -4,7 +4,7 @@ import logging
 import re
 from collections import OrderedDict
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .analysis_gaps import detect_missing_elements
 from .architecture_intelligence import ArchitectureIntelligence
@@ -13,23 +13,53 @@ from .contextual_threat_engine import ContextualThreatEngine
 from .canonical_model import canonicalize_architecture
 from .deduplication_engine import deduplicate_threats
 from .disagreement_engine import DisagreementEngine
+from .evidence_requests import build_evidence_requests
+from . import graph as reachability
 from .graph_builder import GraphBuilder
 from .impact_mapper import map_business_impact
-from .mermaid_generator import generate_mermaid
+from .mermaid_generator import diagram_coverage, generate_mermaid
+from .model_policy import model_status
+from .architecture_document import render as render_architecture_document
 from .output_model import build_system_model, group_findings, normalize_finding_output, risk_methodology
+from .owasp_mapping import owasp_for
+from .known_issue_taxonomy import CONTROL_PROPERTIES, GENERIC_WEAKNESS_RULES_BY_ID
 from .knowledge_threat_engine import KnowledgeThreatEngine
 from .local_intelligence import LocalIntelligence
 from .parser import ArchitectureParser
+from .progress import ProgressReporter, ProgressSink
 from .reporter import ReportGenerator
-from .risk_scoring import calculate_risk
+from .risk_scoring import calculate_risk, score_for
+from . import source_index
 from .confidence_calibration import ConfidenceCalibrator
 from .stride_coverage_engine import StrideCoverageEngine
 from .specialist_router import SpecialistRouter
 from .specialist_orchestrator import SpecialistOrchestrator
 from ..knowledge_base.loader import get_knowledge_base, reload_knowledge_base
+from ..services.untrusted_input import scan as scan_untrusted
 from ..models import AnalysisResult, SystemArchitecture, Threat
 
 logger = logging.getLogger(__name__)
+
+TITLE_LENGTH = 120
+
+
+def _merge(left: Optional[List[Any]], right: Optional[List[Any]]) -> List[Any]:
+    """Both lists, in order, without repeats."""
+    merged: List[Any] = []
+    for item in [*(left or []), *(right or [])]:
+        if item and item not in merged:
+            merged.append(item)
+    return merged
+
+
+def _summarize(text: str, limit: int = TITLE_LENGTH) -> str:
+    """Shorten text for a finding title without cutting a word in half."""
+    cleaned = ' '.join(str(text or '').split()).rstrip('.')
+    if len(cleaned) <= limit:
+        return cleaned
+    clipped = cleaned[:limit]
+    boundary = clipped.rfind(' ')
+    return f"{clipped[:boundary] if boundary > limit // 2 else clipped}..."
 
 
 DOMAIN_PLAYBOOK = {
@@ -190,7 +220,10 @@ class ThreatAnalyzer:
         analysis_mode: str = "standard",
         domain_profile: str = "general",
         source_documents: Optional[List[Dict[str, Any]]] = None,
+        progress: Optional[ProgressSink] = None,
     ) -> AnalysisResult:
+        reporter = ProgressReporter(progress)
+        reporter.phase("parsing")
         cache_key = self._stable_hash({"description": description, "source_documents": source_documents or []})
         system_architecture = self._cache_get(self._parsed_arch_cache, cache_key)
         if system_architecture is None:
@@ -207,6 +240,7 @@ class ThreatAnalyzer:
             use_local_slm=use_local_slm,
             analysis_mode=analysis_mode,
             domain_profile=domain_profile,
+            progress=progress,
         )
 
     def analyze(
@@ -216,20 +250,28 @@ class ThreatAnalyzer:
         use_local_slm: bool = True,
         analysis_mode: str = "standard",
         domain_profile: str = "general",
+        progress: Optional[ProgressSink] = None,
     ) -> AnalysisResult:
+        reporter = ProgressReporter(progress)
         analysis_flags = self._analysis_flags(analysis_mode, use_local_slm)
+        reporter.phase("canonical_model")
         architecture, architecture_validation = canonicalize_architecture(architecture)
         graph = self._get_cached_graph(architecture)
 
+        reporter.phase("knowledge", {"components": len(architecture.components)})
         threats, specialist_diagnostics = self.specialist_orchestrator.analyze(architecture)
         specialist_route = specialist_diagnostics
         kb_diagnostics = specialist_diagnostics["knowledge_diagnostics"]
+        reporter.phase("declared_issues", {"findings": len(threats)})
         threats = self._process_known_issues(architecture, threats)
+        threats = self._process_stated_weaknesses(architecture, threats)
+        threats = self._flag_untrusted_instructions(architecture, threats)
         threats = self._normalize_stride(threats)
         threats = self._ensure_architecture_links(threats, architecture)
         threats = normalize_finding_output(threats, architecture)
         threats = self._apply_risk_model(threats, architecture)
         threats = deduplicate_threats(threats)
+        reporter.phase("stride_coverage", {"findings": len(threats)})
         coverage_candidates, _ = self.stride_coverage_engine.assess(
             architecture, threats, generate_candidates=True,
         )
@@ -238,20 +280,25 @@ class ThreatAnalyzer:
         threats = normalize_finding_output(threats, architecture)
         threats = self._apply_risk_model(threats, architecture)
         threats = deduplicate_threats(threats)
+        reporter.phase("local_intelligence")
         threats, local_diagnostics = self.local_intelligence.enrich(
             architecture, threats, enabled=analysis_flags["local_intelligence"],
         )
         disagreement_diagnostics = self.disagreement_engine.assess(threats, local_diagnostics)
+        reporter.phase("calibration", {"findings": len(threats)})
         threats, confidence_diagnostics = self.confidence_calibrator.calibrate(threats, architecture)
         threats = self._apply_risk_model(threats, architecture)
         threats = self._classify_tiers(threats)
         threats = self._suppress_potentials_superseded_by_known_issues(threats)
+        threats = self._collapse_findings_on_the_same_control(threats)
         _, stride_coverage = self.stride_coverage_engine.assess(
             architecture, threats, generate_candidates=False,
         )
+        reporter.phase("attack_paths")
         attack_paths = generate_attack_paths(architecture, threats)
         threats = self._attach_attack_paths(threats, attack_paths)
         threats = self._enrich_threat_explanations(threats, architecture)
+        threats = self._cite_evidence_sources(threats, architecture)
         architecture_insights = []
         if analysis_flags["architecture_intelligence"]:
             try:
@@ -260,8 +307,12 @@ class ThreatAnalyzer:
                 logger.warning("Architecture intelligence failed: %s", exc)
 
         missing_information = detect_missing_elements(architecture)
+        evidence_requests = build_evidence_requests(stride_coverage, architecture)
+        reporter.phase("scoring")
         score = self._calculate_score(threats)
+        reporter.phase("reporting")
         diagram = generate_mermaid(graph, threats=threats, enhanced=True)
+        diagram_stats = diagram_coverage(graph, threats)
 
         confirmed = [threat for threat in threats if threat.tier == "Confirmed"]
         potential = [threat for threat in threats if threat.tier == "Potential"]
@@ -286,6 +337,7 @@ class ThreatAnalyzer:
             "count": len(attack_paths),
         }
         result.system_model = build_system_model(architecture)
+        result.architecture_document = render_architecture_document(architecture)
         result.stride_coverage = stride_coverage
         result.architecture_validation = architecture_validation
         result.engine_status = {
@@ -306,6 +358,7 @@ class ThreatAnalyzer:
                 **kb_diagnostics,
             },
             "specialist_router": specialist_route,
+            "local_models": model_status(),
             "local_intelligence": local_diagnostics,
             "disagreements": disagreement_diagnostics,
             "confidence_calibration": confidence_diagnostics,
@@ -314,9 +367,16 @@ class ThreatAnalyzer:
                 "applicable_cells": stride_coverage["applicable_cells"],
                 "unknown_cells": stride_coverage["unknown_cells"],
             },
+            "diagram_coverage": diagram_stats,
+            "evidence_requests": {
+                "status": "active",
+                "requests": len(evidence_requests["requests"]),
+                "unresolved_cells": evidence_requests["unresolved_cells"],
+                "cells_addressed": evidence_requests["cells_addressed"],
+            },
             "quality_gate": self._runtime_quality_gate(
                 architecture_validation, threats, stride_coverage, local_diagnostics,
-                disagreement_diagnostics,
+                disagreement_diagnostics, architecture,
             ),
         }
         result.finding_groups = group_findings(threats)
@@ -336,12 +396,68 @@ class ThreatAnalyzer:
         result.follow_up_questions = self._build_follow_up_questions(
             architecture, threats, missing_information, stride_coverage, disagreement_diagnostics,
         )
+        result.evidence_requests = evidence_requests
         result.review_summary = self._build_review_summary(threats)
         result.domain_context = self._build_domain_context(domain_profile, architecture, threats)
         result.ai_security_lens = self._build_ai_security_lens(architecture, threats)
         result.priority_actions = self._build_priority_actions(threats)
         result.report_markdown = self._generate_report_markdown(result)
         return result
+
+    # Extraction states that mean the whole document reached the model. Anything
+    # else left content behind: an image-only PDF page, or an embedded diagram.
+    _COMPLETE_EXTRACTION = frozenset({
+        "text_complete", "structured_complete", "structured_text_complete",
+    })
+
+    @staticmethod
+    def _unread_document_content(
+        architecture: Optional[SystemArchitecture],
+    ) -> List[Dict[str, Any]]:
+        """List uploaded documents whose content did not fully reach the model.
+
+        Ingestion already records this per document and nothing read it, so a
+        design whose diagram pages were images was analysed as though those pages
+        did not exist and published as ready.
+        """
+        documents = ((architecture.metadata if architecture else None) or {}).get("source_documents") or []
+        unread = []
+        for document in documents:
+            quality = str(document.get("extraction_quality") or "")
+            if not quality or quality in ThreatAnalyzer._COMPLETE_EXTRACTION:
+                continue
+            pages = [page for page in str(document.get("image_only_pages") or "").split(",") if page]
+            images = str(document.get("embedded_images") or "")
+            unread.append({
+                "document": document.get("filename") or "uploaded document",
+                "extraction_quality": quality,
+                "unread_pages": pages,
+                "embedded_images": images,
+                "detail": str(document.get("warning") or "").strip()
+                or "Part of this document could not be extracted.",
+            })
+        return unread
+
+    @staticmethod
+    def _describe_unread_content(unread: List[Dict[str, Any]]) -> str:
+        """State which documents were read incompletely, and where."""
+        if not unread:
+            return ""
+
+        def one(record: Dict[str, Any]) -> str:
+            pages = record.get("unread_pages") or []
+            if pages:
+                label = "page" if len(pages) == 1 else "pages"
+                return f"{record['document']} ({label} {', '.join(pages)} not read)"
+            return f"{record['document']} ({record['detail'].rstrip('.').lower()})"
+
+        named = [one(record) for record in unread[:3]]
+        if len(unread) > 3:
+            named.append(f"and {len(unread) - 3} more")
+        return (
+            "Part of an uploaded document was not read, so the model may be missing "
+            "design it describes: " + "; ".join(named) + "."
+        )
 
     @staticmethod
     def _runtime_quality_gate(
@@ -350,43 +466,109 @@ class ThreatAnalyzer:
         stride_coverage: Dict[str, Any],
         local_diagnostics: Optional[Dict[str, Any]] = None,
         disagreement_diagnostics: Optional[Dict[str, Any]] = None,
+        architecture: Optional[SystemArchitecture] = None,
     ) -> Dict[str, Any]:
+        """Decide whether this report can be published as it stands.
+
+        Two different questions were previously answered by one verdict. Whether
+        the report contradicts itself is an integrity question and blocks
+        publication. Whether the model captured everything in the input is a
+        completeness question and calls for review instead, because one missed
+        component is not a reason to withhold every finding.
+        """
+        def scoped(threat: Threat) -> bool:
+            return bool(
+                threat.affected_components or threat.affected_data_flows or threat.affected_assets
+            )
+
         confirmed_without_evidence = sum(
             threat.tier == "Confirmed" and not threat.evidence_details for threat in threats
         )
-        unmapped = sum(
-            not (threat.affected_components or threat.affected_data_flows or threat.affected_assets)
-            for threat in threats
-        )
+        unmapped = sum(not scoped(threat) for threat in threats)
+        def declared(threat: Threat) -> bool:
+            return (threat.explanation or {}).get("origin") == "declared_known_issue"
+
+        # An issue the input states but the model cannot place is still worth
+        # reporting. Dropping it would lose the user's own evidence, and blocking
+        # the report would withhold every other finding over one unplaced item,
+        # so it is carried as a review item instead.
         confirmed_unmapped = sum(
-            threat.tier == "Confirmed"
-            and not (threat.affected_components or threat.affected_data_flows or threat.affected_assets)
+            threat.tier == "Confirmed" and not scoped(threat) and not declared(threat)
             for threat in threats
         )
-        omitted_components = int(
-            (((local_diagnostics or {}).get("challenger") or {}).get("omitted_component_count") or 0)
+        unscoped_declared = sum(
+            not scoped(threat) and declared(threat) for threat in threats
         )
-        duplicate_aliases = int(
-            (((local_diagnostics or {}).get("challenger") or {}).get("duplicate_alias_count") or 0)
-        )
+        challenger = ((local_diagnostics or {}).get("challenger") or {})
+        omitted_components = int(challenger.get("omitted_component_count") or 0)
+        duplicate_aliases = int(challenger.get("duplicate_alias_count") or 0)
         unclassified_known_issues = sum(
             threat.tier == "Confirmed" and str(threat.id).startswith("UNCLASSIFIED-KNOWN-ISSUE")
             for threat in threats
         )
-        hard_failure = (
-            not architecture_validation.get("valid", False)
-            or confirmed_without_evidence > 0
-            or confirmed_unmapped > 0
-            or omitted_components > 0
-            or duplicate_aliases > 0
-            or unclassified_known_issues > 0
-        )
         unresolved_disagreements = int((disagreement_diagnostics or {}).get("unresolved_count") or 0)
-        status = "fail" if hard_failure else "review" if (
-            unmapped or stride_coverage.get("unknown_cells") or unresolved_disagreements
-        ) else "pass"
+        unknown_cells = int(stride_coverage.get("unknown_cells") or 0)
+        applicable_cells = int(stride_coverage.get("applicable_cells") or 0)
+        determined_ratio = (
+            round((applicable_cells - unknown_cells) / applicable_cells, 3) if applicable_cells else 0.0
+        )
+
+        unread_documents = ThreatAnalyzer._unread_document_content(architecture)
+        declared_known_issues = len(((architecture.metadata if architecture else None) or {}).get("known_issues") or [])
+        modeled_known_issues = sum(
+            (threat.explanation or {}).get("origin") == "declared_known_issue" for threat in threats
+        )
+        dropped_known_issues = max(0, declared_known_issues - modeled_known_issues)
+
+        integrity_violations = [
+            check for check in (
+                ("invalid_topology", 0 if architecture_validation.get("valid", False) else 1,
+                 "The component and flow graph does not validate."),
+                ("confirmed_without_evidence", confirmed_without_evidence,
+                 "A confirmed finding cites no evidence."),
+                ("confirmed_without_scope", confirmed_unmapped,
+                 "A confirmed finding names no affected element."),
+                ("declared_known_issue_not_reported", dropped_known_issues,
+                 "An issue stated in the input is missing from the findings."),
+            ) if check[1]
+        ]
+        completeness_warnings = [
+            check for check in (
+                ("omitted_named_components", omitted_components,
+                 "A component named in the input is absent from the model."),
+                ("duplicate_component_aliases", duplicate_aliases,
+                 "One component appears more than once under different names."),
+                ("unclassified_known_issues", unclassified_known_issues,
+                 "A stated issue has no taxonomy classification."),
+                ("unscoped_declared_issues", unscoped_declared,
+                 "An issue stated in the input could not be placed on an element."),
+                ("unscoped_findings", unmapped - confirmed_unmapped,
+                 "A potential finding names no affected element."),
+                ("unresolved_engine_disagreements", unresolved_disagreements,
+                 "Engines disagree and the conflict is unresolved."),
+                # A diagram that was uploaded as an image contributes nothing to
+                # the model. Reporting "ready" over an unread page would present
+                # a model of part of the design as a model of the design.
+                ("unread_document_content", len(unread_documents),
+                 ThreatAnalyzer._describe_unread_content(unread_documents)),
+            ) if check[1]
+        ]
+
+        def as_items(checks) -> List[Dict[str, Any]]:
+            return [{"check": name, "count": count, "detail": detail} for name, count, detail in checks]
+
+        status = (
+            "blocked" if integrity_violations
+            else "review" if completeness_warnings
+            else "ready"
+        )
         return {
             "status": status,
+            # Retained under its original name for API and report consumers.
+            "publication_status": status,
+            "model_integrity": "valid" if not integrity_violations else "violated",
+            "integrity_violations": as_items(integrity_violations),
+            "completeness_warnings": as_items(completeness_warnings),
             "architecture_valid": architecture_validation.get("valid", False),
             "confirmed_without_evidence": confirmed_without_evidence,
             "unmapped_findings": unmapped,
@@ -394,10 +576,25 @@ class ThreatAnalyzer:
             "omitted_named_components": omitted_components,
             "duplicate_component_aliases": duplicate_aliases,
             "unclassified_known_issues": unclassified_known_issues,
-            "unknown_stride_cells": stride_coverage.get("unknown_cells", 0),
+            "unscoped_declared_issues": unscoped_declared,
+            "declared_known_issues": declared_known_issues,
+            "reported_known_issues": modeled_known_issues,
+            "unknown_stride_cells": unknown_cells,
+            "applicable_stride_cells": applicable_cells,
+            # An unknown control state is the expected result of modelling from a
+            # description and is what the potential findings and review questions
+            # are made of, so it is reported as coverage rather than as a defect.
+            "determined_control_ratio": determined_ratio,
             "unresolved_engine_disagreements": unresolved_disagreements,
-            "publication_status": "blocked" if hard_failure else "review" if status == "review" else "ready",
-            "policy": "Invalid topology, omitted or duplicate components, unclassified known issues, confirmed findings without evidence, or confirmed findings without scope block final report publication.",
+            "unread_document_content": unread_documents,
+            "policy": (
+                "Publication is blocked only where the report would contradict itself: an "
+                "invalid topology, a confirmed finding without evidence or scope, or an issue "
+                "stated in the input that no finding reports. Extraction gaps, an issue that "
+                "could not be placed on an element, and unresolved engine disagreements mark "
+                "the report for review. Unknown control states are reported as coverage and do "
+                "not by themselves hold back the report."
+            ),
         }
 
     @staticmethod
@@ -429,6 +626,59 @@ class ThreatAnalyzer:
                 filtered.append(threat)
         return filtered
 
+    #: How authoritative a finding about a control is, most authoritative last.
+    #: A knowledge-base rule names the weakness and carries a written mitigation;
+    #: a contextual pattern describes the same absence in general terms; the
+    #: taxonomy restates the analyst's own sentence. Where several describe one
+    #: control on one component, the reviewer should read the most specific.
+    _CONTROL_FINDING_PRECEDENCE = ("GENERIC-", "CTX-", "KB-")
+
+    @classmethod
+    def _collapse_findings_on_the_same_control(cls, threats: List[Threat]) -> List[Threat]:
+        """One control absent on one component is one finding.
+
+        Different passes reach the same conclusion from the same property: a rule
+        predicate, a contextual pattern and the plain sentence all report that a
+        store is unencrypted. Reporting each bills the analyst three times for one
+        problem, so the most specific is kept and the others' framework mappings
+        and evidence are folded into it.
+        """
+        def authority(threat: Threat) -> int:
+            for rank, prefix in enumerate(cls._CONTROL_FINDING_PRECEDENCE, start=1):
+                if str(threat.id or "").startswith(prefix):
+                    return rank
+            return 0
+
+        claims: Dict[Tuple[str, str], List[Threat]] = {}
+        for threat in threats:
+            if threat.tier != "Confirmed":
+                continue
+            controls = (threat.explanation or {}).get("matched_controls") or []
+            component = threat.component or threat.affected_component
+            for control in controls:
+                if component:
+                    claims.setdefault((component, control), []).append(threat)
+
+        superseded: Dict[int, Threat] = {}
+        for duplicates in claims.values():
+            if len(duplicates) < 2:
+                continue
+            keeper = max(duplicates, key=authority)
+            for threat in duplicates:
+                if threat is not keeper:
+                    superseded[id(threat)] = keeper
+
+        for threat in threats:
+            keeper = superseded.get(id(threat))
+            if keeper is None:
+                continue
+            keeper.cwe = _merge(keeper.cwe, threat.cwe)
+            keeper.owasp_top_10 = _merge(keeper.owasp_top_10, threat.owasp_top_10)
+            keeper.mitre_attack = _merge(keeper.mitre_attack, threat.mitre_attack)
+            keeper.nist_800_53 = _merge(keeper.nist_800_53, threat.nist_800_53)
+            keeper.evidence = _merge(keeper.evidence, threat.evidence)
+        return [threat for threat in threats if id(threat) not in superseded]
+
     def refresh_result_artifacts(
         self,
         result: AnalysisResult,
@@ -445,6 +695,7 @@ class ThreatAnalyzer:
         threats = self._apply_risk_model(threats, architecture)
         threats = self._classify_tiers(threats)
         threats = self._suppress_potentials_superseded_by_known_issues(threats)
+        threats = self._collapse_findings_on_the_same_control(threats)
         threats, local_diagnostics = self.local_intelligence.enrich(
             architecture, threats, enabled=analysis_flags["local_intelligence"],
         )
@@ -455,6 +706,7 @@ class ThreatAnalyzer:
             architecture, threats, generate_candidates=False,
         )
         threats = self._enrich_threat_explanations(threats, architecture)
+        threats = self._cite_evidence_sources(threats, architecture)
         result.threats = threats
 
         missing_information = detect_missing_elements(architecture)
@@ -467,15 +719,18 @@ class ThreatAnalyzer:
             f"{len(confirmed)} confirmed risks, {len(potential)} assumption-sensitive risks, "
             f"and {len((result.attack_chains or {}).get('paths', []))} modeled attack paths."
         )
+        evidence_requests = build_evidence_requests(stride_coverage, architecture)
         result.coverage = self._build_coverage(architecture, threats, analysis_flags, missing_information)
         result.follow_up_questions = self._build_follow_up_questions(
             architecture, threats, missing_information, stride_coverage, disagreement_diagnostics,
         )
+        result.evidence_requests = evidence_requests
         result.review_summary = self._build_review_summary(threats)
         result.domain_context = self._build_domain_context(domain_profile, architecture, threats)
         result.ai_security_lens = self._build_ai_security_lens(architecture, threats)
         result.priority_actions = self._build_priority_actions(threats)
         result.system_model = build_system_model(architecture)
+        result.architecture_document = render_architecture_document(architecture)
         result.stride_coverage = stride_coverage
         result.engine_status = {
             **(result.engine_status or {}),
@@ -487,15 +742,209 @@ class ThreatAnalyzer:
                 "applicable_cells": stride_coverage["applicable_cells"],
                 "unknown_cells": stride_coverage["unknown_cells"],
             },
+            "evidence_requests": {
+                "status": "active",
+                "requests": len(evidence_requests["requests"]),
+                "unresolved_cells": evidence_requests["unresolved_cells"],
+                "cells_addressed": evidence_requests["cells_addressed"],
+            },
             "quality_gate": self._runtime_quality_gate(
                 result.architecture_validation or {"valid": True}, threats, stride_coverage, local_diagnostics,
-                disagreement_diagnostics,
+                disagreement_diagnostics, result.architecture,
             ),
         }
         result.finding_groups = group_findings(threats)
         result.risk_methodology = risk_methodology()
         result.report_markdown = self._generate_report_markdown(result)
         return result
+
+    @staticmethod
+    def _attach_stated_evidence(threat: Threat, statement: str, rule: Dict[str, Any]) -> None:
+        """Record on an existing finding that the description states this outright.
+
+        A finding inferred from a control property and a sentence asserting the
+        same weakness are one problem. Merging keeps the named title while the
+        sentence remains visible as the reason, and promotes the finding to a
+        stated fact rather than a deduction.
+        """
+        evidence = f"Stated in the architecture description: {statement}"
+        if evidence in (threat.evidence or []):
+            return
+        threat.evidence = [*(threat.evidence or []), evidence]
+        threat.evidence_details = [*(threat.evidence_details or []), {
+            "source_type": "architecture_input",
+            "source_ref": threat.component,
+            "line": None,
+            "statement": statement,
+            "confidence": "High",
+        }]
+        threat.tier = "Confirmed"
+        threat.confidence = "High"
+        threat.cwe = list(threat.cwe or []) or list(rule['cwe'])
+        threat.owasp_top_10 = list(threat.owasp_top_10 or []) or list(rule['owasp'])
+
+    def _process_stated_weaknesses(
+        self, architecture: SystemArchitecture, threats: List[Threat]
+    ) -> List[Threat]:
+        """Report weaknesses the description states about a specific component.
+
+        These are stated facts rather than inferences, so they are reported at
+        the same confidence as an entry under a "Known issues" heading. Where a
+        finding already covers the same weakness on the same component - a rule
+        that fired on the control property the sentence set, for instance - the
+        sentence is attached to that finding as evidence instead of being
+        reported again, so the analyst gets one finding that still says where
+        the knowledge came from.
+        """
+        def covering(component_id: str, rule: Dict[str, Any]) -> Optional[Threat]:
+            # Same rule, the same primary weakness reached by another route such
+            # as a "Known issues" entry using a legacy rule id, or a finding that
+            # already fired on the control property this weakness sets.
+            properties = set(CONTROL_PROPERTIES.get(rule['control'], ()))
+            for threat in threats:
+                if threat.component != component_id:
+                    continue
+                controls = set((threat.explanation or {}).get('matched_controls') or ())
+                if (
+                    str(threat.id).startswith(rule['id'])
+                    or rule['cwe'][0] in set(threat.cwe or [])
+                    or bool(properties & controls)
+                ):
+                    return threat
+            return None
+
+        for component in architecture.components or []:
+            for weakness in (component.properties or {}).get('stated_weaknesses') or []:
+                rule = GENERIC_WEAKNESS_RULES_BY_ID.get(weakness['rule_id'])
+                if not rule:
+                    continue
+                covered = covering(component.id, rule)
+                if covered is not None:
+                    self._attach_stated_evidence(covered, weakness['statement'], rule)
+                    continue
+                rule_id = rule['id']
+                statement = weakness['statement']
+                severity = rule['severity'].title()
+                threats.append(Threat(
+                    id=f"{rule_id}-{component.id}",
+                    category=rule['category'],
+                    stride_category=rule['category'],
+                    affected_stride_categories=list(rule['stride']),
+                    title=f"Stated weakness: {_summarize(statement)}",
+                    description=statement,
+                    severity=severity,
+                    severity_source="rule",
+                    likelihood="High",
+                    impact="High" if severity in {"Critical", "High"} else "Medium",
+                    risk_score=90 if severity == "Critical" else 75 if severity == "High" else 55,
+                    confidence="High",
+                    mitigation=rule['mitigation'],
+                    component=component.id,
+                    affected_component=component.id,
+                    component_id=component.id,
+                    root_cause=f"The description states this weakness directly about {component.name}.",
+                    realistic_attack_scenario=(
+                        f"An attacker targets {component.name} at the weakness the description "
+                        f"already states is present: {statement}"
+                    ),
+                    attack_scenario=(
+                        f"An attacker targets {component.name} at the weakness the description "
+                        f"already states is present: {statement}"
+                    ),
+                    business_impact=map_business_impact({"title": statement, "severity": severity}),
+                    evidence=[f"Stated in the architecture description: {statement}"],
+                    evidence_details=[{
+                        "source_type": "architecture_input",
+                        "source_ref": component.id,
+                        "line": None,
+                        "statement": statement,
+                        "confidence": "High",
+                    }],
+                    affected_components=[component.id],
+                    affected_data_flows=[],
+                    affected_assets=[],
+                    tier="Confirmed",
+                    status="Identified",
+                    finding_type="control_gap",
+                    owasp_top_10=list(rule['owasp']),
+                    cwe=list(rule['cwe']),
+                    explanation={
+                        "scope_resolution": "literal_component_sentence",
+                        "scope_warning": None,
+                    },
+                ))
+        return threats
+
+    def _flag_untrusted_instructions(
+        self, architecture: SystemArchitecture, threats: List[Threat]
+    ) -> List[Threat]:
+        """Report material under review that tries to direct the analysis itself.
+
+        Reported whether or not an LLM is enabled, because the finding is about
+        the document rather than about any one engine's behaviour.
+        """
+        metadata = architecture.metadata or {}
+        text = str(metadata.get("architecture_text") or "")
+        detections = scan_untrusted(text, source="architecture input")
+        if not detections:
+            return threats
+
+        summaries = "; ".join(detection["description"] for detection in detections)
+        threats.append(Threat(
+            id="UNTRUSTED-INPUT-INSTRUCTION-001",
+            category="Tampering",
+            stride_category="Tampering",
+            affected_stride_categories=["Tampering", "Repudiation"],
+            title="Submitted material contains text that addresses the analysis tool",
+            description=(
+                "The design material contains text written to direct an automated reviewer rather "
+                f"than to describe the system: {summaries}. Assisted review of this material cannot "
+                "be treated as independent until the text is explained or removed."
+            ),
+            severity="Medium",
+            likelihood="High",
+            impact="Medium",
+            risk_score=60,
+            confidence="High",
+            mitigation=(
+                "Confirm with the document's author why the text is present. Re-run the analysis on "
+                "material without it, and treat any prior assisted review of this document as unreliable. "
+                "Language model output in this run was accepted only where it resolved to a modeled "
+                "component and quoted the source, so the text could suppress findings but not invent them."
+            ),
+            root_cause="Material under review carries instruction-shaped text.",
+            realistic_attack_scenario=(
+                "Someone submitting a design for review embeds instructions telling an assisted "
+                "reviewer to report nothing, so a weakness passes review unrecorded."
+            ),
+            attack_scenario=(
+                "Someone submitting a design for review embeds instructions telling an assisted "
+                "reviewer to report nothing, so a weakness passes review unrecorded."
+            ),
+            business_impact=map_business_impact({"title": "Manipulated security review", "severity": "Medium"}),
+            evidence=[detection["quote"] for detection in detections],
+            evidence_details=[{
+                "source_type": "architecture_input",
+                "source_ref": detection["source"],
+                "line": detection["line"],
+                "statement": detection["quote"],
+                "confidence": "High",
+            } for detection in detections],
+            affected_components=[],
+            affected_data_flows=[],
+            affected_assets=[],
+            tier="Confirmed",
+            status="Identified",
+            finding_type="process",
+            owasp_top_10=["A03:2021-Injection"],
+            cwe=["CWE-77"],
+            explanation={
+                "origin": "untrusted_input_scan",
+                "scope": "submitted_material",
+                "detections": [detection["id"] for detection in detections],
+            },
+        ))
+        return threats
 
     def _process_known_issues(self, architecture: SystemArchitecture, threats: List[Threat]) -> List[Threat]:
         metadata = architecture.metadata or {}
@@ -520,9 +969,10 @@ class ThreatAnalyzer:
                 category=category,
                 stride_category=category,
                 affected_stride_categories=issue.get("affected_stride_categories") or [category],
-                title=f"Known issue: {description[:72]}",
+                title=f"Known issue: {_summarize(description)}",
                 description=description,
                 severity=severity,
+                severity_source="rule",
                 likelihood="High",
                 impact="High" if severity in {"Critical", "High"} else "Medium",
                 risk_score=90 if severity == "Critical" else 75 if severity == "High" else 55,
@@ -554,6 +1004,7 @@ class ThreatAnalyzer:
                 owasp_top_10=issue.get("owasp_top_10", []),
                 cwe=issue.get("cwe", []),
                 explanation={
+                    "origin": "declared_known_issue",
                     "scope_resolution": issue.get("component_resolution", "unresolved"),
                     "scope_warning": None if primary_component else "Confirmed source issue; affected component requires analyst mapping.",
                 },
@@ -582,6 +1033,7 @@ class ThreatAnalyzer:
                 title=finding.get("title", "Security finding"),
                 description=finding.get("description", "An insecure source or configuration pattern was detected."),
                 severity=severity,
+                severity_source="rule",
                 likelihood="High" if severity in {"Critical", "High"} else "Medium",
                 impact="Critical" if severity == "Critical" else "High" if severity == "High" else "Medium",
                 risk_score=severity_score,
@@ -602,10 +1054,14 @@ class ThreatAnalyzer:
                     "confidence": "High",
                 } for item in evidence],
                 cwe=finding.get("cwe", []),
-                owasp_top_10=["A05:2021 Security Misconfiguration"],
+                owasp_top_10=owasp_for(finding.get("cwe", []), finding.get("category")),
                 exposure=exposure,
                 data_sensitivity="sensitive",
-                exploit_complexity="Low" if severity in {"Critical", "High"} else "Medium",
+                # Complexity is left unstated on purpose. Deriving it from the
+                # rule's severity fed severity back into the calculation that
+                # produces severity, and a pattern scanner has no independent
+                # reading of how hard a match is to exploit. The direct-evidence
+                # floor below already keeps a confirmed finding from being demoted.
                 privilege_required="None" if exposure == "public" else "Low",
                 affected_components=[component_id] if component_id else [],
                 tier="Confirmed",
@@ -617,6 +1073,11 @@ class ThreatAnalyzer:
     def _normalize_stride(self, threats: List[Threat]) -> List[Threat]:
         for threat in threats:
             threat.stride_category = STRIDE_MAPPING.get(threat.category, threat.category)
+            # Knowledge base and coverage findings carry a CWE but often no
+            # OWASP entry. A report used for compliance evidence needs the
+            # mapping on every finding, not only on the ones authored with it.
+            if not threat.owasp_top_10:
+                threat.owasp_top_10 = owasp_for(threat.cwe, threat.category)
         return threats
 
     def _classify_tiers(self, threats: List[Threat]) -> List[Threat]:
@@ -640,36 +1101,129 @@ class ThreatAnalyzer:
         """Apply one transparent technical risk calculation to every finding."""
         severity_rank = {"Low": 1, "Medium": 2, "High": 3, "Critical": 4}
         components = {item.id: item for item in (architecture.components if architecture else [])}
-        flows = {
-            f"{item.source_id}->{item.target_id}": item for item in (architecture.flows if architecture else [])
-        }
+        flow_list = list(architecture.flows if architecture else [])
+        flows = {f"{item.source_id}->{item.target_id}": item for item in flow_list}
         for threat in threats:
-            direct_evidence = threat.finding_type in {"code", "iac"} or bool(threat.evidence_details)
-            component = components.get(threat.component or threat.affected_component or threat.component_id or "")
-            flow_ref = (threat.data_flow or threat.related_data_flow or "").replace(" â†’ ", "->")
+            # An authored severity is a floor; a computed one is not. This used to
+            # key off evidence_details being populated, which meant the floor
+            # applied to nearly every finding once architecture evidence started
+            # carrying citations, so auto-generated coverage questions kept the
+            # Medium their producer guessed and never fell to Low.
+            authored = threat.severity_source == "rule"
+            component_id = threat.component or threat.affected_component or threat.component_id or ""
+            component = components.get(component_id)
+            flow_ref = (threat.data_flow or threat.related_data_flow or "").replace(" → ", "->")
             flow = flows.get(flow_ref)
             control_assertions = (component.properties or {}).get("control_assertions", {}) if component else {}
             present_controls = sum(value == "present" for value in control_assertions.values())
+            # A flow-scoped finding is anchored by the two components it runs
+            # between. Without them such findings entered the risk model with no
+            # blast radius and no classification, so every question about a path
+            # scored as though it concerned nothing.
+            anchors = {reference for reference in (threat.affected_components or []) if reference}
+            if component_id:
+                anchors.add(component_id)
+            if flow is not None:
+                anchors.update({flow.source_id, flow.target_id})
             risk = calculate_risk({
                 "category": threat.category,
                 "exposure": threat.exposure,
-                "data_sensitivity": threat.data_sensitivity,
+                "data_sensitivity": threat.data_sensitivity or self._classification(anchors, components, flow),
                 "exploit_complexity": threat.exploit_complexity,
                 "privilege_required": threat.privilege_required,
                 "evidence_confidence": threat.confidence,
                 "compensating_controls": present_controls,
-                "crosses_trust_boundary": bool(flow and (flow.properties or {}).get("crosses_trust_boundary")),
-                "blast_radius": len(set(threat.affected_components or [])),
+                "control_state": self._control_state(threat, component),
+                "crosses_trust_boundary": self._sits_on_a_boundary(anchors, flow, flow_list),
+                "blast_radius": self._blast_radius(anchors, flow_list),
+                "architecture_size": len(components),
             })
+            # This runs once per refinement of the architecture, so the result has
+            # to be free to fall as well as rise. Comparing against the current
+            # severity, and taking the greater score, made every pass a ratchet:
+            # a value computed before controls or classifications were known could
+            # never come back down, and the outcome depended on how many passes
+            # ran. The producing rule's own claim is kept once so the
+            # direct-evidence floor still measures against what was reported.
+            if threat.reported_severity is None:
+                threat.reported_severity = threat.severity
             calculated_severity = risk["severity"]
-            if direct_evidence and severity_rank.get(threat.severity, 1) > severity_rank.get(calculated_severity, 1):
-                calculated_severity = threat.severity
+            if authored and severity_rank.get(threat.reported_severity, 1) > severity_rank.get(calculated_severity, 1):
+                calculated_severity = threat.reported_severity
             threat.severity = calculated_severity
             threat.likelihood = risk["likelihood"]
             threat.impact = risk["impact"]
-            threat.risk_score = max(threat.risk_score or 0, risk["risk_score"])
+            threat.risk_score = (
+                risk["risk_score"] if calculated_severity == risk["severity"]
+                else score_for(calculated_severity, risk["risk_factors"])
+            )
             threat.risk_factors = risk["risk_factors"]
         return threats
+
+    @staticmethod
+    def _blast_radius(anchors: Set[str], flows: List[Any]) -> int:
+        """How much else is reachable once these components are held.
+
+        Counting the components a finding names measures how the finding was
+        written, not what it costs: nearly every finding names one component, so
+        the blast radius term in the risk model never contributed anything. What
+        an attacker gains is the component plus everything it can reach, which is
+        a question about the graph.
+        """
+        reachable = set()
+        for start in anchors:
+            reachable |= reachability.downstream(start, flows)
+        return len(anchors | reachable)
+
+    @staticmethod
+    def _control_state(threat: Threat, component: Optional[Any]) -> str:
+        """Whether the control this finding concerns is absent, present or unstated.
+
+        Confirmed tier is the fallback because a finding only reaches it on direct
+        evidence of the weakness, which establishes the gap even when the rule did
+        not name the control it was about. That is a reading of the architecture,
+        not of our confidence in it: tier says the weakness exists, while
+        confidence grades how good the evidence is, and only the former belongs in
+        likelihood.
+        """
+        assertions = (component.properties or {}).get("control_assertions", {}) if component else {}
+        controls = (threat.explanation or {}).get("matched_controls") or []
+        states = {assertions.get(name, "unknown") for name in controls}
+        if "absent" in states or threat.tier == "Confirmed":
+            return "absent"
+        if states == {"present"}:
+            return "present"
+        return "unknown"
+
+    @staticmethod
+    def _sits_on_a_boundary(anchors: Set[str], flow: Optional[Any], flows: List[Any]) -> bool:
+        """Whether this finding sits where trust changes hands.
+
+        A flow-scoped finding answers this from its own flow. For a
+        component-scoped finding only inbound crossings count: something arriving
+        from another trust zone is attack surface, whereas a call out to a less
+        trusted place is an exfiltration concern that impact already covers.
+        Accepting either direction made this true for 94% of findings, so it added
+        a constant point and separated nothing.
+        """
+        if flow is not None:
+            return bool((flow.properties or {}).get("crosses_trust_boundary"))
+        return any(
+            (item.properties or {}).get("crosses_trust_boundary") and item.target_id == component_id
+            for component_id in anchors
+            for item in reachability.touching(component_id, flows)
+        )
+
+    @staticmethod
+    def _classification(anchors: Set[str], components: Dict[str, Any], flow: Optional[Any]) -> Optional[str]:
+        """The most sensitive data the finding's elements are known to handle."""
+        return reachability.most_sensitive(
+            *(
+                (components[component_id].properties or {}).get("data_sensitivity")
+                for component_id in anchors if component_id in components
+            ),
+            getattr(flow, "data_type", None) if flow is not None else None,
+        )
 
     def _ensure_architecture_links(self, threats: List[Threat], architecture: SystemArchitecture) -> List[Threat]:
         component_to_assets: Dict[str, List[str]] = {}
@@ -694,6 +1248,69 @@ class ThreatAnalyzer:
 
         return threats
 
+    @staticmethod
+    def _flows_by_component(architecture: SystemArchitecture) -> Dict[str, List[Dict[str, str]]]:
+        """Index the flows that touch each component, in reading order.
+
+        A component-scoped finding still lives somewhere in the diagram, and the
+        paths in and out of that component are what tell a reviewer how the
+        weakness is reached and what it can reach. The architecture already
+        holds that; it just was never carried onto the finding.
+        """
+        names = {component.id: component.name or component.id for component in architecture.components or []}
+        index: Dict[str, List[Dict[str, str]]] = {}
+        for flow in architecture.flows or []:
+            properties = flow.properties or {}
+            described = {
+                'label': f"{names.get(flow.source_id, flow.source_id)} → "
+                         f"{names.get(flow.target_id, flow.target_id)}",
+                'reference': f"{flow.source_id}->{flow.target_id}",
+                'protocol': (flow.protocol or '').upper(),
+                'boundary': str(properties.get('trust_boundary') or 'unknown'),
+                'crosses_trust_boundary': bool(properties.get('crosses_trust_boundary')),
+                'assumed': bool(flow.assumed),
+            }
+            for component_id, direction in ((flow.source_id, 'outbound'), (flow.target_id, 'inbound')):
+                index.setdefault(component_id, []).append({**described, 'direction': direction})
+        return index
+
+    @staticmethod
+    def _describe_flow_context(
+        threat: Threat,
+        architecture: SystemArchitecture,
+        incident_flows: Dict[str, List[Dict[str, str]]],
+    ) -> None:
+        """Say which flows relate to this finding, and why none do when that is so.
+
+        The flows a finding is *about* stay in ``affected_data_flows``, because
+        claiming a component-scoped rule examined a particular path would
+        overstate the evidence. The flows merely touching the component go into
+        the explanation as context, and where there are none the reason is
+        recorded, since "no flow-specific impact" reads identically whether the
+        finding is component-local or the architecture has no flows at all.
+        """
+        explanation = dict(threat.explanation or {})
+        related: List[Dict[str, str]] = []
+        seen: set = set()
+        for component_id in threat.affected_components or []:
+            for flow in incident_flows.get(component_id, []):
+                key = (flow['reference'], flow['direction'])
+                if key not in seen:
+                    seen.add(key)
+                    related.append(flow)
+        if related:
+            explanation['component_flows'] = related
+
+        if threat.affected_data_flows:
+            explanation['flow_context'] = 'flow_scoped'
+        elif related:
+            explanation['flow_context'] = 'component_flows'
+        elif not (architecture.flows or []):
+            explanation['flow_context'] = 'no_flows_modeled'
+        else:
+            explanation['flow_context'] = 'component_isolated'
+        threat.explanation = explanation
+
     def _attach_attack_paths(self, threats: List[Threat], attack_paths: List[Dict[str, Any]]) -> List[Threat]:
         for threat in threats:
             for path in attack_paths:
@@ -706,6 +1323,7 @@ class ThreatAnalyzer:
 
     def _enrich_threat_explanations(self, threats: List[Threat], architecture: SystemArchitecture) -> List[Threat]:
         component_map = {component.id: component for component in architecture.components}
+        incident_flows = self._flows_by_component(architecture)
         for threat in threats:
             component = component_map.get(threat.affected_component or threat.component_id or "")
             threat.explanation.update({
@@ -714,6 +1332,38 @@ class ThreatAnalyzer:
                 "asset_sensitivity": threat.data_sensitivity,
                 "root_cause": threat.root_cause,
             })
+            self._describe_flow_context(threat, architecture, incident_flows)
+        return threats
+
+    @staticmethod
+    def _cite_evidence_sources(threats: List[Threat], architecture: SystemArchitecture) -> List[Threat]:
+        """Name the document, page and line behind each piece of evidence.
+
+        Producers record the statement they matched but not where it sat, and with
+        several uploads the statement alone does not say which file to go and
+        read. Resolving it centrally means every producer gains citations without
+        each one needing to carry the source text around.
+
+        Evidence that quotes no source keeps its element reference: a finding
+        derived from the component graph was not stated anywhere.
+        """
+        metadata = architecture.metadata or {}
+        text = str(metadata.get("source_text") or metadata.get("architecture_text") or "")
+        if not text:
+            return threats
+
+        index = source_index.build(text)
+        resolved: Dict[str, Optional[Dict[str, Any]]] = {}
+        for threat in threats:
+            for record in threat.evidence_details or []:
+                statement = str(record.get("statement") or "").strip()
+                if not statement or record.get("cite"):
+                    continue
+                if statement not in resolved:
+                    citation = index.find(statement)
+                    resolved[statement] = citation.as_dict() if citation else None
+                if resolved[statement]:
+                    record.update(resolved[statement])
         return threats
 
     def _build_coverage(

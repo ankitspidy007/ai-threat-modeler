@@ -90,6 +90,16 @@ class Threat(BaseModel):
     data_sensitivity: Optional[str] = None
     exploit_complexity: Optional[str] = None
     privilege_required: Optional[str] = None
+    # What the producing rule claimed before the risk model ran. The risk model
+    # runs several times as the architecture is refined, so it needs the original
+    # claim to compare against rather than the result of its own previous pass.
+    reported_severity: Optional[str] = None
+    # "rule" where a curated rule, taxonomy entry or analyst statement authored the
+    # severity, "model" where this engine computed it. A generic formula cannot
+    # rederive that a privileged pod with a mounted service account token is
+    # critical, so an authored severity is a floor the model may raise but not
+    # lower. A computed one carries no such authority.
+    severity_source: str = "model"
     # Compliance and framework mappings
     owasp_top_10: Optional[List[str]] = Field(default_factory=list)
     cwe: Optional[List[str]] = Field(default_factory=list)
@@ -123,11 +133,15 @@ class AnalysisResult(BaseModel):
     coverage: Optional[Dict[str, Any]] = None
     diff_summary: Optional[Dict[str, Any]] = None
     follow_up_questions: Optional[List[Dict[str, Any]]] = None
+    evidence_requests: Optional[Dict[str, Any]] = None
     review_summary: Optional[Dict[str, Any]] = None
     domain_context: Optional[Dict[str, Any]] = None
     ai_security_lens: Optional[Dict[str, Any]] = None
     priority_actions: Optional[List[Dict[str, Any]]] = None
     system_model: Optional[Dict[str, Any]] = None
+    # The analyzed model in the format the parser accepts, so a reviewer can
+    # correct a row and re-analyze instead of rewriting the original description.
+    architecture_document: Optional[str] = None
     finding_groups: Optional[Dict[str, List[Threat]]] = None
     risk_methodology: Optional[Dict[str, Any]] = None
     stride_coverage: Optional[Dict[str, Any]] = None

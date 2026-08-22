@@ -93,6 +93,7 @@ def canonical_id(value):
     return re.sub(r"-(?:K\d+|\d{2})$", "", value)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("name,description,expected_ids,expected_components", SCENARIOS)
 def test_advanced_holdout_is_classified_scoped_and_publishable(name, description, expected_ids, expected_components):
     result = ThreatAnalyzer().analyze_from_text(description, name, use_local_slm=True, analysis_mode="deep")

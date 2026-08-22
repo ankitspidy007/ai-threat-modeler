@@ -1,11 +1,13 @@
+import asyncio
 import os
 import json
 import time
 import hashlib
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from collections import OrderedDict
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple, TypeVar
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
@@ -23,6 +25,13 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "")
 
+# Resource limits. An analysis is CPU-bound and holds its inputs in memory, so a
+# single caller must not be able to exhaust the process.
+MAX_UPLOAD_FILES = int(os.getenv("AEGIS_THREAT_MAX_UPLOAD_FILES", "20"))
+MAX_UPLOAD_TOTAL_BYTES = int(os.getenv("AEGIS_THREAT_MAX_UPLOAD_TOTAL_BYTES", str(32 * 1024 * 1024)))
+ANALYSIS_TIMEOUT_SECONDS = int(os.getenv("AEGIS_THREAT_ANALYSIS_TIMEOUT_SECONDS", "300"))
+MAX_TRACKED_PROJECTS = int(os.getenv("AEGIS_THREAT_MAX_TRACKED_PROJECTS", "50"))
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,13 +42,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Aegis Threat API", 
-    version="0.2.0",
+    version="2.3.1",
     description="Aegis Threat API for AI-assisted threat modeling and architecture risk analysis",
     lifespan=lifespan
 )
 
-# Environment-based CORS configuration
 if ENVIRONMENT == "production":
+    if "*" in ALLOWED_ORIGINS:
+        raise RuntimeError(
+            "ALLOWED_ORIGINS must name the origins that may call this API. "
+            "A wildcard with credentials would let any site read a threat model."
+        )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=ALLOWED_ORIGINS,
@@ -48,11 +61,17 @@ if ENVIRONMENT == "production":
         allow_headers=["Content-Type", "Authorization"],
     )
 else:
-    # Development mode - allow all origins
+    # Development runs on a developer's machine and has no authentication, so a
+    # wildcard is acceptable. Credentials are not: pairing the two is rejected by
+    # browsers and would be a real flaw if this configuration ever shipped.
+    logger.warning(
+        "Running in development mode: CORS is open and no admin token is required. "
+        "Set ENVIRONMENT=production and ALLOWED_ORIGINS before exposing this service."
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -223,8 +242,73 @@ class TTLAnalysisCache:
         return count
 
 
+class LatestByProject:
+    """Most recent result per project, used to produce a diff on the next run.
+
+    Bounded because the key is caller-supplied: an unbounded dict keyed by
+    project name grows for as long as the process runs.
+    """
+
+    def __init__(self, max_entries: int = MAX_TRACKED_PROJECTS):
+        self.max_entries = max_entries
+        self._store: "OrderedDict[str, AnalysisResult]" = OrderedDict()
+
+    def get(self, project_name: str) -> Optional[AnalysisResult]:
+        result = self._store.get(project_name)
+        if result is not None:
+            self._store.move_to_end(project_name)
+        return result
+
+    def __setitem__(self, project_name: str, result: AnalysisResult) -> None:
+        self._store[project_name] = result
+        self._store.move_to_end(project_name)
+        while len(self._store) > self.max_entries:
+            self._store.popitem(last=False)
+
+    def clear(self) -> None:
+        self._store.clear()
+
+
+T = TypeVar("T")
+
+
+async def _run_analysis(work: Callable[[], T], operation: str) -> T:
+    """Run a synchronous analysis off the event loop, under a time limit.
+
+    Analysis is CPU-bound and can take minutes on a large model. Running it
+    inline would stall every other request, including the health check and any
+    streaming client. The timeout releases the caller; the worker thread cannot
+    be interrupted, so it finishes in the background rather than being killed.
+    """
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(work), timeout=ANALYSIS_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        logger.warning("%s exceeded %ss", operation, ANALYSIS_TIMEOUT_SECONDS)
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                f"{operation} exceeded the {ANALYSIS_TIMEOUT_SECONDS}s limit. "
+                "Reduce the size of the input or raise AEGIS_THREAT_ANALYSIS_TIMEOUT_SECONDS."
+            ),
+        )
+
+
+def _failure(error: Exception, operation: str) -> HTTPException:
+    """Log the detail, return a reference.
+
+    Exception text from this process can carry file paths, provider responses,
+    and occasionally credential material, none of which belongs in an HTTP body.
+    """
+    reference = uuid.uuid4().hex[:12]
+    logger.exception("%s failed [ref=%s]", operation, reference)
+    return HTTPException(
+        status_code=500,
+        detail=f"{operation} failed. Quote reference {reference} when reporting this.",
+    )
+
+
 _analysis_cache = TTLAnalysisCache()
-_latest_analysis_by_project: Dict[str, AnalysisResult] = {}
+_latest_analysis_by_project = LatestByProject()
 
 
 def _stable_cache_key(*parts) -> str:
@@ -245,6 +329,17 @@ def _build_diff_summary(previous: Optional[AnalysisResult], current: AnalysisRes
     component_delta = len(current.architecture.components) - len(previous.architecture.components)
     flow_delta = len(current.architecture.flows) - len(previous.architecture.flows)
 
+    # A reviewer who just amended the model is asking whether the thing they
+    # added arrived, so name the components rather than only counting them.
+    previous_components = {item.id: item.name for item in previous.architecture.components}
+    current_components = {item.id: item.name for item in current.architecture.components}
+    added_components = sorted(
+        current_components[item] for item in set(current_components) - set(previous_components)
+    )
+    removed_components = sorted(
+        previous_components[item] for item in set(previous_components) - set(current_components)
+    )
+
     severity_changes = []
     for threat_id in sorted(previous_ids & current_ids):
         previous_threat = previous_threats[threat_id]
@@ -259,12 +354,15 @@ def _build_diff_summary(previous: Optional[AnalysisResult], current: AnalysisRes
                 "to_tier": current_threat.tier,
             })
 
-    if not new_ids and not resolved_ids and not severity_changes and score_delta == 0 and component_delta == 0 and flow_delta == 0:
+    if not any((new_ids, resolved_ids, severity_changes, added_components, removed_components,
+                score_delta, component_delta, flow_delta)):
         return {
             "compared_to_project": previous.project_name,
             "new_threats": [],
             "resolved_threats": [],
             "severity_changes": [],
+            "added_components": [],
+            "removed_components": [],
             "score_delta": 0,
             "component_delta": 0,
             "flow_delta": 0,
@@ -291,6 +389,8 @@ def _build_diff_summary(previous: Optional[AnalysisResult], current: AnalysisRes
             for threat_id in resolved_ids
         ],
         "severity_changes": severity_changes,
+        "added_components": added_components,
+        "removed_components": removed_components,
         "score_delta": score_delta,
         "component_delta": component_delta,
         "flow_delta": flow_delta,
@@ -383,13 +483,16 @@ async def analyze(request: Request, payload: AnalyzeRequest):
             return cached
         
         analyzer = get_shared_analyzer(request)
-        result = _analyze_text_payload(
-            analyzer,
-            payload.description,
-            payload.project_name,
-            use_local_slm=payload.use_local_slm,
-            analysis_mode=payload.analysis_mode,
-            domain_profile=payload.domain_profile
+        result = await _run_analysis(
+            lambda: _analyze_text_payload(
+                analyzer,
+                payload.description,
+                payload.project_name,
+                use_local_slm=payload.use_local_slm,
+                analysis_mode=payload.analysis_mode,
+                domain_profile=payload.domain_profile,
+            ),
+            "Analysis",
         )
         
         _analysis_cache.set(cache_key, result)
@@ -398,7 +501,7 @@ async def analyze(request: Request, payload: AnalyzeRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        raise _failure(e, "Analysis")
 
 
 @app.post("/analyze-documents", response_model=AnalysisResult)
@@ -420,16 +523,14 @@ async def analyze_documents(
         domain_profile = _normalize_domain_profile(domain_profile)
         context_text = (context_text or "").strip()
 
-        extracted_text, source_documents = await extract_documents(files)
-        degraded_structured_docs = [
-            doc["filename"] for doc in source_documents
-            if doc.get("type") == "docx" and doc.get("extraction_quality") == "fallback_text"
-        ]
-        if degraded_structured_docs:
-            raise ValueError(
-                "Structured DOCX extraction failed for " + ", ".join(degraded_structured_docs)
-                + ". Analysis was stopped because tables and topology records would be lost."
-            )
+        extracted_text, source_documents = await extract_documents(
+            files, max_files=MAX_UPLOAD_FILES, max_total_bytes=MAX_UPLOAD_TOTAL_BYTES,
+        )
+        # Incomplete extraction is carried through to the quality gate, which
+        # names the documents and pages that were not read and marks the report
+        # for review. It is deliberately not a hard stop: the pages that were
+        # read still produce findings worth having, and refusing the whole
+        # analysis over an embedded diagram loses more than it protects.
         design_docs = [doc for doc in source_documents if doc.get("role") != "reference_report"]
         reference_docs = [doc for doc in source_documents if doc.get("role") == "reference_report"]
 
@@ -469,14 +570,17 @@ async def analyze_documents(
             return cached
 
         analyzer = get_shared_analyzer(request)
-        result = _analyze_text_payload(
-            analyzer,
-            combined_description,
-            project_name,
-            use_local_slm=use_local_slm,
-            analysis_mode=analysis_mode,
-            domain_profile=domain_profile,
-            source_documents=source_documents,
+        result = await _run_analysis(
+            lambda: _analyze_text_payload(
+                analyzer,
+                combined_description,
+                project_name,
+                use_local_slm=use_local_slm,
+                analysis_mode=analysis_mode,
+                domain_profile=domain_profile,
+                source_documents=source_documents,
+            ),
+            "Document analysis",
         )
         authoritative_counts = (result.architecture.metadata or {}).get("authoritative_record_counts")
         if authoritative_counts:
@@ -499,7 +603,7 @@ async def analyze_documents(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Document analysis failed: {str(e)}")
+        raise _failure(e, "Document analysis")
 
 
 @app.post("/analyze-iac", response_model=AnalysisResult)
@@ -520,10 +624,13 @@ async def analyze_iac(request: Request, payload: IaCAnalyzeRequest):
         # 2. Run analysis
         analyzer = get_shared_analyzer(request)
         previous_result = _latest_analysis_by_project.get(payload.project_name)
-        result = analyzer.analyze(
-            system_architecture,
-            payload.project_name,
-            analysis_mode=payload.analysis_mode
+        result = await _run_analysis(
+            lambda: analyzer.analyze(
+                system_architecture,
+                payload.project_name,
+                analysis_mode=payload.analysis_mode,
+            ),
+            "IaC analysis",
         )
         result.diff_summary = _build_diff_summary(previous_result, result)
         _latest_analysis_by_project[payload.project_name] = result
@@ -533,7 +640,7 @@ async def analyze_iac(request: Request, payload: IaCAnalyzeRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"IaC Analysis failed: {str(e)}")
+        raise _failure(e, "IaC analysis")
 
 
 @app.post("/analyze-code", response_model=AnalysisResult)
@@ -568,7 +675,7 @@ async def analyze_code(request: Request, payload: CodeAnalyzeRequest):
         _latest_analysis_by_project[payload.project_name] = result
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Code analysis failed: {str(e)}")
+        raise _failure(e, "Code analysis")
 
 
 @app.get("/health")
@@ -599,7 +706,7 @@ def health_check():
     
     return {
         "status": "ok",
-        "version": "2.0.0",
+        "version": "2.3.1",
         "environment": ENVIRONMENT,
         "ml_features": ml_features
     }
@@ -626,7 +733,7 @@ async def retrain_local_models(request: Request):
             "stats": stats,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Local retraining failed: {str(e)}")
+        raise _failure(e, "Local retraining")
 
 
 @app.websocket("/ws/analyze")
@@ -673,6 +780,7 @@ async def websocket_analyze(websocket: WebSocket):
             progress_callback=send_progress,
             analyzer=shared_analyzer
         )
+        previous_result = _latest_analysis_by_project.get(project_name)
         result = await streaming_analyzer.analyze_streaming(
             description,
             project_name,
@@ -680,7 +788,12 @@ async def websocket_analyze(websocket: WebSocket):
             analysis_mode=analysis_mode,
             domain_profile=domain_profile
         )
-        
+        # This is the path the UI uses first, and the one a re-analysis of an
+        # amended model arrives on, so it is the path where the reviewer most
+        # needs to be told what their edit changed.
+        result.diff_summary = _build_diff_summary(previous_result, result)
+        _latest_analysis_by_project[project_name] = result
+
         # Send final result
         result_dict = result.model_dump() if hasattr(result, 'model_dump') else result.dict()
         await websocket.send_json({
@@ -820,13 +933,15 @@ async def analyze_with_llm(request: Request, payload: LLMAnalyzeRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.exception(
+        # The provider name is safe to log; the exception may quote the request,
+        # which carries the caller's API key.
+        logger.error(
             "LLM analysis failed for provider=%s model=%s project=%s",
             payload.llm_provider,
             payload.model,
             payload.project_name,
         )
-        raise HTTPException(status_code=500, detail=f"LLM analysis failed: {str(e)}")
+        raise _failure(e, "LLM analysis")
 
 
 @app.get("/llm/providers")

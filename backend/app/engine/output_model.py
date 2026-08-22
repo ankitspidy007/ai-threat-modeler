@@ -135,17 +135,41 @@ def group_findings(threats) -> Dict[str, List]:
 
 def risk_methodology() -> Dict[str, Any]:
     return {
-        "version": "technical-v1",
+        "version": "technical-v3",
         "inputs": [
             "internet exposure",
             "asset sensitivity",
             "exploit complexity",
             "privileges required",
-            "direct evidence confidence",
             "compensating controls",
+            "trust boundary crossing",
+            "blast radius",
         ],
-        "severity_rule": "Severity is derived from likelihood and impact. Direct code and IaC evidence increases confidence but does not replace the risk calculation.",
+        "severity_rule": (
+            "Severity is derived from likelihood and impact. Exposure and required privilege "
+            "describe the same reachability, so their combined contribution is capped rather "
+            "than counted twice. Evidence confidence is reported alongside a finding but does "
+            "not raise its likelihood. Direct code and IaC evidence keeps a finding from being "
+            "scored below the severity its rule reported, and never above it."
+        ),
+        "likelihood_rule": (
+            "Likelihood is reachability, capped, plus exploit complexity, plus one point for "
+            "sitting on a trust boundary, less one point per compensating control up to two. "
+            "It is recalculated in full whenever the architecture is refined, so controls and "
+            "classifications found later can lower a severity as well as raise it."
+        ),
         "confirmed_rule": "Confirmed findings require explicit source, IaC, or architecture evidence. Assumption-only findings remain potential.",
+        "scope_rule": (
+            "Blast radius is the finding's own elements plus everything reachable from them "
+            "over the data flow graph, and counts toward impact once it covers about half the "
+            "architecture. A component-scoped finding crosses a trust boundary when any flow "
+            "into or out of it does."
+        ),
+        "classification_rule": (
+            "Asset sensitivity is the most sensitive classification carried by the finding's "
+            "components and flows. A classification stated about one component is carried along "
+            "the flows that data travels, and never overrides one stated outright."
+        ),
     }
 
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, Key, Loader2, RefreshCw, Sparkles, X } from 'lucide-react';
-import { useToast } from './Toast';
+import { useToast } from '../hooks/useToast';
 import { API_BASE_URL } from '../config';
 
 const DEFAULT_PROVIDERS = [

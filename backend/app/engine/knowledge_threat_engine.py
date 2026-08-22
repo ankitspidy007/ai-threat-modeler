@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..models import Threat
@@ -46,7 +47,7 @@ class KnowledgeThreatEngine:
                     continue
                 evidence = _component_evidence(component, evidence_fields)
                 confidence = "High" if _has_direct_evidence(component, evidence_fields) else "Medium"
-                findings.append(_to_threat(rule, component, evidence, confidence))
+                findings.append(_to_threat(rule, component, evidence, confidence, evidence_fields))
 
         diagnostics = {
             "engine": "normalized_kb_predicates",
@@ -60,19 +61,43 @@ class KnowledgeThreatEngine:
         return findings, diagnostics
 
 
+# The knowledge base and the canonical model name some things differently, and
+# a name that never matches disables the predicate silently: every rule about a
+# bucket, including unencrypted storage and public access, skipped Object Storage
+# components because "storagebucket" shares no substring with "object storage".
+_RESOURCE_TYPE_SYNONYMS: Dict[str, Tuple[str, ...]] = {
+    "storagebucket": ("object storage", "bucket", "blob storage", "file store", "data lake"),
+    "cache": ("redis", "memcached", "elasticache"),
+}
+
+
 def _component_matches(component, rule: Dict[str, Any]) -> bool:
     expected = {str(item).lower() for item in rule.get("components") or ["Any"]}
     if "any" in expected:
         return True
+    expected |= {
+        synonym
+        for candidate in tuple(expected)
+        for synonym in _RESOURCE_TYPE_SYNONYMS.get(candidate, ())
+    }
     component_tokens = {
         component.type.lower(), component.id.lower(), component.name.lower(),
         str((component.properties or {}).get("db_type") or "").lower(),
         str((component.properties or {}).get("iac_resource_type") or "").lower(),
     }
+    # Spacing is not meaning: a rule written for "IdentityProvider" is about the
+    # same component as one written for "Identity Provider", and comparing the
+    # two literally left the rule matching nothing at all.
+    expected = {_squashed(candidate) for candidate in expected if candidate}
+    component_tokens = {_squashed(token) for token in component_tokens if token}
     return any(
         candidate and any(candidate == token or candidate in token or token in candidate for token in component_tokens if token)
         for candidate in expected
     )
+
+
+def _squashed(value: str) -> str:
+    return re.sub(r"[\s_-]+", "", value)
 
 
 def _ai_rule_scope(component) -> bool:
@@ -176,7 +201,8 @@ def _component_evidence(component, fields: List[str]) -> List[Dict[str, Any]]:
     return evidence
 
 
-def _to_threat(rule: Dict[str, Any], component, evidence: List[Dict[str, Any]], confidence: str) -> Threat:
+def _to_threat(rule: Dict[str, Any], component, evidence: List[Dict[str, Any]], confidence: str,
+               matched_controls: Optional[List[str]] = None) -> Threat:
     severity = rule.get("severity") or "Medium"
     category = rule.get("stride_category") or rule.get("category") or "Unknown"
     return Threat(
@@ -186,6 +212,7 @@ def _to_threat(rule: Dict[str, Any], component, evidence: List[Dict[str, Any]], 
         title=rule.get("title") or rule["id"],
         description=rule.get("description") or rule.get("attack_vector") or rule["id"],
         severity=severity,
+        severity_source="rule",
         likelihood=rule.get("likelihood") or "Medium",
         impact="High" if severity in {"Critical", "High"} else "Medium",
         confidence=confidence,
@@ -211,4 +238,7 @@ def _to_threat(rule: Dict[str, Any], component, evidence: List[Dict[str, Any]], 
         data_sensitivity=(component.properties or {}).get("data_sensitivity") or "internal",
         exploit_complexity="Low" if component.trust_level in {"public", "external"} else "Medium",
         privilege_required="None" if component.trust_level in {"public", "external"} else "Low",
+        # Which control decided the finding, so a second route to the same
+        # problem can recognise it instead of reporting it again.
+        explanation={"matched_controls": sorted(set(matched_controls or ()))},
     )

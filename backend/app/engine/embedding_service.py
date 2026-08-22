@@ -11,6 +11,8 @@ import logging
 import numpy as np
 from typing import List, Tuple, Optional, Dict, Any
 
+from . import model_policy
+
 logger = logging.getLogger(__name__)
 
 # Try to load sentence-transformers
@@ -53,12 +55,19 @@ class EmbeddingService:
         
         try:
             logger.info(f"Loading embedding model: {self.model_name}")
-            self.model = SentenceTransformer(self.model_name)
+            self.model = SentenceTransformer(
+                self.model_name,
+                **model_policy.sentence_transformer_kwargs(self.model_name),
+            )
             self._dimension = self.model.get_sentence_embedding_dimension()
             logger.info(f"Embedding model loaded. Dimension: {self._dimension}")
+            model_policy.note_model(self.model_name, "embeddings", loaded=True)
         except Exception as e:
-            logger.warning(f"Failed to load embedding model: {e}. Using fallback.")
+            logger.warning(f"Failed to load embedding model: {e}. Using TF-IDF fallback.")
             self.model = None
+            model_policy.note_model(
+                self.model_name, "embeddings", loaded=False, error=str(e), fallback="tf-idf",
+            )
     
     @property
     def dimension(self) -> int:

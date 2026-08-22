@@ -11,6 +11,7 @@ import logging
 import json
 from typing import List, Optional, Dict
 from ..models import Threat
+from . import untrusted_input
 from .llm_providers import create_service, list_provider_models, validate_provider_key
 
 logger = logging.getLogger(__name__)
@@ -53,9 +54,10 @@ class LLMAnalyzer:
         """
         service = create_service(provider, api_key, model)
         
-        # RAG: Enrich the description with relevant KB threats
+        # The description comes from documents the analyst did not write, so it is
+        # fenced as data before anything else is appended to it.
         enriched_description = LLMAnalyzer._enrich_with_rag(
-            architecture_description, kb_context
+            untrusted_input.fence(architecture_description), kb_context
         )
         if architecture_model:
             enriched_description += "\n\n--- CANONICAL ARCHITECTURE MODEL ---\n"

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, Dict, List
 
-from .nlp_processor import TECH_COMPONENT_MAP
+from . import technology_catalog
+from .component_roles import already_represented, find_named_roles
 from .stride_coverage_engine import StrideCoverageEngine
 
 
@@ -65,49 +65,40 @@ class LocalChallenger:
     @staticmethod
     def _omitted_literal_components(architecture) -> List[Dict[str, str]]:
         source = str((architecture.metadata or {}).get("architecture_text") or "").lower()
+        # A name resolved to something other than a component of its own is
+        # accounted for, not omitted: the system's own name is not a data store
+        # just because a vendor sells one under that name.
+        resolved = " ".join(
+            str(entry.get("removed") or "")
+            for entry in (architecture.metadata or {}).get("resolved_names") or []
+        )
         represented = " ".join(
-            f"{item.id} {item.name} {item.type} {(item.properties or {}).get('technology', '')}"
-            for item in architecture.components or []
+            [resolved] + [
+                f"{item.id} {item.name} {item.type} {(item.properties or {}).get('technology', '')}"
+                for item in architecture.components or []
+            ]
         ).lower()
         omitted = []
-        represented_types = {item.type for item in architecture.components or []}
-        equivalent_types = {
-            "rest api": {"API"},
-            "api server": {"API"},
-            "web service": {"API", "Service"},
-            "frontend": {"WebClient"},
-            "spa": {"WebClient"},
-            "vector store": {"Database"},
-            "vector database": {"Database"},
-            "mcp server": {"MCP Server"},
-            "shell executor": {"Tool", "MCP Server"},
-            "filesystem": {"Tool", "MCP Server"},
-        }
+        represented_types = frozenset(item.type for item in architecture.components or [])
         # Prefer longest aliases so "azure openai" is not reduced to "openai".
-        for technology in sorted(TECH_COMPONENT_MAP, key=len, reverse=True):
+        for technology in technology_catalog.terms_longest_first():
             if len(technology) < 3:
                 continue
-            pattern = r"(?<![a-z0-9])" + re.escape(technology) + r"(?![a-z0-9])"
-            if not re.search(pattern, source) or re.search(pattern, represented):
+            if not technology_catalog.mentions(source, technology):
                 continue
-            if represented_types & equivalent_types.get(technology, set()):
+            if technology_catalog.mentions(represented, technology):
+                continue
+            if technology_catalog.covered_by(technology, represented_types):
                 continue
             if any(item["technology"] in technology or technology in item["technology"] for item in omitted):
                 continue
             omitted.append({
                 "technology": technology,
-                "expected_type": TECH_COMPONENT_MAP[technology],
+                "expected_type": technology_catalog.TECHNOLOGY_TYPES[technology],
                 "source_evidence": technology,
                 "status": "extraction_review_required",
             })
-        logical_terms = {
-            "eventbridge": "Queue", "step functions": "Service", "aws glue": "Service",
-            "athena": "Service", "scim endpoint": "API", "agent orchestrator": "ML Service",
-            "policy service": "Service", "workflow service": "Service", "memory service": "Service",
-            "code execution service": "Service", "approval service": "Service",
-            "browser tool": "Tool", "observability vendor": "Monitoring", "self-hosted model": "ML Service",
-        }
-        for term, expected_type in logical_terms.items():
+        for term, expected_type in technology_catalog.LOGICAL_TERMS.items():
             if term in source and term not in represented and not any(
                 item["technology"] in term or term in item["technology"] for item in omitted
             ):
@@ -117,20 +108,31 @@ class LocalChallenger:
                     "source_evidence": term,
                     "status": "extraction_review_required",
                 })
+
+        # Registries only cover known technologies and fixed phrases. Named
+        # components such as "Settlement Worker" are the omissions that
+        # previously went unreported, so review them by role vocabulary too.
+        for candidate in find_named_roles(source):
+            if already_represented(candidate, architecture.components or []):
+                continue
+            if any(
+                item["technology"] in candidate["phrase"] or candidate["phrase"] in item["technology"]
+                for item in omitted
+            ):
+                continue
+            omitted.append({
+                "technology": candidate["phrase"],
+                "expected_type": candidate["type"],
+                "source_evidence": candidate["phrase"],
+                "status": "extraction_review_required",
+            })
         return omitted
 
     @staticmethod
     def _duplicate_component_aliases(architecture) -> List[Dict[str, str]]:
-        alias_groups = (
-            {"aws_api_gateway", "api_gateway"},
-            {"key_vault", "vault"},
-            {"okta", "okta_external"},
-            {"azure_openai", "openai"},
-            {"pinecone", "vector_store", "vector_database"},
-        )
         component_ids = {item.id for item in architecture.components or []}
         duplicates = []
-        for aliases in alias_groups:
+        for aliases in technology_catalog.ALIAS_GROUPS:
             present = sorted(component_ids & aliases)
             if len(present) > 1:
                 duplicates.append({"aliases": ", ".join(present), "status": "merge_required"})

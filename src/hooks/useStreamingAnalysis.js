@@ -71,7 +71,7 @@ export function useStreamingAnalysis() {
 
                     if (data.type === 'progress') {
                         setProgress(data.progress || 0);
-                        setPhase(data.phase || '');
+                        setPhase(data.label || data.phase || '');
                         setMessage(data.message || '');
                     } else if (data.type === 'result') {
                         completedRef.current = true;

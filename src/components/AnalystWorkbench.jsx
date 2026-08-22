@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Bot, Download, Layers3, ListTodo, MessageSquareQuote, Users } from 'lucide-react';
 import { clsx } from 'clsx';
 import { answerAnalysisQuestion } from '../utils/analysisCopilot';
+import { loadAnnotations, orphanedAnnotations, saveAnnotations } from '../utils/annotations';
 
 const domainTone = {
   general: 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300',
@@ -25,9 +26,32 @@ function downloadBlob(filename, content, type) {
 export default function AnalystWorkbench({ data, projectName, reviewStates }) {
   const [question, setQuestion] = useState('');
   const [copilotAnswer, setCopilotAnswer] = useState(() => answerAnalysisQuestion('', data));
-  const [owners, setOwners] = useState({});
-  const [notes, setNotes] = useState({});
-  const [componentNotes, setComponentNotes] = useState({});
+  const [owners, setOwners] = useState(() => loadAnnotations(projectName).owners);
+  const [notes, setNotes] = useState(() => loadAnnotations(projectName).notes);
+  const [componentNotes, setComponentNotes] = useState(() => loadAnnotations(projectName).componentNotes);
+
+  // Re-analysis replaces the findings but not the review of them, so what the
+  // reviewer wrote is reloaded and reattached by finding id. Adjusting during
+  // render rather than in an effect keeps one project's notes from being shown
+  // against another for a frame, and avoids the save effect below writing them
+  // back under the new project name.
+  const [loadedProject, setLoadedProject] = useState(projectName);
+  if (projectName !== loadedProject) {
+    const stored = loadAnnotations(projectName);
+    setLoadedProject(projectName);
+    setOwners(stored.owners);
+    setNotes(stored.notes);
+    setComponentNotes(stored.componentNotes);
+  }
+
+  useEffect(() => {
+    saveAnnotations(projectName, { owners, notes, componentNotes });
+  }, [projectName, owners, notes, componentNotes]);
+
+  const orphans = useMemo(
+    () => orphanedAnnotations({ owners, notes }, (data.threats || []).map((threat) => threat.id)),
+    [owners, notes, data.threats],
+  );
 
   const actionRows = useMemo(() => {
     return (data.threats || []).slice(0, 8).map((threat) => ({
@@ -188,6 +212,13 @@ export default function AnalystWorkbench({ data, projectName, reviewStates }) {
               </button>
             </div>
           </div>
+          {orphans.length > 0 && (
+            <p className="mt-3 rounded-lg border border-brand-warning/40 bg-brand-warning/10 px-3 py-2 text-xs leading-5 text-brand-700 dark:text-brand-300">
+              {orphans.length} note{orphans.length === 1 ? '' : 's'} you wrote
+              {orphans.length === 1 ? ' is' : ' are'} attached to findings this run no longer
+              reports. The notes are kept, and will reattach if the finding returns.
+            </p>
+          )}
           <div className="mt-4 space-y-3">
             {actionRows.map((row) => (
               <div key={row.id} className="ui-subpanel">

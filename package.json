@@ -1,14 +1,17 @@
 {
   "name": "aegis-threat",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.3.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "backend": "cd backend && python -m uvicorn app.main:app --reload --port 8000",
+    "backend": "node scripts/run-backend-python.mjs -m uvicorn app.main:app --reload --port 8000",
+    "test": "node scripts/run-backend-python.mjs -m pytest -m \"not slow\" -q -n auto",
+    "test:all": "node scripts/run-backend-python.mjs -m pytest -q",
+    "check:diagrams": "node scripts/run-backend-python.mjs tools/dump_diagrams.py && node scripts/check-diagram-syntax.mjs backend/diagram_check",
     "start": "concurrently \"npm run backend\" \"npm run dev\" --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,green\""
   },
   "dependencies": {
@@ -33,6 +36,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "jsdom": "^29.1.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
     "vite": "^7.2.4"

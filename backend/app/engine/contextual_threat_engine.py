@@ -50,6 +50,11 @@ THREAT_LIBRARY = {
         "cwe": ["CWE-311"],
         "mitre_attack": ["T1005"],
         "nist_800_53": ["SC-28"],
+        # The component property this pattern is a judgement about. Naming it
+        # lets the analyzer see that a knowledge-base rule on the same property
+        # and the same component is the same problem, rather than reporting one
+        # weakness twice under two titles.
+        "controls": ["encryption_at_rest"],
     },
     "secrets_exposure": {
         "id": "CTX-SEC-001",
@@ -585,5 +590,6 @@ class ContextualThreatEngine:
                 "component": component.name if component else None,
                 "flow": flow_ref,
                 "asset": asset.name if asset else None,
+                "matched_controls": list(library_entry.get("controls", [])),
             },
         )

@@ -18,6 +18,7 @@ coverage
 __pycache__/
 *.py[cod]
 backend/app/knowledge_base/cache/
+backend/data/
 backend/*_result.json
 backend/*_report.md
 backend/test_output.txt
@@ -26,6 +27,8 @@ test_out.txt
 # Local analysis and visual-QA output
 tmp/
 test-documents/
+diagram_check/
+threat-evaluation.json
 enhanced_architecture_diagram.mmd
 enhanced_report_result.json
 enhanced_threat_report.md

@@ -373,12 +373,22 @@ class TestStreamingAnalyzer:
         assert len(PHASES) == 10
         assert PHASES[0]["id"] == "parsing"
         assert PHASES[-1]["id"] == "reporting"
-    
-    def test_phase_weights_sum(self):
-        """Phase weights should sum to 100."""
+
+    def test_phase_progress_rises_from_zero_across_the_pipeline(self):
+        """Progress starts at zero and never moves backwards."""
+        from app.engine.progress import ANALYSIS_PHASES, phase_progress
+
+        values = [phase_progress(name) for name, _, _ in ANALYSIS_PHASES]
+        assert values[0] == 0
+        assert values == sorted(values)
+        assert values[-1] < 100, "completion is reported once the result exists"
+
+    def test_every_phase_has_a_label_a_client_can_display(self):
         from app.engine.streaming_analyzer import PHASES
-        total = sum(p["weight"] for p in PHASES)
-        assert total == 100
+
+        for phase in PHASES:
+            assert phase["label"] and not phase["label"].islower()
+            assert phase["message"]
     
     def test_streaming_analyzer_init(self):
         """StreamingAnalyzer should initialize with callback."""

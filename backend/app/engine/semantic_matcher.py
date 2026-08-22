@@ -43,9 +43,16 @@ class SecurityReranker:
             return
         try:
             from sentence_transformers import CrossEncoder
-            self.model = CrossEncoder(self.model_name, local_files_only=True)
+            self.model = CrossEncoder(
+                self.model_name, **model_policy.sentence_transformer_kwargs(self.model_name),
+            )
+            model_policy.note_model(self.model_name, "reranker", loaded=True)
         except Exception as exc:
             self.error = str(exc)
+            model_policy.note_model(
+                self.model_name, "reranker", loaded=False, error=str(exc),
+                fallback="security_feature_reranker",
+            )
 
     @property
     def backend(self) -> str:

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..models import SystemArchitecture
+from . import source_index as sources
 
 
 CONTROL_KEYS = (
@@ -31,6 +32,7 @@ def canonicalize_architecture(architecture: SystemArchitecture) -> Tuple[SystemA
     metadata = architecture.metadata or {}
     source_text = metadata.get("source_text") or metadata.get("architecture_text") or ""
     source_documents = metadata.get("source_documents") or []
+    index = sources.build(source_text)
     component_ids = {component.id for component in architecture.components or []}
     issues: List[Dict[str, Any]] = []
     component_id_counts: Dict[str, int] = {}
@@ -54,16 +56,18 @@ def canonicalize_architecture(architecture: SystemArchitecture) -> Tuple[SystemA
 
     for component in architecture.components or []:
         props = component.properties or {}
-        line_number, statement = _find_component_evidence(source_text, component.name, component.id)
+        line_number, statement = _find_component_evidence(source_text, component.name, component.id, index)
         explicit = bool(statement) or bool(props.get("authoritative") or props.get("authoritative_external_entity"))
         component.confidence = "High" if explicit else "Medium"
+        citation = index.cite(line_number)
         component.evidence = component.evidence or [_evidence(
             "architecture_input" if explicit else "inference",
-            _source_ref(source_documents),
             statement or f"Component {component.name} inferred from architecture context.",
-            line_number,
             component.confidence,
+            citation,
         )]
+        if citation:
+            props["source_document"] = citation.document
         props["evidence_status"] = "explicit" if explicit else "inferred"
         props["control_assertions"] = {
             key: _assertion_status(props.get(key)) for key in CONTROL_KEYS
@@ -103,9 +107,11 @@ def canonicalize_architecture(architecture: SystemArchitecture) -> Tuple[SystemA
             else f"Flow {flow.source_id} to {flow.target_id} inferred by architecture rules."
         )
         flow.confidence = "High" if explicit else "Medium"
+        # A stated flow carries the sentence that stated it, so the sentence is
+        # what locates it. An inferred flow was in no document to begin with.
         flow.evidence = flow.evidence or [_evidence(
             "architecture_input" if explicit else "inference",
-            _source_ref(source_documents), statement, None, flow.confidence,
+            statement, flow.confidence, index.find(statement) if explicit else None,
         )]
         if flow.source_id not in component_ids or flow.target_id not in component_ids:
             issues.append(_gap(
@@ -159,8 +165,8 @@ def canonicalize_architecture(architecture: SystemArchitecture) -> Tuple[SystemA
         component = next((item for item in architecture.components if item.id == asset.related_component_id), None)
         asset.confidence = component.confidence if component else "Medium"
         asset.evidence = asset.evidence or (component.evidence if component else [_evidence(
-            "inference", _source_ref(source_documents),
-            f"Asset {asset.name} inferred from storage and data classification.", None, "Medium",
+            "inference",
+            f"Asset {asset.name} inferred from storage and data classification.", "Medium",
         )])
 
     if metadata.get("authoritative_model") and metadata.get("actors"):
@@ -171,7 +177,8 @@ def canonicalize_architecture(architecture: SystemArchitecture) -> Tuple[SystemA
     metadata["actors"] = actors
     metadata["identities"] = identities
     metadata["canonical_model_version"] = "3.0"
-    metadata["source_provenance"] = source_documents or [{"filename": "architecture input", "role": "source_design"}]
+    metadata["source_provenance"] = _provenance(index, source_documents)
+    metadata["source_attribution"] = _attribution(index, architecture)
     metadata["boundary_crossings"] = boundary_crossings
     metadata["architecture_contract"] = {
         "component_ids_unique": not any(item["type"] == "duplicate_component_id" for item in issues),
@@ -211,14 +218,26 @@ def canonicalize_architecture(architecture: SystemArchitecture) -> Tuple[SystemA
     return architecture, validation
 
 
-def _find_component_evidence(text: str, name: str, component_id: str) -> Tuple[int | None, str]:
+def _find_component_evidence(
+    text: str, name: str, component_id: str, index: sources.SourceIndex,
+) -> Tuple[int | None, str]:
+    """Find the line of the design that names this component.
+
+    Document headers, page markers and section separators are skipped. A
+    component matched against a filename like `orders-service-design.docx` was
+    never named by the design, and quoting the header as its evidence would put
+    scaffolding in the report where a design statement belongs.
+    """
     candidates = {
         name.lower(), component_id.lower().replace("_", " "),
     }
-    for index, line in enumerate((text or "").splitlines(), 1):
+    for line_number, line in enumerate((text or "").splitlines(), 1):
+        citation = index.cite(line_number)
+        if citation is None or citation.line is None:
+            continue
         lowered = line.lower()
         if any(candidate and re.search(r"(?<![a-z0-9])" + re.escape(candidate) + r"(?![a-z0-9])", lowered) for candidate in candidates):
-            return index, line.strip()
+            return line_number, line.strip()
     return None, ""
 
 
@@ -252,20 +271,69 @@ def _assertion_status(value: Any) -> str:
     return "unknown"
 
 
-def _source_ref(source_documents: List[Dict[str, Any]]) -> str:
-    if source_documents:
-        return str(source_documents[0].get("filename") or "uploaded design")
-    return "architecture input"
+def _provenance(index: sources.SourceIndex, source_documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """List the sources the description was assembled from, with ingestion detail.
+
+    The index knows what the text contains; ingestion knows extraction quality
+    and page counts. Neither alone tells a reviewer whether a document was read
+    completely.
+    """
+    by_name = {str(doc.get("filename") or ""): doc for doc in source_documents}
+    records = []
+    for source in index.sources:
+        record = dict(source)
+        record["filename"] = record.pop("document")
+        record.update({
+            key: value for key, value in (by_name.get(record["filename"]) or {}).items()
+            if key not in record
+        })
+        records.append(record)
+    return records or [{"filename": sources.NARRATIVE_DOCUMENT, "role": "source_design"}]
 
 
-def _evidence(source_type: str, source_ref: str, statement: str, line: int | None, confidence: str) -> Dict[str, Any]:
+def _attribution(index: sources.SourceIndex, architecture: SystemArchitecture) -> Dict[str, Any]:
+    """Count what each source contributed, and what nothing stated.
+
+    With several documents the useful question is not how many components were
+    modeled but which document is carrying the model, and how much of it rests on
+    inference instead.
+    """
+    per_source: Dict[str, int] = {}
+    uncited = 0
+    for component in architecture.components or []:
+        document = (component.properties or {}).get("source_document")
+        if document:
+            per_source[document] = per_source.get(document, 0) + 1
+        else:
+            uncited += 1
     return {
+        "components_by_source": dict(sorted(per_source.items(), key=lambda item: (-item[1], item[0]))),
+        "components_without_a_source": uncited,
+        "sources": len(index.sources),
+    }
+
+
+def _evidence(
+    source_type: str,
+    statement: str,
+    confidence: str,
+    citation: Optional[sources.Citation] = None,
+) -> Dict[str, Any]:
+    """Build one evidence record, cited where the statement could be located.
+
+    An inferred claim has no citation by definition: nothing stated it. Saying so
+    is more useful than naming a document that happens to have been uploaded.
+    """
+    record = {
         "source_type": source_type,
-        "source_ref": source_ref,
-        "line": line,
+        "source_ref": citation.document if citation else sources.NARRATIVE_DOCUMENT,
+        "line": citation.line if citation else None,
         "statement": statement,
         "confidence": confidence,
     }
+    if citation:
+        record.update(citation.as_dict())
+    return record
 
 
 def _gap(gap_type: str, scope: str, message: str, severity: str) -> Dict[str, Any]:

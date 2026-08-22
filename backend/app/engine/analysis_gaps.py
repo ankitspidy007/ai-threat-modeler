@@ -31,6 +31,26 @@ def detect_missing_elements(system_model) -> List[Dict[str, str]]:
             "message": "No storage layer was identified. Confirm where application data, logs, and secrets are stored.",
         })
 
+    # Threats live on the edges. A component nothing reaches is assessed almost
+    # not at all, and after someone amends a model to add the component they
+    # forgot, this is the difference between the analysis changing and the
+    # analysis appearing to ignore them.
+    if flows:
+        connected = {flow.source_id for flow in flows} | {flow.target_id for flow in flows}
+        isolated = [component for component in components if component.id not in connected]
+        if isolated:
+            names = ", ".join(component.name for component in isolated[:5])
+            remainder = len(isolated) - 5
+            gaps.append({
+                "type": "unconnected_components",
+                "message": (
+                    f"Nothing is recorded as talking to {names}"
+                    f"{f' and {remainder} others' if remainder > 0 else ''}. "
+                    "Most risk arises on the paths between components, so add the flows "
+                    "that reach them to have them assessed."
+                ),
+            })
+
     external_components = [
         component for component in components
         if (component.properties or {}).get("external") or component.trust_level == "external"

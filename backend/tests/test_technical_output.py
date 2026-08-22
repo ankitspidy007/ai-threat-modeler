@@ -16,7 +16,10 @@ resource "aws_db_instance" "primary" {
         "components", "assets", "data_flows", "trust_boundaries",
         "public_entry_points", "identities", "cloud_resources", "boundary_crossings",
     }
-    assert result.risk_methodology["version"] == "technical-v1"
+    # v3 caps exposure and required privilege together, drops evidence confidence
+    # from likelihood and scores control state instead of exploit complexity, so
+    # reports from either side of that change are not comparable by severity alone.
+    assert result.risk_methodology["version"] == "technical-v3"
     assert result.finding_groups["iac"]
 
     finding = result.finding_groups["iac"][0]

@@ -1,0 +1,22 @@
+version: 2
+
+updates:
+  # Actions are pinned to commit digests in the workflows; Dependabot is what
+  # moves those digests forward, so this entry is what keeps the pinning honest
+  # rather than frozen.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
